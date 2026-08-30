@@ -76,6 +76,7 @@ R2 → your bucket → Settings → CORS policy:
 [
   {
     "AllowedOrigins": ["https://your-app.vercel.app", "http://localhost:3000"],
+    "_comment": "No trailing slash and no path — an Origin header is scheme://host[:port] only, so https://your-app.vercel.app/ never matches",
     "AllowedMethods": ["PUT", "GET"],
     "AllowedHeaders": ["content-type"],
     "ExposeHeaders": ["etag"],
@@ -141,6 +142,17 @@ over `file_versions` — the one table that grows without bound as revisions pil
 up. If a write half-fails they can drift; `POST /api/admin/recalc` (admin only)
 rebuilds both from the rows and prunes abandoned uploads. It is the only code
 that scans the whole table.
+
+### Migrating an existing database
+
+The revisions feature adds tables and columns. A database created before it
+needs `migrations/001_file_versions.console.sql` run in the D1 console
+**before** deploying the new code.
+
+If the code goes out first, the drive still renders its folders and shows a
+banner naming the migration — the files query fails on its own rather than
+taking the whole page down. No data is lost either way: the failure is a query
+against a table that does not exist yet, not a deletion.
 
 ## Links
 
