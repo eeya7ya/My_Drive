@@ -85,6 +85,12 @@ const PARTS: Record<string, string[]> = {
   dots: [],
   logout: ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "m16 17 5-5-5-5", "M21 12H9"],
   lock: ["M7 11V7a5 5 0 0 1 10 0v4"],
+  restore: ["M3 7v6h6", "M3 13a9 9 0 1 0 3-7.7L3 8"],
+  link: [
+    "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71",
+    "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+  ],
+  history: ["M12 7v5l4 2"],
 };
 
 export type IconName = keyof typeof PARTS | string;
@@ -160,6 +166,14 @@ export function Icon({
         <circle cx="12" cy="12" r="10" />
         <path d="M12 16v-4" />
         <path d="M12 8h.01" />
+      </svg>
+    );
+  }
+  if (name === "history") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 7v5l4 2" />
       </svg>
     );
   }

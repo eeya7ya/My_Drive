@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
 import { deleteFile, renameFile } from "@/lib/store";
-import { deleteObject } from "@/lib/r2";
+import { deleteObjects } from "@/lib/r2";
 import { ok, fail, readJson, badRequest } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -22,22 +22,22 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
 }
 
-/** Delete a file and its R2 object. Admin only. */
+/** Delete a file and every one of its revisions. Admin only. */
 export async function DELETE(_req: Request, { params }: Ctx) {
   try {
     await requireAdmin();
     const { id } = await params;
 
-    const key = await deleteFile(id);
-    if (key) {
+    const keys = await deleteFile(id);
+    if (keys.length) {
       try {
-        await deleteObject(key);
+        await deleteObjects(keys);
       } catch (e) {
         console.error("[drive] R2 cleanup failed for deleted file", id, e);
       }
     }
 
-    return ok({ ok: true });
+    return ok({ ok: true, removedVersions: keys.length });
   } catch (err) {
     return fail(err);
   }

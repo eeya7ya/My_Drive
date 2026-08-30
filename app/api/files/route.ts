@@ -8,8 +8,9 @@ export const dynamic = "force-dynamic";
 const MAX_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB — R2's single-PUT ceiling.
 
 /**
- * Reserve a file row and hand back a presigned PUT.
+ * Reserve a revision and hand back a presigned PUT.
  * The browser uploads straight to R2, then calls the confirm route.
+ * Re-uploading an existing name in the same folder creates revision N+1.
  */
 export async function POST(req: Request) {
   try {
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     }
 
     const type = contentType || "application/octet-stream";
-    const { id, r2Key } = await reserveFile(
+    const { fileId, versionId, version, r2Key } = await reserveFile(
       folderId ?? null,
       name,
       size,
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
     );
     const uploadUrl = await presignUpload(r2Key, type);
 
-    return ok({ id, uploadUrl });
+    return ok({ fileId, versionId, version, uploadUrl });
   } catch (err) {
     return fail(err);
   }
