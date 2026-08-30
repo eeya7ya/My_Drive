@@ -146,8 +146,18 @@ that scans the whole table.
 ### Migrating an existing database
 
 The revisions feature adds tables and columns. A database created before it
-needs `migrations/001_file_versions.console.sql` run in the D1 console
-**before** deploying the new code.
+needs **both** migrations run in the D1 console, in order, **before** deploying
+the new code:
+
+1. `migrations/001_file_versions.console.sql` — adds `file_versions` and the
+   pointer columns
+2. `migrations/002_drop_legacy_file_columns.console.sql` — rebuilds `files`
+   without the legacy `r2_key` / `size_bytes` / `content_type` / `uploaded`
+   columns
+
+002 is not optional. `r2_key` is `NOT NULL` and the revisions code no longer
+writes it to `files`, so without it every upload fails with
+`NOT NULL constraint failed: files.r2_key` and `/api/files` returns 500.
 
 If the code goes out first, the drive still renders its folders and shows a
 banner naming the migration — the files query fails on its own rather than
