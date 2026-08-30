@@ -16,12 +16,33 @@ export interface FileRow {
   folder_id: string | null;
   name: string;
   ext: string;
+  current_version_id: string | null;
+  version_count: number;
+  created_at: number;
+  modified_at: number;
+}
+
+export interface FileVersionRow {
+  id: string;
+  file_id: string;
+  version: number;
   size_bytes: number;
   content_type: string;
   r2_key: string;
   uploaded: number;
   created_at: number;
-  modified_at: number;
+  uploaded_at: number | null;
+}
+
+/** One row of a file's history, as the version list renders it. */
+export interface DriveFileVersion {
+  id: string;
+  version: number;
+  size: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  uploadedAtMs: number;
+  isCurrent: boolean;
 }
 
 /** A folder as the UI consumes it — nested, with its files inline. */
@@ -31,6 +52,8 @@ export interface TreeNode {
   code: string;
   icon: string;
   modified: string;
+  /** Epoch ms — the client sorts and date-filters on this, never the server. */
+  modifiedMs: number;
   children: TreeNode[];
   files: DriveFile[];
 }
@@ -42,6 +65,14 @@ export interface DriveFile {
   size: string;
   sizeBytes: number;
   modified: string;
+  /** Revision number currently shown. */
+  version: number;
+  /** How many revisions exist. 1 means no history to expand. */
+  versionCount: number;
+  /** When the current revision was uploaded, formatted for display. */
+  uploadedAt: string;
+  /** Epoch ms — the client sorts and date-filters on this, never the server. */
+  uploadedAtMs: number;
 }
 
 export interface DrivePayload {
@@ -59,6 +90,22 @@ export function formatDate(epochMs: number): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+/** "Aug 12, 2026 at 14:32" — a date alone cannot separate two same-day uploads. */
+export function formatDateTime(epochMs: number): string {
+  const d = new Date(epochMs);
+  const date = d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const time = d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return `${date} at ${time}`;
 }
 
 /** Byte formatting copied from the design's `hsize`. */

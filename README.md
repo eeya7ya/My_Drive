@@ -51,6 +51,24 @@ wrangler r2 bucket create my-drive
 Communication, Analysis, Courses, Thesis, Standards, and their children —
 28 folders). Regenerate it with `node scripts/generate-seed.mjs`.
 
+### Pasting into the D1 dashboard console
+
+Use **`schema.console.sql`** and **`seed.console.sql`** instead. They are the same
+statements with the `--` comments stripped.
+
+This matters: the dashboard console can collapse a pasted file onto a single
+line, and on one line a leading `--` comments out everything after it. The
+console then reports *"The request is malformed: Requests without any query are
+not supported"* — it received one long comment and no SQL. The `.console.sql`
+files carry no comments, so they survive being flattened.
+
+Regenerate them with:
+
+```bash
+sed -e 's/--.*$//' schema.sql | grep -v '^[[:space:]]*$' > schema.console.sql
+sed -e 's/--.*$//' seed.sql   | grep -v '^[[:space:]]*$' > seed.console.sql
+```
+
 **R2 CORS is required**, or browser uploads fail. In the dashboard under
 R2 → your bucket → Settings → CORS policy:
 
@@ -90,6 +108,59 @@ automatically — no build configuration needed. Add every variable from
 `.env.example` under **Settings → Environment Variables**, then redeploy so they
 take effect. Add your production domain to the R2 CORS policy above.
 
+## Revisions and dates
+
+**Re-uploading a file keeps the old copy.** Upload `Thesis Draft.pdf` into a
+folder that already has one and it becomes revision 2 — not a second file. The
+row shows a `REV n` badge; a chevron expands the history, where every revision
+carries its size and exact upload time and can be downloaded, restored, or
+deleted individually. Restoring moves a pointer (`files.current_version_id`),
+so no bytes are copied and nothing is lost.
+
+The cost of this is storage: every revision keeps its own R2 object, and all of
+them count toward the sidebar total. Delete individual revisions to reclaim it.
+
+**Dates.** Every file shows its upload timestamp to the minute, and a toolbar
+above the listing sorts by name / newest / oldest and filters to an upload date
+range.
+
+### Keeping D1 reads low
+
+D1 bills on rows read, so the read path is deliberately flat:
+
+| Action | D1 cost |
+| --- | --- |
+| Load the drive | 2 queries — one row per folder, one per file |
+| Sort, filter by date, search, navigate | **zero** — done in the browser on the payload already fetched |
+| Open one file's revision history | one indexed query on that file's rows |
+| Storage total in the sidebar | one row — a counter, not a `SUM` |
+
+Two counters make that possible: `files.version_count` and
+`settings.used_bytes`, both maintained on write so no page load ever aggregates
+over `file_versions` — the one table that grows without bound as revisions pile
+up. If a write half-fails they can drift; `POST /api/admin/recalc` (admin only)
+rebuilds both from the rows and prunes abandoned uploads. It is the only code
+that scans the whole table.
+
+## Links
+
+Every folder and file has its own URL, mirroring the breadcrumb:
+
+```
+/writing/presentations                      a folder
+/writing/thesis/thesis-draft-pdf            a file — opens the folder,
+                                            highlights it, expands its history
+```
+
+**Copy link** in the right-click menu puts the URL on the clipboard. Navigation
+uses `history.pushState`, so moving around the drive updates the address bar
+without a server round trip, and back/forward work as expected.
+
+Paths are built from names, which is what makes a link worth sharing — the
+trade-off is that **renaming a folder changes its link**. Old links to a renamed
+folder resolve as far as they can and land on the nearest parent with a notice,
+rather than erroring.
+
 ## Using it
 
 The drive is public and read-only: visitors browse folders and download files.
@@ -106,6 +177,7 @@ Sign out with the button that replaces the padlock.
 ```
 app/
   page.tsx                     the drive
+  [...path]/page.tsx           deep links to a folder or file
   admin/login/page.tsx         admin sign-in
   globals.css                  design system + the canvas's own styles
   design-system.css            Industry tokens, copied byte-for-byte
@@ -114,14 +186,19 @@ app/
     auth/login|logout/         session in, session out
     folders/[id]/              create, rename, delete (admin)
     files/[id]/                reserve, confirm, rename, delete, download
+    files/[id]/versions/       history, restore, delete a revision
+    admin/recalc/              rebuild the counters (admin)
 components/
   Drive.tsx                    the ported design
   LoginForm.tsx                sign-in, built from the design system
   icons.tsx                    the canvas's Lucide paths
 lib/
   d1.ts  r2.ts  store.ts  auth.ts  types.ts  api.ts
+  paths.ts                     URL <-> folder/file resolution
 schema.sql                     tables
 seed.sql                       the design's starting folder tree
+migrations/                    schema changes for an existing database
+*.console.sql                  the same SQL, comment-free, for the D1 console
 ```
 
 ## Notes on the port
