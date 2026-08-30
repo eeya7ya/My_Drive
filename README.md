@@ -164,6 +164,58 @@ banner naming the migration — the files query fails on its own rather than
 taking the whole page down. No data is lost either way: the failure is a query
 against a table that does not exist yet, not a deletion.
 
+## Opening files
+
+Clicking a file opens it in the drive rather than downloading it. Download is
+still there — it is just no longer the only way to look at something.
+
+| Opens in the app | How |
+| --- | --- |
+| PDF | the browser's own viewer, in an iframe |
+| Images — png, jpg, gif, webp, svg, bmp, avif | native |
+| Video — mp4, webm, mov, m4v | native player |
+| Audio — mp3, wav, m4a, flac, ogg | native player |
+| Markdown | rendered, with tables and code blocks |
+| Text and source — txt, csv, json, xml, yaml, sql, and ~30 code types | as-is |
+| Word — .docx | converted to HTML by mammoth |
+| Spreadsheets — .xlsx, .xlsm, .xls | every sheet as a table, via SheetJS |
+
+Anything else opens a panel naming the specific reason and offering the
+download, rather than a generic shrug.
+
+**Not supported, and why.** `.dwg` is a closed AutoCAD format with no practical
+in-browser renderer — the open-source options are either commercial services or
+too immature to trust. Export to DXF or PDF. `.pptx` has no reliable
+client-side renderer either; export to PDF. Legacy `.doc` is not supported, only
+`.docx`.
+
+### How the bytes get there
+
+Two paths, chosen per format:
+
+- **Media** (images, video, audio, PDF) redirects to a signed R2 URL and streams
+  straight to the browser. Those elements do not enforce CORS, so previews work
+  regardless of the bucket policy, and large files never cross Vercel.
+- **Anything parsed in JavaScript** (markdown, text, .docx, spreadsheets) is
+  proxied through `/api/files/[id]/raw`, same-origin. `fetch` *does* enforce
+  CORS, and proxying means a wrong CORS policy cannot break these previews.
+  Capped at 25 MB, since this path does use Vercel bandwidth.
+
+`/view` signs with `Content-Disposition: inline`; `/download` signs the same
+object as `attachment`. That header is the whole difference between rendering a
+PDF and saving it.
+
+### A note on safety
+
+Markdown and .docx become HTML, and an uploaded file is untrusted input. Left
+raw, a crafted document could run script in this origin and take the admin's
+session cookie, so everything generated goes through DOMPurify before it
+renders. SVGs go through `<img>`, which never executes their script, rather
+than being inlined.
+
+mammoth and SheetJS are large and most files need neither, so both are
+dynamically imported the first time a .docx or spreadsheet is opened.
+
 ## Links
 
 Every folder and file has its own URL, mirroring the breadcrumb:
@@ -209,14 +261,18 @@ app/
     folders/[id]/              create, rename, delete (admin)
     files/[id]/                reserve, confirm, rename, delete, download
     files/[id]/versions/       history, restore, delete a revision
+    files/[id]/view            signed inline URL, for media previews
+    files/[id]/raw             same-origin bytes, for parsed previews
     admin/recalc/              rebuild the counters (admin)
 components/
   Drive.tsx                    the ported design
+  FileViewer.tsx               the in-app viewer
   LoginForm.tsx                sign-in, built from the design system
   icons.tsx                    the canvas's Lucide paths
 lib/
   d1.ts  r2.ts  store.ts  auth.ts  types.ts  api.ts
   paths.ts                     URL <-> folder/file resolution
+  preview.ts                   which viewer opens which format
 schema.sql                     tables
 seed.sql                       the design's starting folder tree
 migrations/                    schema changes for an existing database

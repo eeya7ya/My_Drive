@@ -110,3 +110,56 @@ body[data-theme="dark"] {
 
 /* The drive is a single full-height surface; never let the page double-scroll. */
 html, body { height: 100%; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Rendered document previews (.md, .docx, spreadsheets).
+
+   These trees come from uploaded files, so they are sanitised before they get
+   here and styled generically — the markup is whatever the source document
+   happened to contain, not markup this app authored.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.dc-doc { font-size: 15px; line-height: 1.65; max-width: 78ch; margin: 0 auto; }
+.dc-doc h1, .dc-doc h2, .dc-doc h3, .dc-doc h4, .dc-doc h5, .dc-doc h6 {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  line-height: 1.15; margin: 1.4em 0 .5em;
+}
+.dc-doc h1 { font-size: 30px; }
+.dc-doc h2 { font-size: 24px; }
+.dc-doc h3 { font-size: 20px; }
+.dc-doc p { margin: 0 0 1em; }
+.dc-doc a { color: var(--color-accent-700); }
+.dc-doc ul, .dc-doc ol { padding-left: 1.4em; margin: 0 0 1em; }
+.dc-doc li { margin: .25em 0; }
+.dc-doc blockquote {
+  margin: 0 0 1em; padding: .2em 0 .2em 1em;
+  border-left: 2px solid var(--color-accent); opacity: .85;
+}
+.dc-doc code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .9em; background: var(--color-accent-100);
+  padding: .1em .35em; border: 1px solid var(--color-accent-300);
+}
+.dc-doc pre {
+  background: var(--color-accent-100); border: 1px solid var(--color-accent-300);
+  padding: 12px 14px; overflow-x: auto; margin: 0 0 1em;
+}
+.dc-doc pre code { background: none; border: none; padding: 0; }
+.dc-doc img { max-width: 100%; height: auto; }
+.dc-doc hr { border: none; border-top: 1px solid var(--color-divider); margin: 1.6em 0; }
+
+/* A spreadsheet can be far wider than the page; it scrolls in its own box
+   rather than stretching the document column. */
+.dc-doc table {
+  border-collapse: collapse; font-size: 13px; margin: 0 0 1.4em;
+  display: block; overflow-x: auto; max-width: 100%;
+}
+.dc-doc th, .dc-doc td {
+  border: 1px solid var(--color-divider); padding: 5px 9px;
+  text-align: left; white-space: nowrap;
+}
+.dc-doc th { background: var(--color-accent-100); color: var(--color-accent-800); font-weight: 600; }
+.dc-doc .sheet-name {
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--color-accent-700); margin: 1.2em 0 .5em;
+}

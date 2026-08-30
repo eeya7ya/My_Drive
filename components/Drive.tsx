@@ -11,6 +11,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
+import FileViewer from "./FileViewer";
+import { kindFor } from "@/lib/preview";
 import { hrefFor, resolveSegments, segmentsOf, slugify } from "@/lib/paths";
 import {
   DrivePayload,
@@ -21,6 +23,16 @@ import {
 } from "@/lib/types";
 
 type SortKey = "newest" | "oldest" | "name";
+
+/** Depth-first lookup by folder id. */
+function findNode(nodes: TreeNode[], id: string): TreeNode | null {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const hit = findNode(n.children, id);
+    if (hit) return hit;
+  }
+  return null;
+}
 
 /** The design's recurring micro-label: 11px, uppercase, letterspaced, accent. */
 const LABEL: React.CSSProperties = {
@@ -80,6 +92,13 @@ export default function Drive({
   const [sort, setSort] = useState<SortKey>("name");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+
+  // The file open in the viewer, with the revision being shown.
+  const [viewing, setViewing] = useState<{
+    file: DriveFile;
+    versionId: string | null;
+    label: string | null;
+  } | null>(null);
 
   // A file deep-linked to, highlighted until the next navigation.
   const [focusFile, setFocusFile] = useState<string | null>(null);
@@ -446,6 +465,14 @@ export default function Drive({
     []
   );
 
+  /** Open a file in the in-app viewer instead of downloading it. */
+  const openFile = useCallback(
+    (file: DriveFile, versionId: string | null = null, label: string | null = null) => {
+      setViewing({ file, versionId, label });
+    },
+    []
+  );
+
   const downloadVersion = useCallback((fileId: string, versionId: string) => {
     window.location.href = `/api/files/${fileId}/download?version=${versionId}`;
   }, []);
@@ -549,11 +576,19 @@ export default function Drive({
       setPath(r.folderPath);
       setFocusFile(r.fileId);
 
-      // A link to a file opens its history, which is the useful thing to see
-      // when someone sends you one.
+      // A link to a file opens the file — that is what the person who sent it
+      // meant. The history goes with it, so the revision on screen is clear.
       if (r.fileId) {
         setOpenHistory(r.fileId);
         loadVersions(r.fileId);
+        const folder = r.folderPath.length
+          ? r.folderPath[r.folderPath.length - 1]
+          : null;
+        const list = folder
+          ? (findNode(data.tree, folder)?.files ?? [])
+          : data.rootFiles;
+        const target = list.find((f) => f.id === r.fileId);
+        if (target) setViewing({ file: target, versionId: null, label: null });
       }
 
       if (!r.exact) {
@@ -624,6 +659,7 @@ export default function Drive({
   const fileMenu = useCallback(
     (ev: React.MouseEvent, file: DriveFile) => {
       const items: MenuItem[] = [
+        { label: "Open", icon: "eye", action: () => openFile(file) },
         { label: "Download", icon: "download", action: () => downloadFile(file) },
         {
           label: "Copy link",
@@ -652,7 +688,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [isAdmin, downloadFile, copyLink, toggleHistory, renameFileAction, deleteFileAction, openMenu]
+    [isAdmin, openFile, downloadFile, copyLink, toggleHistory, renameFileAction, deleteFileAction, openMenu]
   );
 
   const canvasMenu = useCallback(
@@ -1597,6 +1633,7 @@ export default function Drive({
                   <div key={d.key} style={{ animationDelay: d.delay }}>
                   <div
                     className="dc-file-row"
+                    onClick={() => openFile(d.file)}
                     onContextMenu={(ev) => fileMenu(ev, d.file)}
                     ref={
                       focusFile === d.file.id
@@ -1607,15 +1644,16 @@ export default function Drive({
                             })
                         : undefined
                     }
-                    style={
-                      focusFile === d.file.id
+                    style={{
+                      cursor: "pointer",
+                      ...(focusFile === d.file.id
                         ? {
                             background:
                               "color-mix(in srgb, var(--color-accent) 14%, var(--color-surface))",
                             boxShadow: "inset 2px 0 0 var(--color-accent)",
                           }
-                        : undefined
-                    }
+                        : {}),
+                    }}
                   >
                     <div
                       style={{
@@ -1675,6 +1713,20 @@ export default function Drive({
                         />
                       </button>
                     )}
+                    <button
+                      className="dc-file-btn"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        openFile(d.file);
+                      }}
+                      title={
+                        kindFor(d.file.name) === "none"
+                          ? "No preview — opens with a download option"
+                          : "Open in the drive"
+                      }
+                    >
+                      <Icon name="eye" size={15} />
+                    </button>
                     <button
                       className="dc-file-btn"
                       onClick={(ev) => {
@@ -1756,6 +1808,15 @@ export default function Drive({
                                 CURRENT
                               </span>
                             )}
+                            <button
+                              className="dc-file-btn"
+                              onClick={() =>
+                                openFile(d.file, v.id, `REV ${v.version}`)
+                              }
+                              title={`Open revision ${v.version}`}
+                            >
+                              <Icon name="eye" size={14} />
+                            </button>
                             <button
                               className="dc-file-btn"
                               onClick={() => downloadVersion(d.file.id, v.id)}
@@ -1931,6 +1992,20 @@ export default function Drive({
             )}
           </div>
         </div>
+      )}
+
+      {viewing && (
+        <FileViewer
+          file={viewing.file}
+          versionId={viewing.versionId}
+          versionLabel={viewing.label}
+          onClose={() => setViewing(null)}
+          onDownload={() =>
+            viewing.versionId
+              ? downloadVersion(viewing.file.id, viewing.versionId)
+              : downloadFile(viewing.file)
+          }
+        />
       )}
     </div>
   );

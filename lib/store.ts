@@ -488,19 +488,39 @@ export async function renameFile(id: string, rawName: string): Promise<void> {
 export async function resolveDownload(
   fileId: string,
   versionId?: string | null
-): Promise<{ r2Key: string; name: string; version: number } | null> {
-  const rows = await d1Query<{ r2_key: string; name: string; version: number }>(
+): Promise<{
+  r2Key: string;
+  name: string;
+  version: number;
+  contentType: string;
+  sizeBytes: number;
+} | null> {
+  const rows = await d1Query<{
+    r2_key: string;
+    name: string;
+    version: number;
+    content_type: string;
+    size_bytes: number;
+  }>(
     versionId
-      ? `SELECT v.r2_key, f.name, v.version
+      ? `SELECT v.r2_key, f.name, v.version, v.content_type, v.size_bytes
            FROM file_versions v JOIN files f ON f.id = v.file_id
           WHERE v.id = ? AND v.file_id = ? AND v.uploaded = 1`
-      : `SELECT v.r2_key, f.name, v.version
+      : `SELECT v.r2_key, f.name, v.version, v.content_type, v.size_bytes
            FROM files f JOIN file_versions v ON v.id = f.current_version_id
           WHERE f.id = ? AND v.uploaded = 1`,
     versionId ? [versionId, fileId] : [fileId]
   );
   const r = rows[0];
-  return r ? { r2Key: r.r2_key, name: r.name, version: r.version } : null;
+  return r
+    ? {
+        r2Key: r.r2_key,
+        name: r.name,
+        version: r.version,
+        contentType: r.content_type,
+        sizeBytes: r.size_bytes,
+      }
+    : null;
 }
 
 /** Delete a file and every revision; returns their R2 keys. */
