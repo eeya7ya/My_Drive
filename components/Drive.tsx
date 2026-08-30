@@ -90,6 +90,7 @@ export default function Drive({
   // Sort and date filter run entirely on the payload already in memory, so
   // changing them costs no D1 reads.
   const [sort, setSort] = useState<SortKey>("name");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
@@ -119,14 +120,22 @@ export default function Drive({
 
   /* ── data ─────────────────────────────────────────────────────────────── */
 
-  const refresh = useCallback(async () => {
+  /**
+   * Reload the drive.
+   *
+   * `keepError` matters: an upload that fails still refreshes afterwards to
+   * pick up whatever did succeed, and clearing the error there would erase the
+   * only report of why the upload failed before it could be read. Callers that
+   * just failed pass true.
+   */
+  const refresh = useCallback(async (keepError = false) => {
     try {
       const res = await fetch("/api/drive", { cache: "no-store" });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error || "Could not load the drive");
       setData(body as DrivePayload);
       setNotice(typeof body?.notice === "string" ? body.notice : null);
-      setError(null);
+      if (!keepError) setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load the drive");
     } finally {
@@ -364,6 +373,7 @@ export default function Drive({
       const folderId = target.length ? target[target.length - 1] : null;
 
       setError(null);
+      let failed = false;
       for (let i = 0; i < picked.length; i++) {
         const file = picked[i];
         setBusy(
@@ -406,6 +416,7 @@ export default function Drive({
             body: JSON.stringify({ versionId }),
           });
         } catch (e) {
+          failed = true;
           setError(
             `${file.name}: ${e instanceof Error ? e.message : "upload failed"}`
           );
@@ -414,7 +425,7 @@ export default function Drive({
       }
 
       setBusy(null);
-      await refresh();
+      await refresh(failed);
     },
     [call, refresh]
   );
@@ -642,10 +653,14 @@ export default function Drive({
         { label: "Open", icon: "open", action: () => enter(p) },
         { label: "Copy link", icon: "link", action: () => copyLink(p) },
       ];
+      items.push({
+        label: "Upload file",
+        icon: "upload",
+        action: () => triggerUpload(p),
+      });
       if (isAdmin) {
         items.push(
           { label: "New folder", icon: "plus", action: () => addFolder(p) },
-          { label: "Upload file", icon: "upload", action: () => triggerUpload(p) },
           { sep: true },
           { label: "Rename", icon: "edit", action: () => renameNode(p) },
           { label: "Delete", icon: "trash", danger: true, action: () => deleteNode(p) }
@@ -693,22 +708,26 @@ export default function Drive({
 
   const canvasMenu = useCallback(
     (ev: React.MouseEvent) => {
-      if (!isAdmin) return;
-      openMenu(ev, [
-        { label: "New folder", icon: "plus", action: () => addFolder(path) },
+      const items: MenuItem[] = [
         { label: "Upload file", icon: "upload", action: () => triggerUpload(path) },
-      ]);
+      ];
+      if (isAdmin) {
+        items.push({ label: "New folder", icon: "plus", action: () => addFolder(path) });
+      }
+      openMenu(ev, items);
     },
     [isAdmin, openMenu, addFolder, triggerUpload, path]
   );
 
   const rootMenu = useCallback(
     (ev: React.MouseEvent) => {
-      if (!isAdmin) return;
-      openMenu(ev, [
-        { label: "New folder", icon: "plus", action: () => addFolder([]) },
+      const items: MenuItem[] = [
         { label: "Upload file", icon: "upload", action: () => triggerUpload([]) },
-      ]);
+      ];
+      if (isAdmin) {
+        items.push({ label: "New folder", icon: "plus", action: () => addFolder([]) });
+      }
+      openMenu(ev, items);
     },
     [isAdmin, openMenu, addFolder, triggerUpload]
   );
@@ -725,6 +744,8 @@ export default function Drive({
   const fromMs = useMemo(() => (from ? new Date(from + "T00:00:00").getTime() : null), [from]);
   const toMs = useMemo(() => (to ? new Date(to + "T23:59:59.999").getTime() : null), [to]);
   const dateFiltered = fromMs !== null || toMs !== null;
+  /** Anything narrowing or reordering the listing, so the button can say so. */
+  const filterActive = dateFiltered || sort !== "name";
 
   const inRange = useCallback(
     (ms: number) =>
@@ -843,8 +864,10 @@ export default function Drive({
         .filter(Boolean)
         .join(" · ") || "Empty";
 
-  const showActions = !searching && isAdmin;
-  const showUpload = !searching && isAdmin;
+  // Anyone may add to the drive; only the admin may restructure it.
+  const showUpload = !searching;
+  const showNewFolder = !searching && isAdmin;
+  const showActions = showUpload || showNewFolder;
   const showSectionLabel = view === "grid" && !searching && hasFolders && hasFiles;
   const showGrid = hasFolders && view === "grid";
   const showList = hasFolders && view === "list";
@@ -1215,6 +1238,137 @@ export default function Drive({
               </span>
             </label>
           </div>
+          {/* Sort and date filter live behind this, the way a data grid hides
+              them until asked. The dot marks a filter that is still applied,
+              so a short listing is never a mystery. */}
+          <div style={{ position: "relative" }}>
+            <button
+              className="btn btn-secondary btn-icon"
+              onClick={() => setFiltersOpen((v) => !v)}
+              title="Sort and filter"
+              style={
+                filterActive
+                  ? {
+                      borderColor: "var(--color-accent)",
+                      color: "var(--color-accent-700)",
+                    }
+                  : undefined
+              }
+            >
+              <Icon name="filter" size={15} />
+              {filterActive && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 5,
+                    right: 5,
+                    width: 6,
+                    height: 6,
+                    background: "var(--color-accent)",
+                  }}
+                />
+              )}
+            </button>
+
+            {filtersOpen && (
+              <>
+                <div
+                  onClick={() => setFiltersOpen(false)}
+                  style={{ position: "fixed", inset: 0, zIndex: 70 }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    right: 0,
+                    zIndex: 71,
+                    minWidth: 300,
+                    padding: 14,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 14,
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-divider)",
+                    boxShadow: "var(--shadow-lg)",
+                    animation: "pop .12s ease-out both",
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    <span style={LABEL}>Sort</span>
+                    <div className="seg">
+                      {(
+                        [
+                          ["name", "Name"],
+                          ["newest", "Newest"],
+                          ["oldest", "Oldest"],
+                        ] as [SortKey, string][]
+                      ).map(([key, label]) => (
+                        <label
+                          key={key}
+                          className="seg-opt"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => setSort(key)}
+                        >
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              background: sort === key ? active : "transparent",
+                              color: sort === key ? activeFg : "inherit",
+                              margin: "-7px -12px",
+                              padding: "7px 12px",
+                              fontSize: 12,
+                            }}
+                          >
+                            {label}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    <span style={LABEL}>Uploaded between</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <input
+                        className="input"
+                        type="date"
+                        value={from}
+                        max={to || undefined}
+                        onChange={(e) => setFrom(e.target.value)}
+                        style={{ flex: 1, fontSize: 13, padding: "5px 8px" }}
+                        aria-label="From date"
+                      />
+                      <span style={{ opacity: 0.45, fontSize: 12 }}>to</span>
+                      <input
+                        className="input"
+                        type="date"
+                        value={to}
+                        min={from || undefined}
+                        onChange={(e) => setTo(e.target.value)}
+                        style={{ flex: 1, fontSize: 13, padding: "5px 8px" }}
+                        aria-label="To date"
+                      />
+                    </div>
+                  </div>
+
+                  {filterActive && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: 12, justifyContent: "center" }}
+                      onClick={() => {
+                        setSort("name");
+                        setFrom("");
+                        setTo("");
+                      }}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
           <button
             className="btn btn-secondary btn-icon"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -1282,86 +1436,6 @@ export default function Drive({
           ))}
         </div>
 
-        {/* Sort and date range. Both act on data already in memory — changing
-            them re-renders, it never re-queries. */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            padding: "14px 27px 0",
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={LABEL}>Sort</span>
-            <div className="seg">
-              {(
-                [
-                  ["name", "Name"],
-                  ["newest", "Newest"],
-                  ["oldest", "Oldest"],
-                ] as [SortKey, string][]
-              ).map(([key, label]) => (
-                <label
-                  key={key}
-                  className="seg-opt"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => setSort(key)}
-                >
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      background: sort === key ? active : "transparent",
-                      color: sort === key ? activeFg : "inherit",
-                      margin: "-7px -12px",
-                      padding: "7px 12px",
-                      fontSize: 12,
-                    }}
-                  >
-                    {label}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={LABEL}>Uploaded</span>
-            <input
-              className="input"
-              type="date"
-              value={from}
-              max={to || undefined}
-              onChange={(e) => setFrom(e.target.value)}
-              style={{ width: 152, fontSize: 13, padding: "5px 8px" }}
-              aria-label="From date"
-            />
-            <span style={{ opacity: 0.45, fontSize: 12 }}>to</span>
-            <input
-              className="input"
-              type="date"
-              value={to}
-              min={from || undefined}
-              onChange={(e) => setTo(e.target.value)}
-              style={{ width: 152, fontSize: 13, padding: "5px 8px" }}
-              aria-label="To date"
-            />
-            {dateFiltered && (
-              <button
-                className="btn btn-ghost"
-                style={{ fontSize: 12 }}
-                onClick={() => {
-                  setFrom("");
-                  setTo("");
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-
         {notice && (
           <div style={{ padding: "12px 27px 0" }}>
             <div
@@ -1390,15 +1464,38 @@ export default function Drive({
               </span>
             )}
             {error && (
-              <span
+              <div
                 style={{
-                  fontSize: 12,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 9,
+                  marginTop: busy ? 8 : 0,
+                  padding: "10px 13px",
+                  border: "1px solid color-mix(in srgb, #c0492f 45%, transparent)",
+                  background: "color-mix(in srgb, #c0492f 8%, transparent)",
                   color: "#c0492f",
-                  marginLeft: busy ? 8 : 0,
+                  fontSize: 13,
                 }}
               >
-                {error}
-              </span>
+                <Icon name="info" size={15} style={{ flex: "none", marginTop: 2 }} />
+                <span style={{ flex: 1 }}>{error}</span>
+                <button
+                  onClick={() => setError(null)}
+                  title="Dismiss"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "inherit",
+                    opacity: 0.7,
+                    padding: 0,
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -1447,10 +1544,12 @@ export default function Drive({
                     Upload
                   </button>
                 )}
-                <button className="btn btn-primary" onClick={() => addFolder(path)}>
-                  <Icon name="plus" size={14} />
-                  New folder
-                </button>
+                {showNewFolder && (
+                  <button className="btn btn-primary" onClick={() => addFolder(path)}>
+                    <Icon name="plus" size={14} />
+                    New folder
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1890,7 +1989,7 @@ export default function Drive({
                     ? "No folder names match your search. Try a shorter term."
                     : isAdmin
                       ? "Right-click here or use the buttons to add a folder or upload files."
-                      : "Nothing has been added here yet."}
+                      : "Nothing here yet — use Upload file to add something."}
                 </div>
                 {showActions && (
                   <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
@@ -1903,13 +2002,15 @@ export default function Drive({
                         Upload file
                       </button>
                     )}
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => addFolder(path)}
-                    >
-                      <Icon name="plus" size={14} />
-                      New folder
-                    </button>
+                    {showNewFolder && (
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => addFolder(path)}
+                      >
+                        <Icon name="plus" size={14} />
+                        New folder
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1929,7 +2030,7 @@ export default function Drive({
             <Icon name="info" size={13} />
             {isAdmin
               ? "Right-click a folder, a file, or empty space to manage."
-              : "Right-click a folder or a file to open or download it."}
+              : "Right-click to upload, or a file to open and download it."}
           </div>
         </div>
       </main>
