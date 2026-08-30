@@ -51,6 +51,24 @@ wrangler r2 bucket create my-drive
 Communication, Analysis, Courses, Thesis, Standards, and their children —
 28 folders). Regenerate it with `node scripts/generate-seed.mjs`.
 
+### Pasting into the D1 dashboard console
+
+Use **`schema.console.sql`** and **`seed.console.sql`** instead. They are the same
+statements with the `--` comments stripped.
+
+This matters: the dashboard console can collapse a pasted file onto a single
+line, and on one line a leading `--` comments out everything after it. The
+console then reports *"The request is malformed: Requests without any query are
+not supported"* — it received one long comment and no SQL. The `.console.sql`
+files carry no comments, so they survive being flattened.
+
+Regenerate them with:
+
+```bash
+sed -e 's/--.*$//' schema.sql | grep -v '^[[:space:]]*$' > schema.console.sql
+sed -e 's/--.*$//' seed.sql   | grep -v '^[[:space:]]*$' > seed.console.sql
+```
+
 **R2 CORS is required**, or browser uploads fail. In the dashboard under
 R2 → your bucket → Settings → CORS policy:
 
@@ -122,6 +140,7 @@ lib/
   d1.ts  r2.ts  store.ts  auth.ts  types.ts  api.ts
 schema.sql                     tables
 seed.sql                       the design's starting folder tree
+*.console.sql                  the same SQL, comment-free, for the D1 console
 ```
 
 ## Notes on the port
