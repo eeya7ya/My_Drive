@@ -1,4 +1,3 @@
-import { requireAdmin } from "@/lib/auth";
 import { confirmFile } from "@/lib/store";
 import { ok, fail, readJson, badRequest } from "@/lib/api";
 
@@ -6,10 +5,15 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** Mark a reserved revision uploaded so it becomes the drive's current copy. */
+/**
+ * Mark a reserved revision uploaded so it becomes the drive's current copy.
+ *
+ * Open to the same callers as the reserve route: gating this one alone would
+ * let a visitor start an upload that could never complete, leaving orphaned
+ * bytes in R2 and an unconfirmed row in D1.
+ */
 export async function POST(req: Request, { params }: Ctx) {
   try {
-    await requireAdmin();
     const { id } = await params;
     const { versionId } = await readJson<{ versionId?: string }>(req);
     if (typeof versionId !== "string" || !versionId) {
