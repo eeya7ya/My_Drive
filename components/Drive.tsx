@@ -71,6 +71,9 @@ export default function Drive({
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A server-side condition the operator should act on, e.g. a pending
+  // migration. Distinct from `error`, which reports a failed action.
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Sort and date filter run entirely on the payload already in memory, so
   // changing them costs no D1 reads.
@@ -103,6 +106,7 @@ export default function Drive({
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error || "Could not load the drive");
       setData(body as DrivePayload);
+      setNotice(typeof body?.notice === "string" ? body.notice : null);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load the drive");
@@ -1321,6 +1325,26 @@ export default function Drive({
             )}
           </div>
         </div>
+
+        {notice && (
+          <div style={{ padding: "12px 27px 0" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 9,
+                padding: "10px 13px",
+                border: "1px solid var(--color-accent-300)",
+                background: "var(--color-accent-100)",
+                color: "var(--color-accent-800)",
+                fontSize: 13,
+              }}
+            >
+              <Icon name="info" size={15} style={{ flex: "none", marginTop: 2 }} />
+              <span>{notice}</span>
+            </div>
+          </div>
+        )}
 
         {(busy || error) && (
           <div style={{ padding: "12px 27px 0" }}>

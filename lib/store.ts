@@ -72,8 +72,13 @@ function toDriveFile(r: FileWithVersion): DriveFile {
 export async function getTree(): Promise<{
   tree: TreeNode[];
   rootFiles: DriveFile[];
+  filesError: string | null;
 }> {
-  const [folders, files] = await Promise.all([
+  // The two reads are deliberately independent. A folder tree is the drive's
+  // backbone; if the files query fails — most plausibly because the database
+  // has not been migrated yet — showing the folders with a clear warning beats
+  // a blank drive that looks like data loss.
+  const [folders, fileResult] = await Promise.all([
     d1Query<FolderRow>("SELECT * FROM folders ORDER BY position ASC, name ASC"),
     // Joining on current_version_id reads exactly one version row per file —
     // never the whole history.
@@ -85,8 +90,17 @@ export async function getTree(): Promise<{
          JOIN file_versions v ON v.id = f.current_version_id
         WHERE v.uploaded = 1
         ORDER BY f.name ASC`
+    ).then(
+      (rows) => ({ rows, error: null as string | null }),
+      (e: unknown) => ({
+        rows: [] as FileWithVersion[],
+        error: e instanceof Error ? e.message : "Could not read files",
+      })
     ),
   ]);
+
+  const files = fileResult.rows;
+  const filesError = fileResult.error;
 
   const filesByFolder = new Map<string, DriveFile[]>();
   const rootFiles: DriveFile[] = [];
@@ -130,7 +144,7 @@ export async function getTree(): Promise<{
     }
   }
 
-  return { tree, rootFiles };
+  return { tree, rootFiles, filesError };
 }
 
 /** Both numbers come from the settings table: two rows, no aggregate. */

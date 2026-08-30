@@ -24,7 +24,7 @@ export async function GET() {
       return ok({ ...payload, unconfigured: true });
     }
 
-    const [{ tree, rootFiles }, usage] = await Promise.all([
+    const [{ tree, rootFiles, filesError }, usage] = await Promise.all([
       getTree(),
       getUsage(),
     ]);
@@ -36,6 +36,20 @@ export async function GET() {
       quotaBytes: usage.quotaBytes,
       isAdmin: admin,
     };
+
+    // A missing file_versions table means the database predates the revisions
+    // migration. Say so in words the operator can act on — the raw SQLite
+    // error reads like the data is gone, when only the query failed.
+    if (filesError) {
+      const needsMigration = /no such table|no such column/i.test(filesError);
+      return ok({
+        ...payload,
+        notice: needsMigration
+          ? "Folders are shown, but files could not be read: this database has not been migrated yet. Run migrations/001_file_versions.console.sql in the D1 console. No data has been lost."
+          : `Files could not be read: ${filesError}`,
+      });
+    }
+
     return ok(payload);
   } catch (err) {
     return fail(err);
