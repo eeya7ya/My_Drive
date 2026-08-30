@@ -11,6 +11,7 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -83,6 +84,38 @@ export async function presignDownload(
   );
 }
 
+/**
+ * Signed GET served inline rather than as an attachment, so a browser renders
+ * the file instead of saving it. The content type is asserted here because R2
+ * returns whatever was set at upload, and an empty or wrong one sends a PDF to
+ * the download bar instead of the viewer.
+ */
+export async function presignInline(
+  key: string,
+  filename: string,
+  contentType: string,
+  expiresIn = 900
+): Promise<string> {
+  const safe = filename.replace(/["\\]/g, "_");
+  return getSignedUrl(
+    client(),
+    new GetObjectCommand({
+      Bucket: bucket(),
+      Key: key,
+      ResponseContentType: contentType || "application/octet-stream",
+      ResponseContentDisposition: `inline; filename="${safe}"`,
+    }),
+    { expiresIn }
+  );
+}
+
+/** Read an object server-side, for the same-origin preview proxy. */
+export async function getObjectStream(key: string) {
+  return client().send(
+    new GetObjectCommand({ Bucket: bucket(), Key: key })
+  );
+}
+
 export async function deleteObject(key: string): Promise<void> {
   await client().send(
     new DeleteObjectCommand({ Bucket: bucket(), Key: key })
@@ -102,6 +135,19 @@ export async function deleteObjects(keys: string[]): Promise<void> {
       })
     );
   }
+}
+
+/**
+ * Prove the configured credentials can actually open the configured bucket.
+ * ListObjectsV2 with MaxKeys=1 is the cheapest call that fails distinctly for
+ * a wrong bucket name versus a bad key.
+ */
+export async function probeBucket(): Promise<{ bucket: string; count: number }> {
+  const name = bucket();
+  const out = await client().send(
+    new ListObjectsV2Command({ Bucket: name, MaxKeys: 1 })
+  );
+  return { bucket: name, count: out.KeyCount ?? 0 };
 }
 
 export function isR2Configured(): boolean {
