@@ -11,6 +11,7 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -134,6 +135,19 @@ export async function deleteObjects(keys: string[]): Promise<void> {
       })
     );
   }
+}
+
+/**
+ * Prove the configured credentials can actually open the configured bucket.
+ * ListObjectsV2 with MaxKeys=1 is the cheapest call that fails distinctly for
+ * a wrong bucket name versus a bad key.
+ */
+export async function probeBucket(): Promise<{ bucket: string; count: number }> {
+  const name = bucket();
+  const out = await client().send(
+    new ListObjectsV2Command({ Bucket: name, MaxKeys: 1 })
+  );
+  return { bucket: name, count: out.KeyCount ?? 0 };
 }
 
 export function isR2Configured(): boolean {
