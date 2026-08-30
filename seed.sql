@@ -1,0 +1,35 @@
+-- Yahya Khaled Drive — starting folder tree.
+-- Generated from the design canvas by scripts/generate-seed.mjs.
+-- Load after schema.sql:
+--   npx wrangler d1 execute <DB_NAME> --remote --file=./seed.sql
+
+DELETE FROM folders;
+
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('msc-00-0', NULL, 'Master Degree', 'MSC-00', 'cap', 0, 1786536000000, 1786536000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('prt-01-0', 'msc-00-0', 'Power System Protection', 'PRT-01', 'shield', 0, 1785412800000, 1785412800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('prt-11-0', 'prt-01-0', 'Relay Coordination', 'PRT-11', 'folder', 0, 1787572800000, 1787572800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('prt-12-1', 'prt-01-0', 'Distance Protection', 'PRT-12', 'folder', 1, 1781784000000, 1781784000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('prt-13-2', 'prt-01-0', 'Differential Protection', 'PRT-13', 'folder', 2, 1787918400000, 1787918400000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('prt-14-3', 'prt-01-0', 'Protection Lab Work', 'PRT-14', 'folder', 3, 1778328000000, 1778328000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('com-02-1', 'msc-00-0', 'Power System Communication', 'COM-02', 'tower', 1, 1786536000000, 1786536000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('com-21-0', 'com-02-1', 'IEC 61850 & GOOSE', 'COM-21', 'folder', 0, 1785412800000, 1785412800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('com-22-1', 'com-02-1', 'SCADA Systems', 'COM-22', 'folder', 1, 1787572800000, 1787572800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('com-23-2', 'com-02-1', 'Teleprotection', 'COM-23', 'folder', 2, 1781784000000, 1781784000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('com-24-3', 'com-02-1', 'Substation Networking', 'COM-24', 'folder', 3, 1787918400000, 1787918400000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('anl-03-2', 'msc-00-0', 'Power System Analysis', 'ANL-03', 'activity', 2, 1778328000000, 1778328000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('anl-31-0', 'anl-03-2', 'Load Flow Studies', 'ANL-31', 'folder', 0, 1786536000000, 1786536000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('anl-32-1', 'anl-03-2', 'Short Circuit Studies', 'ANL-32', 'folder', 1, 1785412800000, 1785412800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('anl-33-2', 'anl-03-2', 'Transient Stability', 'ANL-33', 'folder', 2, 1787572800000, 1787572800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('crs-04-3', 'msc-00-0', 'Courses & Lectures', 'CRS-04', 'book', 3, 1781784000000, 1781784000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('crs-41-0', 'crs-04-3', 'Semester 1', 'CRS-41', 'folder', 0, 1787918400000, 1787918400000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('crs-42-1', 'crs-04-3', 'Semester 2', 'CRS-42', 'folder', 1, 1778328000000, 1778328000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('crs-43-2', 'crs-04-3', 'Semester 3', 'CRS-43', 'folder', 2, 1786536000000, 1786536000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('ths-05-4', 'msc-00-0', 'Thesis & Research', 'THS-05', 'flask', 4, 1785412800000, 1785412800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('ths-51-0', 'ths-05-4', 'Literature Review', 'THS-51', 'folder', 0, 1787572800000, 1787572800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('ths-52-1', 'ths-05-4', 'Simulation Models', 'THS-52', 'folder', 1, 1781784000000, 1781784000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('ths-53-2', 'ths-05-4', 'Drafts', 'THS-53', 'folder', 2, 1787918400000, 1787918400000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('ths-54-3', 'ths-05-4', 'Published Papers', 'THS-54', 'folder', 3, 1778328000000, 1778328000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('std-06-5', 'msc-00-0', 'Standards & References', 'STD-06', 'bookmark', 5, 1786536000000, 1786536000000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('std-61-0', 'std-06-5', 'IEC Standards', 'STD-61', 'folder', 0, 1785412800000, 1785412800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('std-62-1', 'std-06-5', 'IEEE Standards', 'STD-62', 'folder', 1, 1787572800000, 1787572800000);
+INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('std-63-2', 'std-06-5', 'Textbooks', 'STD-63', 'folder', 2, 1781784000000, 1781784000000);

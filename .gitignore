@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# Unzipped copy of the committed design handoff — regenerate with:
+#   unzip "Yahya Khaled Drive Design-handoff.zip" -d design-handoff
+design-handoff/
+
+# Local verification screenshots
+.verify/

@@ -1,0 +1,112 @@
+@import "./design-system.css";
+
+/* ── Canvas-level styles, copied verbatim from "Yahya Khaled - Drive.dc.html" ── */
+body { margin:0; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body); transition:background .35s, color .35s; }
+@keyframes rise { from { opacity:0; transform:translateY(14px); } }
+@keyframes sweepIn { from { width:0; opacity:0; } }
+@keyframes grow { from { width:0; } }
+@keyframes drift { from { opacity:0; transform:translateX(-8px); } }
+@keyframes pop { from { opacity:0; transform:scale(.96) translateY(-4px); } }
+:root {
+  --side-bg:#eaeef3; --side-fg:#1d1f20; --side-fg-dim:rgba(29,31,32,.58);
+  --side-label:var(--color-accent-700); --side-hover:color-mix(in srgb, var(--color-accent) 12%, transparent);
+  --side-active-bg:var(--color-accent-100); --side-active-fg:var(--color-accent-800); --side-active-icon:var(--color-accent-700);
+  --side-icon:rgba(29,31,32,.5); --side-rule:var(--color-divider); --side-border:var(--color-divider);
+  --side-track:color-mix(in srgb, var(--color-accent) 20%, #ffffff); --side-track-border:var(--color-divider);
+}
+body[data-theme="dark"] {
+  --side-bg:#0e1a26; --side-fg:#e6edf4; --side-fg-dim:rgba(238,244,250,.6);
+  --side-label:#93b4d6; --side-hover:rgba(238,244,250,.09);
+  --side-active-bg:rgba(238,244,250,.13); --side-active-fg:#ffffff; --side-active-icon:var(--color-accent-300);
+  --side-icon:rgba(238,244,250,.6); --side-rule:rgba(238,244,250,.18); --side-border:var(--color-divider);
+  --side-track:rgba(238,244,250,.14); --side-track-border:rgba(238,244,250,.22);
+}
+a { color: var(--color-accent); text-underline-offset:3px; }
+a:hover { color: var(--color-accent-600); }
+.brand-dark { display: none; }
+body[data-theme="dark"] .brand-bright { display: none; }
+body[data-theme="dark"] .brand-dark { display: block; }
+body[data-theme="dark"] {
+  --color-bg:#141e28; --color-surface:#1c2a38; --color-text:#e6edf4;
+  --color-divider:rgba(230,237,244,.16);
+  --color-accent:#94bce3; --color-accent-600:#b5d9fd; --color-accent-700:#d6ebff;
+  --color-accent-100:#2c455d; --color-accent-200:#243a4e; --color-accent-300:#3a5670; --color-accent-800:#d6ebff;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 6px 18px rgba(0,0,0,.45); --shadow-lg:0 14px 40px rgba(0,0,0,.55);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Port of the canvas's `style-hover` attributes.
+
+   The design tool expresses hover with a `style-hover` attribute alongside an
+   inline `style`. Inline styles beat class rules, so the base declarations for
+   any element with a hover state live here as a class rather than inline, and
+   the values that vary per row are passed in as custom properties. Every
+   declaration below is transcribed from the canvas — same properties, same
+   values, same order.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.dc-brand {
+  display: flex; align-items: center; gap: 12px; cursor: pointer;
+  animation: drift .4s both;
+}
+.dc-brand:hover { opacity: .9; }
+
+.dc-tree-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 8px; padding-left: var(--row-indent);
+  font-size: 14px; cursor: pointer;
+  color: var(--row-color); background: var(--row-bg);
+  border-left: var(--row-rule);
+}
+.dc-tree-row:hover { background: var(--side-hover); }
+
+.dc-crumb { cursor: pointer; color: var(--crumb-color); font-weight: var(--crumb-weight); }
+.dc-crumb:hover { color: var(--color-accent-700); }
+
+.dc-card {
+  position: relative; cursor: pointer;
+  display: flex; flex-direction: column; gap: 15px; padding: 18px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-top: 2px solid var(--color-accent);
+  transition: transform .22s cubic-bezier(.2,.7,.3,1), box-shadow .22s, border-color .22s;
+  animation: rise .45s cubic-bezier(.2,.7,.3,1) both;
+}
+.dc-card:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+}
+
+.dc-icon-btn {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--color-text); opacity: .4;
+}
+.dc-icon-btn:hover { opacity: 1; color: var(--color-accent-700); }
+
+.dc-file-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 16px; border-bottom: 1px solid var(--color-divider);
+  background: var(--color-surface);
+  animation: rise .35s both;
+}
+.dc-file-row:hover { background: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface)); }
+
+.dc-file-btn {
+  width: 30px; height: 30px; display: grid; place-items: center;
+  background: transparent; border: 1px solid transparent; cursor: pointer;
+  color: var(--color-text); opacity: .45;
+}
+.dc-file-btn:hover { opacity: 1; color: var(--color-accent-700); border-color: color-mix(in srgb, var(--color-accent) 40%, transparent); }
+.dc-file-btn.dc-danger:hover { opacity: 1; color: #c0492f; border-color: color-mix(in srgb, #c0492f 40%, transparent); }
+
+.dc-menu-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 11px; font-size: 14px; cursor: pointer;
+  color: var(--item-color);
+}
+.dc-menu-item:hover { background: var(--item-hover-bg); }
+
+/* The drive is a single full-height surface; never let the page double-scroll. */
+html, body { height: 100%; }
