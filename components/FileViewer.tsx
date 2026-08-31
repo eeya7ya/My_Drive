@@ -211,6 +211,7 @@ export default function FileViewer({
   return (
     <div
       onClick={onClose}
+      className="dc-viewer-wrap"
       style={{
         position: "fixed",
         inset: 0,
@@ -224,6 +225,7 @@ export default function FileViewer({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="dc-viewer"
         style={{
           width: "min(1180px, 100%)",
           height: "min(880px, 100%)",
@@ -236,6 +238,7 @@ export default function FileViewer({
         }}
       >
         <header
+          className="dc-viewer-head"
           style={{
             display: "flex",
             alignItems: "center",
@@ -265,7 +268,7 @@ export default function FileViewer({
               {file.size} · {file.uploadedAt}
             </div>
           </div>
-          <span className="tag tag-accent" style={{ fontSize: 10 }}>
+          <span className="tag tag-accent dc-viewer-rev" style={{ fontSize: 10 }}>
             {versionLabel ?? `REV ${file.version}`}
           </span>
           <button className="btn btn-secondary" onClick={onDownload}>

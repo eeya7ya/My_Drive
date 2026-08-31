@@ -163,3 +163,106 @@ html, body { height: 100%; }
   font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
   color: var(--color-accent-700); margin: 1.2em 0 .5em;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Phones and tablets.
+
+   The canvas design assumes a laptop: a permanent 270px sidebar, right-click
+   menus, and a viewer sized for a big window. None of that survives a phone,
+   so below 860px the sidebar becomes an off-canvas drawer, the padding and
+   type step down, and the viewer goes full-screen. The desktop layout is
+   untouched above the breakpoint.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.dc-menu-btn { display: none; }
+
+@media (max-width: 860px) {
+  .dc-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 60;
+    width: min(84vw, 320px);
+    transform: translateX(-100%);
+    transition: transform .26s cubic-bezier(.2,.7,.3,1);
+    box-shadow: var(--shadow-lg);
+    overflow-y: auto;
+  }
+  .dc-sidebar.dc-open { transform: none; }
+
+  .dc-scrim {
+    position: fixed; inset: 0; z-index: 59;
+    background: color-mix(in srgb, #1d1f20 45%, transparent);
+  }
+
+  /* The hamburger only exists where the sidebar is hidden. */
+  .dc-menu-btn { display: grid; }
+
+  .dc-pad { padding-left: 16px !important; padding-right: 16px !important; }
+  .dc-header { gap: 8px !important; padding: 12px 16px !important; }
+
+  /* The search field must not squeeze the buttons onto a second row. */
+  .dc-search { min-width: 0 !important; flex: 1 1 100% !important; order: -1; }
+
+  .dc-title { font-size: 26px !important; }
+
+  /* Two columns at phone widths beats one tall column of huge cards. */
+  .dc-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+    gap: 12px !important;
+  }
+  .dc-card { padding: 14px !important; gap: 11px !important; }
+
+  /* The folder code pinned bottom-right collides with the meta row when the
+     card is this narrow, so it steps out of the corner. */
+  .dc-card .dc-card-code { position: static !important; display: block; margin-top: 6px; }
+
+  .dc-file-row { padding: 11px 12px !important; gap: 10px !important; }
+
+  .dc-viewer-wrap { padding: 0 !important; }
+  .dc-viewer {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    border: none !important;
+  }
+  .dc-viewer-head { padding: 10px 12px !important; }
+  /* On a phone the filename plus four controls will not fit on one line. */
+  .dc-viewer-head .dc-viewer-rev { display: none; }
+
+  .dc-filter-pop { right: -60px !important; min-width: 260px !important; }
+}
+
+/* Touch devices get no hover state and no right-click, so the affordances
+   that depend on either are always visible instead of revealed. */
+@media (hover: none) {
+  .dc-icon-btn, .dc-file-btn { opacity: .85; }
+}
+
+/* A long-press should select the row, not the text inside it. */
+.dc-file-row, .dc-card, .dc-tree-row { -webkit-touch-callout: none; }
+
+/* Keep content clear of a notch or a home indicator when installed. */
+@supports (padding: env(safe-area-inset-left)) {
+  @media (max-width: 860px) {
+    .dc-header, .dc-pad { padding-left: max(16px, env(safe-area-inset-left)) !important; padding-right: max(16px, env(safe-area-inset-right)) !important; }
+    .dc-sidebar { padding-left: max(20px, env(safe-area-inset-left)); }
+  }
+}
+
+/* On a narrow phone the file row cannot carry an icon, a name, two tags and
+   three buttons. The extension is already in the filename and tapping the row
+   already opens the file, so both drop out and the row fits without the name
+   being squeezed to nothing. */
+@media (max-width: 520px) {
+  .dc-file-row { gap: 8px !important; }
+  .dc-file-ext, .dc-file-open { display: none !important; }
+}
+
+/* "Right-click" means nothing on a touchscreen. Both hints are rendered and
+   CSS picks the one that matches the input device, which avoids a client-only
+   check that would mismatch during hydration. */
+.dc-hint-touch { display: none; }
+@media (hover: none) {
+  .dc-hint-mouse { display: none; }
+  .dc-hint-touch { display: inline; }
+}
