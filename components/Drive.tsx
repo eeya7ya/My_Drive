@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Icon } from "./icons";
 import FileViewer from "./FileViewer";
 import { kindFor } from "@/lib/preview";
+import { useLongPress } from "@/lib/longpress";
 import { hrefFor, resolveSegments, segmentsOf, slugify } from "@/lib/paths";
 import {
   DrivePayload,
@@ -91,6 +92,8 @@ export default function Drive({
   // changing them costs no D1 reads.
   const [sort, setSort] = useState<SortKey>("name");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Below the mobile breakpoint the sidebar is a drawer rather than a column.
+  const [navOpen, setNavOpen] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
@@ -235,6 +238,7 @@ export default function Drive({
       setPath(p);
       setQuery("");
       setMenu(null);
+      setNavOpen(false);
       if (!opts?.fileName) setFocusFile(null);
 
       if (typeof window !== "undefined") {
@@ -732,6 +736,10 @@ export default function Drive({
     [isAdmin, openMenu, addFolder, triggerUpload]
   );
 
+  // Touch equivalents of right-click. Declared here so each has its menu
+  // builder already in scope.
+  const canvasPress = useLongPress(canvasMenu);
+
   /* ── derived view model (the canvas's renderVals) ─────────────────────── */
 
   const searching = query.trim().length > 0;
@@ -782,6 +790,27 @@ export default function Drive({
     [nodeAt]
   );
 
+  // One long-press binding shared by every card and row: the menu builder is
+  // read from a ref at fire time, so a single hook covers a changing list
+  // without breaking the rules of hooks.
+  const pressTarget = useRef<((ev: React.MouseEvent) => void) | null>(null);
+  const itemPress = useLongPress(
+    useCallback((ev: React.MouseEvent) => pressTarget.current?.(ev), [])
+  );
+  const bindPress = useCallback(
+    (open: (ev: React.MouseEvent) => void) => ({
+      handlers: {
+        ...itemPress.handlers,
+        onTouchStart: (e: React.TouchEvent) => {
+          pressTarget.current = open;
+          itemPress.handlers.onTouchStart(e);
+        },
+      },
+      suppressClick: itemPress.suppressClick,
+    }),
+    [itemPress]
+  );
+
   const folders = shownEntries.map((e, idx) => {
     const parentNames = e.path
       .slice(0, -1)
@@ -804,6 +833,7 @@ export default function Drive({
             : "Empty",
       open: () => enter(e.path),
       menu: (ev: React.MouseEvent) => folderMenu(ev, e.path),
+      press: bindPress((ev: React.MouseEvent) => folderMenu(ev, e.path)),
     };
   });
 
@@ -825,6 +855,7 @@ export default function Drive({
     version: f.version,
     versionCount: f.versionCount,
     delay: Math.min(idx * 45, 300) + "ms",
+    press: bindPress((ev: React.MouseEvent) => fileMenu(ev, f)),
   }));
 
   const crumbs = [
@@ -964,7 +995,11 @@ export default function Drive({
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", alignItems: "stretch" }}>
+      {navOpen && (
+        <div className="dc-scrim" onClick={() => setNavOpen(false)} />
+      )}
       <aside
+        className={navOpen ? "dc-sidebar dc-open" : "dc-sidebar"}
         style={{
           width: 270,
           flex: "none",
@@ -1166,6 +1201,7 @@ export default function Drive({
         />
 
         <header
+          className="dc-header dc-pad"
           style={{
             display: "flex",
             alignItems: "center",
@@ -1175,7 +1211,15 @@ export default function Drive({
             flexWrap: "wrap",
           }}
         >
+          <button
+            className="btn btn-secondary btn-icon dc-menu-btn"
+            onClick={() => setNavOpen(true)}
+            title="Folders"
+          >
+            <Icon name="menu" size={15} />
+          </button>
           <div
+            className="dc-search"
             style={{
               flex: 1,
               minWidth: 220,
@@ -1277,6 +1321,7 @@ export default function Drive({
                   style={{ position: "fixed", inset: 0, zIndex: 70 }}
                 />
                 <div
+                  className="dc-filter-pop"
                   style={{
                     position: "absolute",
                     top: "calc(100% + 6px)",
@@ -1403,6 +1448,7 @@ export default function Drive({
         </header>
 
         <div
+          className="dc-pad"
           style={{
             display: "flex",
             alignItems: "center",
@@ -1500,7 +1546,12 @@ export default function Drive({
           </div>
         )}
 
-        <div onContextMenu={canvasMenu} style={{ padding: "14px 27px 44px", flex: 1 }}>
+        <div
+          onContextMenu={canvasMenu}
+          {...canvasPress.handlers}
+          className="dc-pad"
+          style={{ padding: "14px 27px 44px", flex: 1 }}
+        >
           <div
             style={{
               display: "flex",
@@ -1512,7 +1563,9 @@ export default function Drive({
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-                <h2 style={{ margin: 0, fontSize: 34 }}>{title}</h2>
+                <h2 className="dc-title" style={{ margin: 0, fontSize: 34 }}>
+                  {title}
+                </h2>
                 <span
                   style={{
                     fontSize: 12,
@@ -1570,6 +1623,7 @@ export default function Drive({
 
           {showGrid && (
             <div
+              className="dc-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
@@ -1580,8 +1634,11 @@ export default function Drive({
                 <div
                   key={f.key}
                   className="dc-card"
-                  onClick={f.open}
+                  onClick={() => {
+                    if (!f.press.suppressClick()) f.open();
+                  }}
                   onContextMenu={f.menu}
+                  {...f.press.handlers}
                   style={{ animationDelay: f.delay }}
                 >
                   <div
@@ -1638,6 +1695,7 @@ export default function Drive({
                     </div>
                   </div>
                   <span
+                    className="dc-card-code"
                     style={{
                       position: "absolute",
                       right: 14,
@@ -1732,8 +1790,11 @@ export default function Drive({
                   <div key={d.key} style={{ animationDelay: d.delay }}>
                   <div
                     className="dc-file-row"
-                    onClick={() => openFile(d.file)}
+                    onClick={() => {
+                      if (!d.press.suppressClick()) openFile(d.file);
+                    }}
                     onContextMenu={(ev) => fileMenu(ev, d.file)}
+                    {...d.press.handlers}
                     ref={
                       focusFile === d.file.id
                         ? (el) =>
@@ -1787,7 +1848,10 @@ export default function Drive({
                     <span className="tag tag-accent" style={{ fontSize: 10 }}>
                       REV {d.version}
                     </span>
-                    <span className="tag tag-neutral" style={{ fontSize: 10 }}>
+                    <span
+                      className="tag tag-neutral dc-file-ext"
+                      style={{ fontSize: 10 }}
+                    >
                       {d.extTag}
                     </span>
                     {d.versionCount > 1 && (
@@ -1813,7 +1877,7 @@ export default function Drive({
                       </button>
                     )}
                     <button
-                      className="dc-file-btn"
+                      className="dc-file-btn dc-file-open"
                       onClick={(ev) => {
                         ev.stopPropagation();
                         openFile(d.file);
@@ -1988,7 +2052,7 @@ export default function Drive({
                   {searching
                     ? "No folder names match your search. Try a shorter term."
                     : isAdmin
-                      ? "Right-click here or use the buttons to add a folder or upload files."
+                      ? "Use the buttons above to add a folder or upload files."
                       : "Nothing here yet — use Upload file to add something."}
                 </div>
                 {showActions && (
@@ -2028,9 +2092,19 @@ export default function Drive({
             }}
           >
             <Icon name="info" size={13} />
-            {isAdmin
-              ? "Right-click a folder, a file, or empty space to manage."
-              : "Right-click to upload, or a file to open and download it."}
+            {/* Both are rendered and CSS picks one, so the wording matches the
+                input device without a client-only check that would mismatch
+                during hydration. */}
+            <span className="dc-hint-mouse">
+              {isAdmin
+                ? "Right-click a folder, a file, or empty space to manage."
+                : "Right-click to upload, or a file to open and download it."}
+            </span>
+            <span className="dc-hint-touch">
+              {isAdmin
+                ? "Touch and hold a folder, a file, or empty space to manage."
+                : "Touch and hold to upload, or tap a file to open it."}
+            </span>
           </div>
         </div>
       </main>

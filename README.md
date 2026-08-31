@@ -164,6 +164,41 @@ banner naming the migration — the files query fails on its own rather than
 taking the whole page down. No data is lost either way: the failure is a query
 against a table that does not exist yet, not a deletion.
 
+## Phones and tablets
+
+The canvas design assumes a laptop — a permanent 270px sidebar, right-click
+menus, a viewer sized for a big window. Below 860px:
+
+- the sidebar becomes an off-canvas drawer behind a hamburger, closing itself
+  when you navigate
+- padding and headings step down, folders go to a two-column grid, and the
+  viewer runs full-bleed
+- **touch and hold** opens the same context menu right-click does, with a
+  short vibration where the platform supports it; a hold is suppressed from
+  also firing the tap, so holding a folder opens the menu instead of entering
+  it
+- below 520px the file row drops its extension tag and open button — the
+  extension is already in the filename and tapping the row opens the file —
+  so the name is not squeezed to nothing
+- the hint line says "touch and hold" rather than "right-click", chosen in CSS
+  by `(hover: none)` so it never mismatches during hydration
+
+Above the breakpoint the desktop layout is untouched, which is checked in the
+same pass.
+
+### Installing it
+
+`app/manifest.ts` makes the drive installable to a home screen, opening
+standalone without browser chrome. The brand mark is one 2000px square listed
+at several sizes, so each platform downscales rather than the repo carrying
+near-duplicate icons. `viewportFit: "cover"` lets the page reach under a notch
+and the safe-area insets pad it back; zoom is deliberately left uncapped so
+text can still be enlarged.
+
+This is a progressive web app, not a native binary — there is no App Store
+build, and it needs a network connection. What it gives you is the drive on the
+home screen, full-screen, behaving like an app.
+
 ## Opening files
 
 Clicking a file opens it in the drive rather than downloading it. Download is
@@ -272,6 +307,7 @@ components/
 lib/
   d1.ts  r2.ts  store.ts  auth.ts  types.ts  api.ts
   paths.ts                     URL <-> folder/file resolution
+  longpress.ts                 touch-and-hold as right-click
   preview.ts                   which viewer opens which format
 schema.sql                     tables
 seed.sql                       the design's starting folder tree
