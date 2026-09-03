@@ -116,7 +116,7 @@ One deployment and one database hold two drives that never mix:
 | Drive | Address | Rows |
 | --- | --- | --- |
 | Yahya Khaled — Power Systems Drive | `/` | `drive = 'main'` |
-| eSpark | `/espark` | `drive = 'espark'` |
+| eSpark | `/advec` | `drive = 'espark'` |
 
 Every folder and file row carries a `drive` column and every query in
 `lib/store.ts` is scoped by it, so the main drive cannot see an eSpark row and
@@ -130,7 +130,7 @@ One admin password covers both; the padlock returns you to the drive you
 signed in from.
 
 The drives are declared in `lib/brand.ts`. Adding a third is a new entry
-there plus a route folder like `app/espark`.
+there plus a route folder like `app/advec`.
 
 ### Migrating an existing database
 

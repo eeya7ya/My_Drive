@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Deep links into the main drive: /writing/presentations,
- * /writing/thesis/draft.pdf, and so on. (/espark/… is matched by the eSpark
+ * /writing/thesis/draft.pdf, and so on. (/advec/… is matched by the eSpark
  * route first, since a static segment beats a catch-all.)
  *
  * The server renders the same shell for every path — the Drive component

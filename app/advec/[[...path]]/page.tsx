@@ -10,12 +10,12 @@ const brand = driveFor("espark");
 export const metadata: Metadata = {
   title: brand.title,
   description: brand.description,
-  manifest: "/espark/manifest.webmanifest",
+  manifest: "/advec/manifest.webmanifest",
   appleWebApp: { capable: true, title: brand.shortName, statusBarStyle: "default" },
 };
 
 /**
- * The eSpark drive: /espark is its root, /espark/alternator/testing a deep
+ * The eSpark drive: /advec is its root, /advec/alternator/testing a deep
  * link. It shares nothing with the main drive but the code — every request
  * it makes names its own drive, and the store only returns that drive's rows.
  */

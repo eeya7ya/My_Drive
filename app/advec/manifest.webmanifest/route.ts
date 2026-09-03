@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * The eSpark drive's web app manifest, so installing it to a home screen
- * gives an app called eSpark that opens at /espark. Next's manifest.ts
+ * gives an app called eSpark that opens at /advec. Next's manifest.ts
  * convention only covers the app root, hence a plain route here.
  */
 export function GET() {

@@ -4,7 +4,7 @@ import { driveFor } from "@/lib/brand";
 /**
  * The main drive's manifest: installable to a phone's home screen, opening
  * without browser chrome so the drive behaves like an app rather than a page.
- * The eSpark drive has its own at /espark/manifest.webmanifest.
+ * The eSpark drive has its own at /advec/manifest.webmanifest.
  *
  * The brand mark is a single 2000px square; listing several sizes against the
  * one file lets each platform pick and downscale, which avoids shipping

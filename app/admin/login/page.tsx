@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * One admin signs in to every drive. The form wears the brand of the drive
- * it was opened from (`?next=/espark`) and returns there afterwards.
+ * it was opened from (`?next=/advec`) and returns there afterwards.
  */
 export default async function AdminLoginPage({
   searchParams,
