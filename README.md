@@ -145,13 +145,18 @@ wrangler d1 execute espark-drive --remote --file=./seed.espark.sql
 wrangler r2 bucket create espark-drive            # a second bucket
 ```
 
-`seed.espark.sql` is the eSpark drive's starting tree: the 16 equipment
-packages and their 99 subjects from the Electrical Scope Register workbook
-(Alternator → Rating & site derating, Neutral earthing & NER, …; MV Switchgear
-→ Ratings, Busbar configuration, …; through Cross-Cutting Items). Positions
-follow the register's own numbering, so the drive shows 1, 1.1, 1.2 … exactly
-as the workbook does. It only inserts — `INSERT OR IGNORE`, never a delete —
-so it is safe to run twice. Regenerate it with
+`seed.espark.sql` is the eSpark drive's folder tree, from the Electrical
+Scope Register Rev2 workbook: 17 parts (Alternator, MV Switchgear, …,
+E-House) and their 127 deliverables. Part and Sub numbers are the register's
+own, so `9.5` in the workbook is folder 9.5 in the drive. Each deliverable
+gets a short folder title — the register's full wording is kept beside it in
+`scripts/generate-espark-seed.mjs` — and a deliverable that bundles several
+documents (ITP, MOS, Test Report Template; a datasheet line naming five kinds
+of equipment) gets a third level, one folder per document, so each upload has
+an obvious home.
+
+The file first removes the Rev1 tree (ids `esp-*`), then inserts this one with
+`INSERT OR IGNORE`, so running it twice changes nothing. Regenerate it with
 `node scripts/generate-espark-seed.mjs`. Do **not** load `seed.sql` here; that
 is the Power Systems tree.
 
