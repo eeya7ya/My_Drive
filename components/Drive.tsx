@@ -1042,7 +1042,17 @@ export default function Drive({
             ev.stopPropagation();
             if (hasKids) setExpanded((prev) => ({ ...prev, [n.id]: !isOpen }));
           },
-          open: () => enter(p),
+          // Opening a folder also unfolds it (enter expands the whole path).
+          // A second click on the folder already open folds it back, so the
+          // row itself is enough to browse the tree without hunting for the
+          // chevron.
+          open: () => {
+            if (isActive && hasKids) {
+              setExpanded((prev) => ({ ...prev, [n.id]: !isOpen }));
+              return;
+            }
+            enter(p);
+          },
           menu: (ev) => folderMenu(ev, p),
         });
 
@@ -1077,10 +1087,14 @@ export default function Drive({
         }}
       >
         <div className="dc-brand" onClick={() => enter([])}>
+          {/* The mark is a tall path, roughly 1:2, cropped to its own bounds
+              (espark-mark-*.png) so the box can match its shape. In the square
+              brand image it fills a third of the width and shrank to a scribble
+              beside the name. */}
           <div
             style={{
-              width: 52,
-              height: 52,
+              width: 34,
+              height: 72,
               flex: "none",
               display: "grid",
               placeItems: "center",
@@ -1089,7 +1103,7 @@ export default function Drive({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="brand-bright"
-              src="/assets/espark-bright.png"
+              src="/assets/espark-mark-bright.png"
               alt="eSpark"
               style={{
                 gridArea: "1/1",
@@ -1102,7 +1116,7 @@ export default function Drive({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="brand-dark"
-              src="/assets/espark-dark.png"
+              src="/assets/espark-mark-dark.png"
               alt="eSpark"
               style={{
                 gridArea: "1/1",
@@ -1118,7 +1132,7 @@ export default function Drive({
               style={{
                 fontFamily: "var(--font-heading)",
                 fontWeight: 600,
-                fontSize: 19,
+                fontSize: brand.numbered ? 24 : 19,
                 lineHeight: 1.1,
                 letterSpacing: ".02em",
               }}
@@ -1154,6 +1168,7 @@ export default function Drive({
             <div
               key={r.key}
               className="dc-tree-row"
+              onClick={r.open}
               onContextMenu={r.menu}
               style={
                 {
@@ -1164,6 +1179,9 @@ export default function Drive({
                 } as React.CSSProperties
               }
             >
+              {/* The chevron only folds or unfolds; the rest of the row —
+                  icon, name, count and the padding between — opens the folder,
+                  so a click lands wherever the pointer happens to be. */}
               <span
                 onClick={r.toggle}
                 style={{
@@ -1179,13 +1197,11 @@ export default function Drive({
                 <Icon name="chevron" size={13} />
               </span>
               <span
-                onClick={r.open}
                 style={{ display: "inline-flex", flex: "none", color: r.iconColor }}
               >
                 <Icon name={r.icon} size={15} />
               </span>
               <span
-                onClick={r.open}
                 style={{
                   flex: 1,
                   whiteSpace: "nowrap",
@@ -2242,8 +2258,8 @@ export default function Drive({
               <span>Powered by</span>
               <span
                 style={{
-                  width: 16,
-                  height: 16,
+                  width: 11,
+                  height: 22,
                   display: "grid",
                   placeItems: "center",
                   flex: "none",
@@ -2252,14 +2268,14 @@ export default function Drive({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   className="brand-bright"
-                  src="/assets/espark-bright.png"
+                  src="/assets/espark-mark-bright.png"
                   alt=""
                   style={{ gridArea: "1/1", width: "100%", height: "100%", objectFit: "contain" }}
                 />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   className="brand-dark"
-                  src="/assets/espark-dark.png"
+                  src="/assets/espark-mark-dark.png"
                   alt=""
                   style={{ gridArea: "1/1", width: "100%", height: "100%", objectFit: "contain" }}
                 />

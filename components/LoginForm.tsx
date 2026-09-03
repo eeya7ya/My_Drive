@@ -70,10 +70,12 @@ export default function LoginForm({
             marginBottom: 26,
           }}
         >
+          {/* The mark is about 1:2, cropped to its bounds, so the box takes
+              its shape rather than a square that leaves it a sliver. */}
           <div
             style={{
-              width: 44,
-              height: 44,
+              width: 30,
+              height: 62,
               flex: "none",
               display: "grid",
               placeItems: "center",
@@ -82,7 +84,7 @@ export default function LoginForm({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="brand-bright"
-              src="/assets/espark-bright.png"
+              src="/assets/espark-mark-bright.png"
               alt="eSpark"
               style={{
                 gridArea: "1/1",
@@ -94,7 +96,7 @@ export default function LoginForm({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="brand-dark"
-              src="/assets/espark-dark.png"
+              src="/assets/espark-mark-dark.png"
               alt="eSpark"
               style={{
                 gridArea: "1/1",
