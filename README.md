@@ -109,6 +109,56 @@ automatically — no build configuration needed. Add every variable from
 `.env.example` under **Settings → Environment Variables**, then redeploy so they
 take effect. Add your production domain to the R2 CORS policy above.
 
+## A second drive: eSpark
+
+The same code serves more than one drive. Each drive is its own deployment
+with its own database and bucket; one environment variable decides which
+identity the app wears on top of that data.
+
+| `DRIVE_VARIANT` | Drive |
+| --- | --- |
+| unset, or `yahya` | Yahya Khaled — Power Systems Drive, as above |
+| `espark` | the eSpark drive |
+
+On the eSpark drive:
+
+- **Folders are numbered in outline style** — `1`, `1.1`, `1.2`, `2` — from
+  their place in the tree, and the number shows wherever a folder is named:
+  the sidebar tree, the cards and list, the breadcrumb, and the page title.
+  Nothing is stored for this; the number is computed from the folder's
+  position when the drive loads, so it can never drift from the tree.
+- A new folder takes the next number among its siblings. To renumber, the
+  admin right-clicks a folder and picks **Move up** or **Move down**; the
+  siblings' positions are rewritten and every number below follows.
+- The listing keeps tree order by default so the numbers read in sequence.
+  The sort menu gains a **Number** option and still offers Name / Newest /
+  Oldest.
+- The sidebar, sign-in card, tab title and home-screen name read **eSpark**,
+  and **Powered by eSpark** sits in the bottom-right corner of the page.
+
+Setting it up is the same as the first drive, once more:
+
+```bash
+wrangler d1 create espark-drive                   # a second database
+wrangler d1 execute espark-drive --remote --file=./schema.sql
+wrangler r2 bucket create espark-drive            # a second bucket
+```
+
+Skip `seed.sql` — that is the Power Systems folder tree. The eSpark drive
+starts empty and the admin builds its tree from the panel; folders number
+themselves as they are added.
+
+Then import the repo at Vercel a second time as a new project, add the same
+variables as before pointing at the new database and bucket, and add:
+
+```
+DRIVE_VARIANT=espark
+```
+
+Add the new project's domain to the new bucket's CORS policy. Both projects
+build from the same branch, so a change to the code reaches both drives on
+the next deploy.
+
 ## Revisions and dates
 
 **Re-uploading a file keeps the old copy.** Upload `Thesis Draft.pdf` into a
@@ -306,6 +356,7 @@ components/
   icons.tsx                    the canvas's Lucide paths
 lib/
   d1.ts  r2.ts  store.ts  auth.ts  types.ts  api.ts
+  brand.ts                     which drive this is (DRIVE_VARIANT)
   paths.ts                     URL <-> folder/file resolution
   longpress.ts                 touch-and-hold as right-click
   preview.ts                   which viewer opens which format

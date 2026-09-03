@@ -15,6 +15,7 @@ import FileViewer from "./FileViewer";
 import { kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
 import { hrefFor, resolveSegments, segmentsOf, slugify } from "@/lib/paths";
+import { Brand, DEFAULT_BRAND } from "@/lib/brand";
 import {
   DrivePayload,
   DriveFile,
@@ -23,7 +24,8 @@ import {
   humanSizeTrim,
 } from "@/lib/types";
 
-type SortKey = "newest" | "oldest" | "name";
+/** "order" is tree order — the order the outline numbers count in. */
+type SortKey = "order" | "newest" | "oldest" | "name";
 
 /** Depth-first lookup by folder id. */
 function findNode(nodes: TreeNode[], id: string): TreeNode | null {
@@ -70,10 +72,23 @@ const EMPTY: DrivePayload = {
 export default function Drive({
   defaultTheme = "light",
   defaultView = "grid",
+  brand = DEFAULT_BRAND,
 }: {
   defaultTheme?: "light" | "dark";
   defaultView?: "grid" | "list";
+  /** Which drive this deployment is; decided server-side from DRIVE_VARIANT. */
+  brand?: Brand;
 }) {
+  // On a numbered drive every folder label carries its outline number, and
+  // the listing keeps tree order by default so the numbers read in sequence.
+  const numbered = brand.numbered;
+  const defaultSort: SortKey = numbered ? "order" : "name";
+  const labelOf = useCallback(
+    (n: { number: string; name: string }) =>
+      numbered && n.number ? `${n.number} ${n.name}` : n.name,
+    [numbered]
+  );
+
   const [data, setData] = useState<DrivePayload>(EMPTY);
   const [loaded, setLoaded] = useState(false);
   const [path, setPath] = useState<string[]>([]);
@@ -90,7 +105,7 @@ export default function Drive({
 
   // Sort and date filter run entirely on the payload already in memory, so
   // changing them costs no D1 reads.
-  const [sort, setSort] = useState<SortKey>("name");
+  const [sort, setSort] = useState<SortKey>(defaultSort);
   const [filtersOpen, setFiltersOpen] = useState(false);
   // Below the mobile breakpoint the sidebar is a drawer rather than a column.
   const [navOpen, setNavOpen] = useState(false);
@@ -356,6 +371,21 @@ export default function Drive({
       });
     },
     [nodeAt, call, run, path]
+  );
+
+  /** Step a folder up or down among its siblings — how a number changes. */
+  const moveNode = useCallback(
+    (p: string[], direction: "up" | "down") => {
+      const node = nodeAt(p);
+      if (!node) return;
+      run(direction === "up" ? "Moving folder up" : "Moving folder down", async () => {
+        await call(`/api/folders/${node.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ move: direction }),
+        });
+      });
+    },
+    [nodeAt, call, run]
   );
 
   const triggerUpload = useCallback((p: string[]) => {
@@ -666,13 +696,30 @@ export default function Drive({
         items.push(
           { label: "New folder", icon: "plus", action: () => addFolder(p) },
           { sep: true },
-          { label: "Rename", icon: "edit", action: () => renameNode(p) },
-          { label: "Delete", icon: "trash", danger: true, action: () => deleteNode(p) }
+          { label: "Rename", icon: "edit", action: () => renameNode(p) }
         );
+        // Reordering only matters where the order is visible — on a numbered
+        // drive it is the number itself.
+        if (numbered) {
+          const siblings = listAt(p.slice(0, -1));
+          const idx = siblings.findIndex((n) => n.id === p[p.length - 1]);
+          if (idx > 0) {
+            items.push({ label: "Move up", icon: "up", action: () => moveNode(p, "up") });
+          }
+          if (idx >= 0 && idx < siblings.length - 1) {
+            items.push({ label: "Move down", icon: "down", action: () => moveNode(p, "down") });
+          }
+        }
+        items.push({
+          label: "Delete",
+          icon: "trash",
+          danger: true,
+          action: () => deleteNode(p),
+        });
       }
       openMenu(ev, items);
     },
-    [isAdmin, enter, copyLink, addFolder, triggerUpload, renameNode, deleteNode, openMenu]
+    [isAdmin, numbered, listAt, enter, copyLink, addFolder, triggerUpload, renameNode, moveNode, deleteNode, openMenu]
   );
 
   const fileMenu = useCallback(
@@ -753,7 +800,7 @@ export default function Drive({
   const toMs = useMemo(() => (to ? new Date(to + "T23:59:59.999").getTime() : null), [to]);
   const dateFiltered = fromMs !== null || toMs !== null;
   /** Anything narrowing or reordering the listing, so the button can say so. */
-  const filterActive = dateFiltered || sort !== "name";
+  const filterActive = dateFiltered || sort !== defaultSort;
 
   const inRange = useCallback(
     (ms: number) =>
@@ -776,6 +823,8 @@ export default function Drive({
   const shownEntries = useMemo(() => {
     let list = entries;
     if (dateFiltered) list = list.filter((e) => inRange(e.node.modifiedMs));
+    // Entries already arrive in tree order, which is what "order" means.
+    if (sort === "order") return list;
     if (sort === "name") {
       return [...list].sort((a, b) => a.node.name.localeCompare(b.node.name));
     }
@@ -814,12 +863,18 @@ export default function Drive({
   const folders = shownEntries.map((e, idx) => {
     const parentNames = e.path
       .slice(0, -1)
-      .map((id, i) => nodeAt(e.path.slice(0, i + 1))?.name ?? "")
+      .map((id, i) => {
+        const n = nodeAt(e.path.slice(0, i + 1));
+        return n ? labelOf(n) : "";
+      })
       .filter(Boolean);
     return {
       key: e.node.id,
       name: e.node.name,
-      code: e.node.code,
+      number: e.node.number,
+      // The design's reference slot: the folder code, or on a numbered drive
+      // the outline number, which is the reference that means something there.
+      code: numbered ? e.node.number : e.node.code,
       modified: e.node.modified,
       delay: Math.min(idx * 55, 500) + "ms",
       icon: e.node.icon,
@@ -841,7 +896,10 @@ export default function Drive({
     if (searching) return [] as DriveFile[];
     let list = filesAt(path);
     if (dateFiltered) list = list.filter((f) => inRange(f.uploadedAtMs));
-    if (sort === "name") return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    // Files carry no outline number, so tree order for them is name order.
+    if (sort === "name" || sort === "order") {
+      return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    }
     const dir = sort === "newest" ? -1 : 1;
     return [...list].sort((a, b) => (a.uploadedAtMs - b.uploadedAtMs) * dir);
   }, [searching, filesAt, path, dateFiltered, inRange, sort]);
@@ -869,9 +927,10 @@ export default function Drive({
     },
     ...path.map((id, idx) => {
       const last = idx === path.length - 1;
+      const node = nodeAt(path.slice(0, idx + 1));
       return {
         key: id,
-        name: nodeAt(path.slice(0, idx + 1))?.name ?? "",
+        name: node ? labelOf(node) : "",
         notFirst: true,
         open: () => enter(path.slice(0, idx + 1)),
         color: last ? "var(--color-accent-700)" : "inherit",
@@ -885,7 +944,7 @@ export default function Drive({
   const hasFiles = files.length > 0;
   const isEmpty = !hasFolders && !hasFiles;
 
-  const title = searching ? "Search results" : current ? current.name : "My Drive";
+  const title = searching ? "Search results" : current ? labelOf(current) : "My Drive";
   const countLabel = searching
     ? folders.length + " matches for “" + query.trim() + "”"
     : [
@@ -916,6 +975,8 @@ export default function Drive({
     const rows: {
       key: string;
       name: string;
+      /** Outline number, shown before the name on a numbered drive. */
+      number: string;
       count: string;
       indent: string;
       icon: string;
@@ -937,6 +998,7 @@ export default function Drive({
     rows.push({
       key: "__root",
       name: "My Drive",
+      number: "",
       count: String(data.tree.length),
       indent: "8px",
       icon: "drive",
@@ -965,6 +1027,7 @@ export default function Drive({
         rows.push({
           key: n.id,
           name: n.name,
+          number: numbered ? n.number : "",
           count: hasKids ? String(n.children.length) : "",
           indent: 8 + depth * 15 + "px",
           icon: n.icon,
@@ -989,7 +1052,7 @@ export default function Drive({
 
     if (rootOpen) walk(data.tree, 1, []);
     return rows;
-  }, [expanded, path, data.tree, enter, rootMenu, folderMenu]);
+  }, [expanded, path, data.tree, numbered, enter, rootMenu, folderMenu]);
 
   /* ── render ───────────────────────────────────────────────────────────── */
 
@@ -1060,7 +1123,7 @@ export default function Drive({
                 letterSpacing: ".02em",
               }}
             >
-              YAHYA KHALED
+              {brand.name}
             </div>
             <div
               style={{
@@ -1070,7 +1133,7 @@ export default function Drive({
                 color: "var(--side-label)",
               }}
             >
-              Power Systems Drive
+              {brand.tagline}
             </div>
           </div>
         </div>
@@ -1131,6 +1194,17 @@ export default function Drive({
                   fontWeight: r.weight,
                 }}
               >
+                {r.number && (
+                  <span
+                    style={{
+                      marginRight: 6,
+                      opacity: 0.6,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {r.number}
+                  </span>
+                )}
                 {r.name}
               </span>
               <span style={{ fontSize: 10, opacity: 0.4 }}>{r.count}</span>
@@ -1343,6 +1417,7 @@ export default function Drive({
                     <div className="seg">
                       {(
                         [
+                          ...(numbered ? [["order", "Number"]] : []),
                           ["name", "Name"],
                           ["newest", "Newest"],
                           ["oldest", "Oldest"],
@@ -1401,7 +1476,7 @@ export default function Drive({
                       className="btn btn-secondary"
                       style={{ fontSize: 12, justifyContent: "center" }}
                       onClick={() => {
-                        setSort("name");
+                        setSort(defaultSort);
                         setFrom("");
                         setTo("");
                       }}
@@ -1550,7 +1625,7 @@ export default function Drive({
           onContextMenu={canvasMenu}
           {...canvasPress.handlers}
           className="dc-pad"
-          style={{ padding: "14px 27px 44px", flex: 1 }}
+          style={{ padding: "14px 27px 26px", flex: 1 }}
         >
           <div
             style={{
@@ -1678,6 +1753,17 @@ export default function Drive({
                         lineHeight: 1.2,
                       }}
                     >
+                      {numbered && (
+                        <span
+                          style={{
+                            color: "var(--color-accent-700)",
+                            marginRight: 8,
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {f.number}
+                        </span>
+                      )}
                       {f.name}
                     </div>
                     <div
@@ -1694,21 +1780,26 @@ export default function Drive({
                       <span style={{ fontSize: 11, opacity: 0.5 }}>{f.modified}</span>
                     </div>
                   </div>
-                  <span
-                    className="dc-card-code"
-                    style={{
-                      position: "absolute",
-                      right: 14,
-                      bottom: 14,
-                      fontSize: 10,
-                      letterSpacing: ".1em",
-                      textTransform: "uppercase",
-                      color: "var(--color-accent-700)",
-                      opacity: 0.6,
-                    }}
-                  >
-                    {f.code}
-                  </span>
+                  {/* On a numbered drive the number already leads the title;
+                      repeating it in the corner is clutter, so the slot is
+                      left out rather than filled with a meaningless code. */}
+                  {!numbered && (
+                    <span
+                      className="dc-card-code"
+                      style={{
+                        position: "absolute",
+                        right: 14,
+                        bottom: 14,
+                        fontSize: 10,
+                        letterSpacing: ".1em",
+                        textTransform: "uppercase",
+                        color: "var(--color-accent-700)",
+                        opacity: 0.6,
+                      }}
+                    >
+                      {f.code}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -1738,7 +1829,20 @@ export default function Drive({
                         >
                           <Icon name={f.icon} size={15} />
                         </span>
-                        <span style={{ fontWeight: 500 }}>{f.name}</span>
+                        <span style={{ fontWeight: 500 }}>
+                          {numbered && (
+                            <span
+                              style={{
+                                color: "var(--color-accent-700)",
+                                marginRight: 8,
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            >
+                              {f.number}
+                            </span>
+                          )}
+                          {f.name}
+                        </span>
                       </div>
                     </td>
                     <td
@@ -2081,10 +2185,24 @@ export default function Drive({
             </div>
           )}
 
+        </div>
+
+        {/* The hint line sits at the foot of the main column, so it stays at
+            the bottom whether the listing is long or empty, and leaves the
+            right-hand corner for the "powered by" mark on a drive that has one. */}
+        <footer
+          className="dc-pad"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            flexWrap: "wrap",
+            padding: "0 27px 22px",
+            fontSize: 11,
+          }}
+        >
           <div
             style={{
-              marginTop: 26,
-              fontSize: 11,
               opacity: 0.4,
               display: "flex",
               alignItems: "center",
@@ -2106,7 +2224,52 @@ export default function Drive({
                 : "Touch and hold to upload, or tap a file to open it."}
             </span>
           </div>
-        </div>
+          {brand.poweredBy && (
+            <div
+              className="dc-powered"
+              style={{
+                marginLeft: "auto",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                letterSpacing: ".08em",
+                textTransform: "uppercase",
+                fontSize: 10,
+                color: "var(--color-accent-700)",
+                opacity: 0.75,
+              }}
+            >
+              <span>Powered by</span>
+              <span
+                style={{
+                  width: 16,
+                  height: 16,
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "none",
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="brand-bright"
+                  src="/assets/espark-bright.png"
+                  alt=""
+                  style={{ gridArea: "1/1", width: "100%", height: "100%", objectFit: "contain" }}
+                />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="brand-dark"
+                  src="/assets/espark-dark.png"
+                  alt=""
+                  style={{ gridArea: "1/1", width: "100%", height: "100%", objectFit: "contain" }}
+                />
+              </span>
+              <span style={{ fontWeight: 600, textTransform: "none", letterSpacing: ".02em", fontSize: 12 }}>
+                {brand.poweredBy}
+              </span>
+            </div>
+          )}
+        </footer>
       </main>
 
       {menu && (

@@ -1,4 +1,5 @@
 import Drive from "@/components/Drive";
+import { brand } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +11,5 @@ export const dynamic = "force-dynamic";
  * link from costing any more D1 reads than opening the drive normally does.
  */
 export default function DrivePathPage() {
-  return <Drive defaultTheme="light" defaultView="grid" />;
+  return <Drive defaultTheme="light" defaultView="grid" brand={brand()} />;
 }

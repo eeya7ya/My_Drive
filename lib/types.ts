@@ -51,6 +51,11 @@ export interface TreeNode {
   name: string;
   code: string;
   icon: string;
+  /**
+   * Outline number from the folder's place in the tree: "1", "1.1", "1.2",
+   * "2". Always computed; a numbered drive shows it, the others ignore it.
+   */
+  number: string;
   modified: string;
   /** Epoch ms — the client sorts and date-filters on this, never the server. */
   modifiedMs: number;
