@@ -141,12 +141,22 @@ Setting it up is the same as the first drive, once more:
 ```bash
 wrangler d1 create espark-drive                   # a second database
 wrangler d1 execute espark-drive --remote --file=./schema.sql
+wrangler d1 execute espark-drive --remote --file=./seed.espark.sql
 wrangler r2 bucket create espark-drive            # a second bucket
 ```
 
-Skip `seed.sql` — that is the Power Systems folder tree. The eSpark drive
-starts empty and the admin builds its tree from the panel; folders number
-themselves as they are added.
+`seed.espark.sql` is the eSpark drive's starting tree: the 16 equipment
+packages and their 99 subjects from the Electrical Scope Register workbook
+(Alternator → Rating & site derating, Neutral earthing & NER, …; MV Switchgear
+→ Ratings, Busbar configuration, …; through Cross-Cutting Items). Positions
+follow the register's own numbering, so the drive shows 1, 1.1, 1.2 … exactly
+as the workbook does. It only inserts — `INSERT OR IGNORE`, never a delete —
+so it is safe to run twice. Regenerate it with
+`node scripts/generate-espark-seed.mjs`. Do **not** load `seed.sql` here; that
+is the Power Systems tree.
+
+For the D1 dashboard console, paste `seed.espark.console.sql`, the same
+statements with no comments (see the note on the console above).
 
 Then import the repo at Vercel a second time as a new project, add the same
 variables as before pointing at the new database and bucket, and add:
