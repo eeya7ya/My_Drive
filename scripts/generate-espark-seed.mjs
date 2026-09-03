@@ -1,0 +1,193 @@
+/**
+ * Emit seed.espark.sql and seed.espark.console.sql — the eSpark drive's
+ * starting folder tree, taken from the Electrical Scope Register workbook
+ * (sheet "Scope Register", columns No. and Package / Subject).
+ *
+ * Level 1 is the equipment package, level 2 the subject within it. The drive
+ * numbers folders from their position, so positions here follow the register's
+ * own numbering and the app shows 1, 1.1, 1.2 … exactly as the workbook does.
+ *
+ *   node scripts/generate-espark-seed.mjs
+ *   npx wrangler d1 execute <ESPARK_DB> --remote --file=./seed.espark.sql
+ */
+
+import { writeFileSync } from "node:fs";
+
+const P = (name, children) => ({ name, children });
+
+export const TREE = [
+  P("Alternator", [
+    "Rating & site derating",
+    "Neutral earthing & NER",
+    "Excitation, AVR & governor",
+    "Fault contribution",
+    "Generator protection",
+    "Testing",
+  ]),
+  P("MV Switchgear (MVSG)", [
+    "Ratings",
+    "Busbar configuration",
+    "Breakers & interlocking",
+    "Protection & instrument transformers",
+    "Coordination & arc flash",
+    "Testing & room requirements",
+  ]),
+  P("Aux Transformer", [
+    "Rating & vector group",
+    "Dry vs oil-filled",
+    "Protection",
+    "Inrush & through-fault",
+    "Losses & noise",
+    "Testing",
+  ]),
+  P("MV Cable & Termination", [
+    "Sizing",
+    "Construction",
+    "Screen bonding & earthing",
+    "Routing & installation",
+    "Terminations & joints",
+    "Testing",
+  ]),
+  P("LV Cables", [
+    "Sizing",
+    "Fire performance",
+    "Containment & segregation",
+    "Cable schedule",
+    "Testing",
+  ]),
+  P("Earthing", [
+    "Soil resistivity & grid design",
+    "Touch & step voltage",
+    "System / equipment / clean earth",
+    "Bonding & equipotential",
+    "Interface with LPS & SPD",
+    "Testing",
+  ]),
+  P("Main Distribution Boards", [
+    "Assembly standard",
+    "Ratings",
+    "Feeder schedule",
+    "Discrimination & cascading",
+    "Changeover / ATS",
+    "Metering & monitoring",
+    "Arc flash, access & ventilation",
+  ]),
+  P("Control Room", [
+    "Layout & ergonomics",
+    "HVAC",
+    "Fire detection & suppression",
+    "Power supplies",
+    "Operator interface",
+    "Access control & security",
+  ]),
+  P("MCC Panels", [
+    "Starter selection",
+    "Coordination type 1 / type 2",
+    "VFD issues",
+    "Construction",
+    "I/O & communications",
+    "Testing",
+  ]),
+  P("Control Panels & Motors", [
+    "Motor data",
+    "Hazardous area",
+    "Accessories",
+    "Control philosophy",
+    "Motor starting study",
+    "Commissioning",
+  ]),
+  P("Charger & Batteries", [
+    "DC system definition",
+    "Battery sizing",
+    "Battery type",
+    "Charger",
+    "DC distribution",
+    "Battery room",
+    "Alarms & testing",
+  ]),
+  P("SCADA System", [
+    "Architecture",
+    "Protocols & interoperability",
+    "Time synchronisation",
+    "Signal list & tagging",
+    "HMI & reporting",
+    "Cybersecurity",
+    "Testing",
+  ]),
+  P("Lighting", [
+    "Illuminance design",
+    "Emergency & escape lighting",
+    "Luminaire selection",
+    "Lighting control",
+    "External & area lighting",
+    "Lighting & small power boards",
+    // The register's row 13.7 reads "If lightning protection is meant" — a
+    // note rather than a name. Its key points are all lightning protection
+    // (IEC 62305, air termination, down conductors), so that is the folder.
+    "Lightning Protection",
+  ]),
+  P("LV Equipment", [
+    "Sub-boards & isolators",
+    "UPS",
+    "Power factor correction",
+    "Metering & energy monitoring",
+    "Environment & identification",
+  ]),
+  P("ELV Equipment", [
+    "System list",
+    "Cause & effect matrix",
+    "Power & backup",
+    "Cabling",
+    "Integration boundaries",
+  ]),
+  P("Cross-Cutting Items", [
+    "Single line diagram & load list",
+    "Studies",
+    "Standards & specification register",
+    "Interface / responsibility matrix",
+    "Vendor document review",
+    "ITP & hold points",
+    "Energisation & commissioning sequence",
+    "O&M, spares & training",
+  ]),
+];
+
+const q = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+// One fixed stamp so the file is reproducible; the drive shows it as the
+// folder's modified date until something changes inside it.
+const TS = Date.parse("2026-09-03T12:00:00Z");
+
+const rows = [];
+TREE.forEach((pkg, i) => {
+  const n = String(i + 1);
+  rows.push({ id: `esp-${n}`, parent: null, name: pkg.name, code: n, pos: i });
+  pkg.children.forEach((child, j) => {
+    const sub = `${n}.${j + 1}`;
+    rows.push({ id: `esp-${n}-${j + 1}`, parent: `esp-${n}`, name: child, code: sub, pos: j });
+  });
+});
+
+const statements = rows.map(
+  (r) =>
+    `INSERT OR IGNORE INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES (` +
+    [q(r.id), r.parent === null ? "NULL" : q(r.parent), q(r.name), q(r.code), "'folder'", r.pos, TS, TS].join(", ") +
+    ");"
+);
+
+const header = [
+  "-- eSpark Drive — starting folder tree, from the Electrical Scope Register.",
+  "-- Generated by scripts/generate-espark-seed.mjs. Load after schema.sql:",
+  "--   npx wrangler d1 execute <ESPARK_DB> --remote --file=./seed.espark.sql",
+  "-- INSERT OR IGNORE: safe to run twice, and never deletes anything.",
+  "",
+];
+
+writeFileSync("seed.espark.sql", [...header, ...statements, ""].join("\n"));
+// The D1 dashboard console can flatten a paste onto one line, where a leading
+// "--" comments out everything after it; this copy carries no comments.
+writeFileSync("seed.espark.console.sql", statements.join("\n") + "\n");
+
+const packages = TREE.length;
+console.log(
+  `seed.espark.sql written — ${packages} packages, ${rows.length - packages} subjects, ${rows.length} folders`
+);
