@@ -123,6 +123,7 @@ export async function getTree(): Promise<{
       name: f.name,
       code: f.code,
       icon: f.icon,
+      number: "",
       modified: formatDate(f.modified_at),
       modifiedMs: f.modified_at,
       children: [],
@@ -143,6 +144,16 @@ export async function getTree(): Promise<{
       else tree.push(node);
     }
   }
+
+  // Outline numbers follow tree order — the ORDER BY above — so "1.2" is the
+  // second child of the first root folder, whatever it is called.
+  const number = (nodes: TreeNode[], prefix: string) => {
+    nodes.forEach((n, i) => {
+      n.number = prefix + (i + 1);
+      number(n.children, n.number + ".");
+    });
+  };
+  number(tree, "");
 
   return { tree, rootFiles, filesError };
 }
@@ -234,18 +245,30 @@ export async function createFolder(
   let n = 2;
   while (taken.has(name)) name = `${base} ${n++}`;
 
-  const countRows = await d1Query<{ c: number }>(
-    "SELECT COUNT(*) AS c FROM folders"
-  );
+  const [countRows, posRows] = await Promise.all([
+    d1Query<{ c: number }>("SELECT COUNT(*) AS c FROM folders"),
+    // A new folder goes last among its siblings, so on a numbered drive it
+    // takes the next number instead of jumping in front of the existing ones.
+    d1Query<{ m: number | null }>(
+      parentId === null
+        ? "SELECT MAX(position) AS m FROM folders WHERE parent_id IS NULL"
+        : "SELECT MAX(position) AS m FROM folders WHERE parent_id = ?",
+      parentId === null ? [] : [parentId]
+    ),
+  ]);
   const code = "USR-" + String(Number(countRows[0]?.c ?? 0) + 1).padStart(2, "0");
+  const position =
+    posRows[0]?.m === null || posRows[0]?.m === undefined
+      ? 0
+      : Number(posRows[0].m) + 1;
 
   const now = Date.now();
   const id = newId();
 
   await d1Execute(
     `INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at)
-     VALUES (?, ?, ?, ?, 'folder', 0, ?, ?)`,
-    [id, parentId, name, code, now, now]
+     VALUES (?, ?, ?, ?, 'folder', ?, ?, ?)`,
+    [id, parentId, name, code, position, now, now]
   );
 
   return {
@@ -254,10 +277,52 @@ export async function createFolder(
     name,
     code,
     icon: "folder",
-    position: 0,
+    position,
     created_at: now,
     modified_at: now,
   };
+}
+
+/**
+ * Move a folder one step among its siblings. This is what changes an outline
+ * number: "1.3" becomes "1.2" by moving up.
+ *
+ * Every sibling's position is rewritten 0..n-1 in the new order rather than
+ * swapping two values, because seeded and older rows can share a position
+ * (creation used to write 0 for everything) and a swap between ties would
+ * change nothing visible.
+ */
+export async function moveFolder(
+  id: string,
+  direction: "up" | "down"
+): Promise<void> {
+  const rows = await d1Query<{ parent_id: string | null }>(
+    "SELECT parent_id FROM folders WHERE id = ?",
+    [id]
+  );
+  if (!rows.length) throw new Error("Folder not found");
+  const parentId = rows[0].parent_id;
+
+  // Same order the tree is read in, so "up" means what the screen shows.
+  const siblings = await d1Query<{ id: string }>(
+    parentId === null
+      ? "SELECT id FROM folders WHERE parent_id IS NULL ORDER BY position ASC, name ASC"
+      : "SELECT id FROM folders WHERE parent_id = ? ORDER BY position ASC, name ASC",
+    parentId === null ? [] : [parentId]
+  );
+  const order = siblings.map((s) => s.id);
+  const from = order.indexOf(id);
+  const to = direction === "up" ? from - 1 : from + 1;
+  if (from < 0 || to < 0 || to >= order.length) return; // Already at the edge.
+
+  order.splice(from, 1);
+  order.splice(to, 0, id);
+
+  await Promise.all(
+    order.map((fid, i) =>
+      d1Execute("UPDATE folders SET position = ? WHERE id = ?", [i, fid])
+    )
+  );
 }
 
 export async function renameFolder(id: string, rawName: string): Promise<void> {

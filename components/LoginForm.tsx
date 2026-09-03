@@ -9,8 +9,13 @@
 
 import React, { useState } from "react";
 import { Icon } from "./icons";
+import { Brand, DEFAULT_BRAND } from "@/lib/brand";
 
-export default function LoginForm() {
+export default function LoginForm({
+  brand = DEFAULT_BRAND,
+}: {
+  brand?: Brand;
+}) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -109,7 +114,7 @@ export default function LoginForm() {
                 letterSpacing: ".02em",
               }}
             >
-              YAHYA KHALED
+              {brand.name}
             </div>
             <div
               style={{

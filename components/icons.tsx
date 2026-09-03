@@ -95,6 +95,10 @@ const PARTS: Record<string, string[]> = {
     "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
   ],
   history: ["M12 7v5l4 2"],
+  // Reordering folders on a numbered drive. Lucide arrow-up / arrow-down,
+  // same stroke as the rest of the set.
+  up: ["m5 12 7-7 7 7", "M12 19V5"],
+  down: ["M12 5v14", "m19 12-7 7-7-7"],
 };
 
 export type IconName = keyof typeof PARTS | string;

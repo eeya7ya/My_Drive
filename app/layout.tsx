@@ -1,20 +1,28 @@
 import type { Metadata, Viewport } from "next";
+import { brand } from "@/lib/brand";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "Yahya Khaled — Power Systems Drive",
-  description: "Power systems study drive: folders, files, and admin management.",
-  icons: {
-    icon: "/assets/espark-bright.png",
-    apple: "/assets/espark-bright.png",
-  },
-  manifest: "/manifest.webmanifest",
-  appleWebApp: {
-    capable: true,
-    title: "PS Drive",
-    statusBarStyle: "default",
-  },
-};
+/**
+ * Metadata is a function rather than a constant so the tab title follows
+ * DRIVE_VARIANT — the same build serves more than one drive.
+ */
+export function generateMetadata(): Metadata {
+  const b = brand();
+  return {
+    title: b.title,
+    description: b.description,
+    icons: {
+      icon: "/assets/espark-bright.png",
+      apple: "/assets/espark-bright.png",
+    },
+    manifest: "/manifest.webmanifest",
+    appleWebApp: {
+      capable: true,
+      title: b.shortName,
+      statusBarStyle: "default",
+    },
+  };
+}
 
 /**
  * viewportFit: "cover" lets the page reach under a notch; the body then pads

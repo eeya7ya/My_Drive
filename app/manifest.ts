@@ -1,4 +1,9 @@
 import type { MetadataRoute } from "next";
+import { brand } from "@/lib/brand";
+
+// Read DRIVE_VARIANT when the manifest is requested, not when the app is
+// built, so the same build can serve either drive.
+export const dynamic = "force-dynamic";
 
 /**
  * Installable to a phone's home screen, opening without browser chrome so the
@@ -9,10 +14,11 @@ import type { MetadataRoute } from "next";
  * near-duplicate icons for a logo that is already square.
  */
 export default function manifest(): MetadataRoute.Manifest {
+  const b = brand();
   return {
-    name: "Yahya Khaled — Power Systems Drive",
-    short_name: "PS Drive",
-    description: "Power systems study drive: folders, files, and revisions.",
+    name: b.title,
+    short_name: b.shortName,
+    description: b.description,
     start_url: "/",
     display: "standalone",
     orientation: "any",
