@@ -1,20 +1,17 @@
 import type { MetadataRoute } from "next";
-import { brand } from "@/lib/brand";
-
-// Read DRIVE_VARIANT when the manifest is requested, not when the app is
-// built, so the same build can serve either drive.
-export const dynamic = "force-dynamic";
+import { driveFor } from "@/lib/brand";
 
 /**
- * Installable to a phone's home screen, opening without browser chrome so the
- * drive behaves like an app rather than a page.
+ * The main drive's manifest: installable to a phone's home screen, opening
+ * without browser chrome so the drive behaves like an app rather than a page.
+ * The eSpark drive has its own at /espark/manifest.webmanifest.
  *
  * The brand mark is a single 2000px square; listing several sizes against the
  * one file lets each platform pick and downscale, which avoids shipping
  * near-duplicate icons for a logo that is already square.
  */
 export default function manifest(): MetadataRoute.Manifest {
-  const b = brand();
+  const b = driveFor("main");
   return {
     name: b.title,
     short_name: b.shortName,

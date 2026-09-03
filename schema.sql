@@ -9,9 +9,12 @@
 -- they ever drift.
 
 -- Folder tree. parent_id NULL = a root-level folder ("My Drive" is virtual).
+-- drive says which drive the folder belongs to ('main' or 'espark'); every
+-- read is scoped by it, so one database holds several drives that never mix.
 CREATE TABLE IF NOT EXISTS folders (
   id          TEXT PRIMARY KEY,
   parent_id   TEXT REFERENCES folders(id) ON DELETE CASCADE,
+  drive       TEXT NOT NULL DEFAULT 'main',
   name        TEXT NOT NULL,
   code        TEXT NOT NULL DEFAULT '',
   icon        TEXT NOT NULL DEFAULT 'folder',
@@ -21,6 +24,7 @@ CREATE TABLE IF NOT EXISTS folders (
 );
 
 CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
+CREATE INDEX IF NOT EXISTS idx_folders_drive ON folders(drive, parent_id);
 
 -- A file is a document identity: a name in a folder. Its bytes live in
 -- file_versions, and current_version_id says which revision the drive shows.
@@ -29,6 +33,7 @@ CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
 CREATE TABLE IF NOT EXISTS files (
   id                 TEXT PRIMARY KEY,
   folder_id          TEXT REFERENCES folders(id) ON DELETE CASCADE,
+  drive              TEXT NOT NULL DEFAULT 'main',
   name               TEXT NOT NULL,
   ext                TEXT NOT NULL DEFAULT 'file',
   current_version_id TEXT,
@@ -38,6 +43,7 @@ CREATE TABLE IF NOT EXISTS files (
 );
 
 CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);
+CREATE INDEX IF NOT EXISTS idx_files_drive ON files(drive, folder_id);
 -- One document per name per folder: a re-upload becomes a revision, not a twin.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_files_folder_name ON files(folder_id, name);
 
@@ -60,9 +66,10 @@ CREATE TABLE IF NOT EXISTS file_versions (
 
 CREATE INDEX IF NOT EXISTS idx_file_versions_file ON file_versions(file_id, version DESC);
 
--- Single-row settings. quota_bytes is the sidebar's denominator; used_bytes is
+-- Key/value settings. quota_bytes is the sidebar's denominator; used_bytes is
 -- the running storage total, kept current on upload and delete so the sidebar
--- costs one row read instead of a SUM over every revision ever stored.
+-- costs one row read instead of a SUM over every revision ever stored. The
+-- main drive uses the bare keys; every other drive prefixes them ('espark/').
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -70,3 +77,5 @@ CREATE TABLE IF NOT EXISTS settings (
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('quota_bytes', '214748364800');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('used_bytes', '0');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('espark/quota_bytes', '214748364800');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('espark/used_bytes', '0');

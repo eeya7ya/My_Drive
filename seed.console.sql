@@ -1,4 +1,4 @@
-DELETE FROM folders;
+DELETE FROM folders WHERE drive = 'main';
 INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('msc-00-0', NULL, 'Master Degree', 'MSC-00', 'cap', 0, 1786536000000, 1786536000000);
 INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('prt-01-0', 'msc-00-0', 'Power System Protection', 'PRT-01', 'shield', 0, 1785412800000, 1785412800000);
 INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('prt-11-0', 'prt-01-0', 'Relay Coordination', 'PRT-11', 'folder', 0, 1787572800000, 1787572800000);

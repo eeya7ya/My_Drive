@@ -1,8 +1,18 @@
 import LoginForm from "@/components/LoginForm";
-import { brand } from "@/lib/brand";
+import { driveForPath } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminLoginPage() {
-  return <LoginForm brand={brand()} />;
+/**
+ * One admin signs in to every drive. The form wears the brand of the drive
+ * it was opened from (`?next=/espark`) and returns there afterwards.
+ */
+export default async function AdminLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+  const target = typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  return <LoginForm brand={driveForPath(target)} next={target} />;
 }

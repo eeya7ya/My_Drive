@@ -1,14 +1,19 @@
 import { getTree, getUsage } from "@/lib/store";
 import { isAdmin } from "@/lib/auth";
 import { isD1Configured } from "@/lib/d1";
+import { parseDrive } from "@/lib/brand";
 import { ok, fail } from "@/lib/api";
 import { DrivePayload } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-/** The whole drive in one call: tree, root files, usage, and viewer role. */
-export async function GET() {
+/**
+ * One drive in one call: its tree, root files, usage, and the viewer's role.
+ * `?drive=` names the drive; an unknown key is a 400, never the wrong tree.
+ */
+export async function GET(req: Request) {
   try {
+    const drive = parseDrive(new URL(req.url).searchParams.get("drive"));
     const admin = await isAdmin();
 
     // Before Cloudflare credentials are set the app should still render the
@@ -25,8 +30,8 @@ export async function GET() {
     }
 
     const [{ tree, rootFiles, filesError }, usage] = await Promise.all([
-      getTree(),
-      getUsage(),
+      getTree(drive),
+      getUsage(drive),
     ]);
 
     const payload: DrivePayload = {
@@ -37,16 +42,19 @@ export async function GET() {
       isAdmin: admin,
     };
 
-    // A missing file_versions table means the database predates the revisions
-    // migration. Say so in words the operator can act on — the raw SQLite
-    // error reads like the data is gone, when only the query failed.
+    // A missing table or column means the database predates a migration.
+    // Say so in words the operator can act on — the raw SQLite error reads
+    // like the data is gone, when only the query failed.
     if (filesError) {
+      const needsDrives = /no such column.*drive/i.test(filesError);
       const needsMigration = /no such table|no such column/i.test(filesError);
       return ok({
         ...payload,
-        notice: needsMigration
-          ? "Folders are shown, but files could not be read: this database has not been migrated yet. Run migrations/001_file_versions.console.sql in the D1 console. No data has been lost."
-          : `Files could not be read: ${filesError}`,
+        notice: needsDrives
+          ? "Files could not be read: this database has no drive column yet. Run migrations/003_drives.console.sql in the D1 console. No data has been lost."
+          : needsMigration
+            ? "Folders are shown, but files could not be read: this database has not been migrated yet. Run migrations/001_file_versions.console.sql in the D1 console. No data has been lost."
+            : `Files could not be read: ${filesError}`,
       });
     }
 

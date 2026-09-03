@@ -3,6 +3,8 @@
 export interface FolderRow {
   id: string;
   parent_id: string | null;
+  /** Which drive the row belongs to; see lib/brand.ts. */
+  drive: string;
   name: string;
   code: string;
   icon: string;
@@ -14,6 +16,7 @@ export interface FolderRow {
 export interface FileRow {
   id: string;
   folder_id: string | null;
+  drive: string;
   name: string;
   ext: string;
   current_version_id: string | null;

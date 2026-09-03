@@ -3,7 +3,7 @@
 -- Load after schema.sql:
 --   npx wrangler d1 execute <DB_NAME> --remote --file=./seed.sql
 
-DELETE FROM folders;
+DELETE FROM folders WHERE drive = 'main';
 
 INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('msc-00-0', NULL, 'Master Degree', 'MSC-00', 'cap', 0, 1786536000000, 1786536000000);
 INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES ('prt-01-0', 'msc-00-0', 'Power System Protection', 'PRT-01', 'shield', 0, 1785412800000, 1785412800000);
