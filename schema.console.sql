@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS folders (
   id          TEXT PRIMARY KEY,
   parent_id   TEXT REFERENCES folders(id) ON DELETE CASCADE,
+  drive       TEXT NOT NULL DEFAULT 'main',
   name        TEXT NOT NULL,
   code        TEXT NOT NULL DEFAULT '',
   icon        TEXT NOT NULL DEFAULT 'folder',
@@ -9,9 +10,11 @@ CREATE TABLE IF NOT EXISTS folders (
   modified_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
+CREATE INDEX IF NOT EXISTS idx_folders_drive ON folders(drive, parent_id);
 CREATE TABLE IF NOT EXISTS files (
   id                 TEXT PRIMARY KEY,
   folder_id          TEXT REFERENCES folders(id) ON DELETE CASCADE,
+  drive              TEXT NOT NULL DEFAULT 'main',
   name               TEXT NOT NULL,
   ext                TEXT NOT NULL DEFAULT 'file',
   current_version_id TEXT,
@@ -20,6 +23,7 @@ CREATE TABLE IF NOT EXISTS files (
   modified_at        INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);
+CREATE INDEX IF NOT EXISTS idx_files_drive ON files(drive, folder_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_files_folder_name ON files(folder_id, name);
 CREATE TABLE IF NOT EXISTS file_versions (
   id           TEXT PRIMARY KEY,
@@ -40,3 +44,5 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 INSERT OR IGNORE INTO settings (key, value) VALUES ('quota_bytes', '214748364800');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('used_bytes', '0');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('espark/quota_bytes', '214748364800');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('espark/used_bytes', '0');

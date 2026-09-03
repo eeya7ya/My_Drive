@@ -1,28 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import { brand } from "@/lib/brand";
+import { driveFor } from "@/lib/brand";
 import "./globals.css";
 
-/**
- * Metadata is a function rather than a constant so the tab title follows
- * DRIVE_VARIANT — the same build serves more than one drive.
- */
-export function generateMetadata(): Metadata {
-  const b = brand();
-  return {
-    title: b.title,
-    description: b.description,
-    icons: {
-      icon: "/assets/espark-bright.png",
-      apple: "/assets/espark-bright.png",
-    },
-    manifest: "/manifest.webmanifest",
-    appleWebApp: {
-      capable: true,
-      title: b.shortName,
-      statusBarStyle: "default",
-    },
-  };
-}
+const main = driveFor("main");
+
+/** Defaults for the main drive; the eSpark route sets its own title and manifest. */
+export const metadata: Metadata = {
+  title: main.title,
+  description: main.description,
+  icons: {
+    icon: "/assets/espark-bright.png",
+    apple: "/assets/espark-bright.png",
+  },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: main.shortName,
+    statusBarStyle: "default",
+  },
+};
 
 /**
  * viewportFit: "cover" lets the page reach under a notch; the body then pads

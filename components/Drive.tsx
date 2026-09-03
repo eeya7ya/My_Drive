@@ -14,7 +14,7 @@ import { Icon } from "./icons";
 import FileViewer from "./FileViewer";
 import { kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
-import { hrefFor, resolveSegments, segmentsOf, slugify } from "@/lib/paths";
+import { hrefFor, resolveSegments, segmentsOf, slugify, stripBasePath } from "@/lib/paths";
 import { Brand, DEFAULT_BRAND } from "@/lib/brand";
 import {
   DrivePayload,
@@ -76,9 +76,13 @@ export default function Drive({
 }: {
   defaultTheme?: "light" | "dark";
   defaultView?: "grid" | "list";
-  /** Which drive this deployment is; decided server-side from DRIVE_VARIANT. */
+  /** Which drive this page shows; chosen by the route that renders it. */
   brand?: Brand;
 }) {
+  // Every request and every link carries the drive, so this component can
+  // only ever see and touch one drive's rows.
+  const driveKey = brand.key;
+  const basePath = brand.basePath;
   // On a numbered drive every folder label carries its outline number, and
   // the listing keeps tree order by default so the numbers read in sequence.
   const numbered = brand.numbered;
@@ -148,7 +152,9 @@ export default function Drive({
    */
   const refresh = useCallback(async (keepError = false) => {
     try {
-      const res = await fetch("/api/drive", { cache: "no-store" });
+      const res = await fetch(`/api/drive?drive=${encodeURIComponent(driveKey)}`, {
+        cache: "no-store",
+      });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error || "Could not load the drive");
       setData(body as DrivePayload);
@@ -159,7 +165,7 @@ export default function Drive({
     } finally {
       setLoaded(true);
     }
-  }, []);
+  }, [driveKey]);
 
   useEffect(() => {
     refresh();
@@ -257,14 +263,14 @@ export default function Drive({
       if (!opts?.fileName) setFocusFile(null);
 
       if (typeof window !== "undefined") {
-        const href = hrefFor(treeRef.current, p, opts?.fileName ?? null);
+        const href = hrefFor(treeRef.current, p, opts?.fileName ?? null, basePath);
         if (href !== window.location.pathname) {
           if (opts?.replace) window.history.replaceState({}, "", href);
           else window.history.pushState({}, "", href);
         }
       }
     },
-    []
+    [basePath]
   );
 
   // A folder that disappeared (deleted in another tab) must not strand the
@@ -330,11 +336,15 @@ export default function Drive({
       run("Creating folder", async () => {
         await call("/api/folders", {
           method: "POST",
-          body: JSON.stringify({ parentId, name: name.trim() || "New Folder" }),
+          body: JSON.stringify({
+            drive: driveKey,
+            parentId,
+            name: name.trim() || "New Folder",
+          }),
         });
       });
     },
-    [call, run]
+    [call, run, driveKey]
   );
 
   const renameNode = useCallback(
@@ -421,6 +431,7 @@ export default function Drive({
             {
               method: "POST",
               body: JSON.stringify({
+                drive: driveKey,
                 folderId,
                 name: file.name,
                 size: file.size,
@@ -461,7 +472,7 @@ export default function Drive({
       setBusy(null);
       await refresh(failed);
     },
-    [call, refresh]
+    [call, refresh, driveKey]
   );
 
   const renameFileAction = useCallback(
@@ -495,7 +506,7 @@ export default function Drive({
   /** Put a shareable absolute URL on the clipboard. */
   const copyLink = useCallback(
     async (folderPath: string[], fileName?: string | null) => {
-      const href = hrefFor(treeRef.current, folderPath, fileName ?? null);
+      const href = hrefFor(treeRef.current, folderPath, fileName ?? null, basePath);
       const url = window.location.origin + href;
       try {
         await navigator.clipboard.writeText(url);
@@ -507,7 +518,7 @@ export default function Drive({
         window.prompt("Copy this link", url);
       }
     },
-    []
+    [basePath]
   );
 
   /** Open a file in the in-app viewer instead of downloading it. */
@@ -605,7 +616,7 @@ export default function Drive({
   /** Point the view at whatever the current URL names. */
   const applyUrl = useCallback(
     (pathname: string) => {
-      const segs = segmentsOf(pathname);
+      const segs = segmentsOf(stripBasePath(pathname, basePath));
       if (!segs.length) {
         setPath([]);
         setFocusFile(null);
@@ -642,7 +653,7 @@ export default function Drive({
         );
       }
     },
-    [data.tree, data.rootFiles, loadVersions]
+    [data.tree, data.rootFiles, loadVersions, basePath]
   );
 
   // Resolve the address bar once, after the first payload arrives.
@@ -1529,7 +1540,7 @@ export default function Drive({
           ) : (
             <a
               className="btn btn-secondary btn-icon"
-              href="/admin/login"
+              href={`/admin/login?next=${encodeURIComponent(basePath || "/")}`}
               title="Admin sign in"
               style={{ textDecoration: "none" }}
             >

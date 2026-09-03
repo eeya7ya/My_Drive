@@ -13,8 +13,11 @@ import { Brand, DEFAULT_BRAND } from "@/lib/brand";
 
 export default function LoginForm({
   brand = DEFAULT_BRAND,
+  next = "/",
 }: {
   brand?: Brand;
+  /** Where to go after signing in — the drive the padlock was clicked on. */
+  next?: string;
 }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +35,7 @@ export default function LoginForm({
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Sign in failed");
-      window.location.href = "/";
+      window.location.href = next;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign in failed");
       setBusy(false);
@@ -173,7 +176,7 @@ export default function LoginForm({
         </form>
 
         <a
-          href="/"
+          href={next}
           style={{
             display: "inline-block",
             marginTop: 18,

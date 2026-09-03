@@ -16,6 +16,7 @@
  */
 
 import { d1Query, d1Execute } from "./d1";
+import { DRIVE_KEYS, DriveKey } from "./brand";
 import {
   DriveFile,
   DriveFileVersion,
@@ -32,6 +33,15 @@ const DEFAULT_QUOTA = 214748364800; // 200 GB — matches the design's sidebar.
 
 function newId(): string {
   return crypto.randomUUID();
+}
+
+/**
+ * Every drive keeps its own counters in the settings table. The main drive
+ * uses the bare keys it always had, so a database from before there were
+ * several drives needs no data migration for it; the others prefix theirs.
+ */
+function settingKey(drive: DriveKey, key: "used_bytes" | "quota_bytes"): string {
+  return drive === "main" ? key : `${drive}/${key}`;
 }
 
 /** The current-revision view of a file, as one flat row from the join. */
@@ -69,7 +79,7 @@ function toDriveFile(r: FileWithVersion): DriveFile {
  * Folder counts here are small (a study drive, not a filesystem), so this is
  * far cheaper than a round trip per level over D1's HTTP API.
  */
-export async function getTree(): Promise<{
+export async function getTree(drive: DriveKey): Promise<{
   tree: TreeNode[];
   rootFiles: DriveFile[];
   filesError: string | null;
@@ -78,8 +88,14 @@ export async function getTree(): Promise<{
   // backbone; if the files query fails — most plausibly because the database
   // has not been migrated yet — showing the folders with a clear warning beats
   // a blank drive that looks like data loss.
+  //
+  // Both are scoped to one drive. Nothing below this line can see another
+  // drive's rows, which is what keeps the drives apart.
   const [folders, fileResult] = await Promise.all([
-    d1Query<FolderRow>("SELECT * FROM folders ORDER BY position ASC, name ASC"),
+    d1Query<FolderRow>(
+      "SELECT * FROM folders WHERE drive = ? ORDER BY position ASC, name ASC",
+      [drive]
+    ),
     // Joining on current_version_id reads exactly one version row per file —
     // never the whole history.
     d1Query<FileWithVersion>(
@@ -88,8 +104,9 @@ export async function getTree(): Promise<{
               v.version, v.size_bytes, v.uploaded_at
          FROM files f
          JOIN file_versions v ON v.id = f.current_version_id
-        WHERE v.uploaded = 1
-        ORDER BY f.name ASC`
+        WHERE v.uploaded = 1 AND f.drive = ?
+        ORDER BY f.name ASC`,
+      [drive]
     ).then(
       (rows) => ({ rows, error: null as string | null }),
       (e: unknown) => ({
@@ -159,25 +176,33 @@ export async function getTree(): Promise<{
 }
 
 /** Both numbers come from the settings table: two rows, no aggregate. */
-export async function getUsage(): Promise<{
+export async function getUsage(drive: DriveKey): Promise<{
   usedBytes: number;
   quotaBytes: number;
 }> {
+  const usedKey = settingKey(drive, "used_bytes");
+  const quotaKey = settingKey(drive, "quota_bytes");
   const rows = await d1Query<{ key: string; value: string }>(
-    "SELECT key, value FROM settings WHERE key IN ('quota_bytes','used_bytes')"
+    "SELECT key, value FROM settings WHERE key IN (?, ?)",
+    [quotaKey, usedKey]
   );
   const map = new Map(rows.map((r) => [r.key, r.value]));
-  const quotaBytes = Number(map.get("quota_bytes") ?? DEFAULT_QUOTA);
+  const quotaBytes = Number(map.get(quotaKey) ?? DEFAULT_QUOTA);
   return {
-    usedBytes: Number(map.get("used_bytes") ?? 0),
+    usedBytes: Number(map.get(usedKey) ?? 0),
     quotaBytes: quotaBytes || DEFAULT_QUOTA,
   };
 }
 
-/** Move the running storage total. Negative delta for deletions. */
-async function bumpUsedBytes(delta: number): Promise<void> {
+/** Move one drive's running storage total. Negative delta for deletions. */
+async function bumpUsedBytes(drive: DriveKey, delta: number): Promise<void> {
   const n = Math.trunc(delta);
   if (!n) return;
+  // The row may not exist yet for a drive added after the database was
+  // created; create it so the counter has somewhere to go.
+  await d1Execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, '0')", [
+    settingKey(drive, "used_bytes"),
+  ]);
   // MAX(0, …) keeps a drifted counter from going negative and rendering a
   // nonsense storage bar. The inner CAST … AS INTEGER matters: without it a
   // REAL operand makes the sum REAL and the counter is stored as "4500000.0",
@@ -185,60 +210,71 @@ async function bumpUsedBytes(delta: number): Promise<void> {
   await d1Execute(
     `UPDATE settings
         SET value = CAST(CAST(MAX(0, CAST(value AS INTEGER) + ?) AS INTEGER) AS TEXT)
-      WHERE key = 'used_bytes'`,
-    [n]
+      WHERE key = ?`,
+    [n, settingKey(drive, "used_bytes")]
   );
 }
 
-/** Rebuild both counters from the underlying rows. Admin-triggered only. */
+/** Rebuild every drive's counters from the underlying rows. Admin only. */
 export async function recalcCounters(): Promise<{
-  usedBytes: number;
-  files: number;
+  drives: Record<string, { usedBytes: number; files: number }>;
 }> {
-  await d1Execute(
-    `UPDATE settings
-        SET value = CAST(CAST((SELECT COALESCE(SUM(size_bytes), 0)
-                                 FROM file_versions WHERE uploaded = 1) AS INTEGER) AS TEXT)
-      WHERE key = 'used_bytes'`
-  );
   await d1Execute(
     `UPDATE files
         SET version_count = (SELECT COUNT(*) FROM file_versions
                               WHERE file_id = files.id AND uploaded = 1)`
   );
-  const [usage, count] = await Promise.all([
-    getUsage(),
-    d1Query<{ c: number }>("SELECT COUNT(*) AS c FROM files"),
-  ]);
-  return { usedBytes: usage.usedBytes, files: Number(count[0]?.c ?? 0) };
+  const drives: Record<string, { usedBytes: number; files: number }> = {};
+  for (const drive of DRIVE_KEYS) {
+    const key = settingKey(drive, "used_bytes");
+    await d1Execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, '0')", [key]);
+    await d1Execute(
+      `UPDATE settings
+          SET value = CAST(CAST((SELECT COALESCE(SUM(v.size_bytes), 0)
+                                   FROM file_versions v JOIN files f ON f.id = v.file_id
+                                  WHERE v.uploaded = 1 AND f.drive = ?) AS INTEGER) AS TEXT)
+        WHERE key = ?`,
+      [drive, key]
+    );
+    const [usage, count] = await Promise.all([
+      getUsage(drive),
+      d1Query<{ c: number }>("SELECT COUNT(*) AS c FROM files WHERE drive = ?", [drive]),
+    ]);
+    drives[drive] = { usedBytes: usage.usedBytes, files: Number(count[0]?.c ?? 0) };
+  }
+  return { drives };
 }
 
 /* ── folders ──────────────────────────────────────────────────────────── */
 
-/** Reject a parent id that isn't a real folder, so we never orphan a row. */
-async function assertFolderExists(id: string | null): Promise<void> {
+/**
+ * Reject a parent that isn't a real folder of this drive. The drive check is
+ * what stops a row being filed under another drive's folder by id.
+ */
+async function assertFolderExists(drive: DriveKey, id: string | null): Promise<void> {
   if (id === null) return;
   const rows = await d1Query<{ id: string }>(
-    "SELECT id FROM folders WHERE id = ?",
-    [id]
+    "SELECT id FROM folders WHERE id = ? AND drive = ?",
+    [id, drive]
   );
   if (!rows.length) throw new Error("Parent folder not found");
 }
 
 export async function createFolder(
+  drive: DriveKey,
   parentId: string | null,
   rawName: string
 ): Promise<FolderRow> {
-  await assertFolderExists(parentId);
+  await assertFolderExists(drive, parentId);
 
   const base = rawName.trim() || "New Folder";
 
   // De-duplicate against siblings the way the design does: "Name", "Name 2"...
   const siblings = await d1Query<{ name: string }>(
     parentId === null
-      ? "SELECT name FROM folders WHERE parent_id IS NULL"
+      ? "SELECT name FROM folders WHERE parent_id IS NULL AND drive = ?"
       : "SELECT name FROM folders WHERE parent_id = ?",
-    parentId === null ? [] : [parentId]
+    parentId === null ? [drive] : [parentId]
   );
   const taken = new Set(siblings.map((s) => s.name));
   let name = base;
@@ -246,14 +282,14 @@ export async function createFolder(
   while (taken.has(name)) name = `${base} ${n++}`;
 
   const [countRows, posRows] = await Promise.all([
-    d1Query<{ c: number }>("SELECT COUNT(*) AS c FROM folders"),
+    d1Query<{ c: number }>("SELECT COUNT(*) AS c FROM folders WHERE drive = ?", [drive]),
     // A new folder goes last among its siblings, so on a numbered drive it
     // takes the next number instead of jumping in front of the existing ones.
     d1Query<{ m: number | null }>(
       parentId === null
-        ? "SELECT MAX(position) AS m FROM folders WHERE parent_id IS NULL"
+        ? "SELECT MAX(position) AS m FROM folders WHERE parent_id IS NULL AND drive = ?"
         : "SELECT MAX(position) AS m FROM folders WHERE parent_id = ?",
-      parentId === null ? [] : [parentId]
+      parentId === null ? [drive] : [parentId]
     ),
   ]);
   const code = "USR-" + String(Number(countRows[0]?.c ?? 0) + 1).padStart(2, "0");
@@ -266,14 +302,15 @@ export async function createFolder(
   const id = newId();
 
   await d1Execute(
-    `INSERT INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at)
-     VALUES (?, ?, ?, ?, 'folder', ?, ?, ?)`,
-    [id, parentId, name, code, position, now, now]
+    `INSERT INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at)
+     VALUES (?, ?, ?, ?, ?, 'folder', ?, ?, ?)`,
+    [id, parentId, drive, name, code, position, now, now]
   );
 
   return {
     id,
     parent_id: parentId,
+    drive,
     name,
     code,
     icon: "folder",
@@ -296,19 +333,20 @@ export async function moveFolder(
   id: string,
   direction: "up" | "down"
 ): Promise<void> {
-  const rows = await d1Query<{ parent_id: string | null }>(
-    "SELECT parent_id FROM folders WHERE id = ?",
+  const rows = await d1Query<{ parent_id: string | null; drive: string }>(
+    "SELECT parent_id, drive FROM folders WHERE id = ?",
     [id]
   );
   if (!rows.length) throw new Error("Folder not found");
   const parentId = rows[0].parent_id;
 
   // Same order the tree is read in, so "up" means what the screen shows.
+  // Root-level siblings are the roots of this folder's own drive only.
   const siblings = await d1Query<{ id: string }>(
     parentId === null
-      ? "SELECT id FROM folders WHERE parent_id IS NULL ORDER BY position ASC, name ASC"
+      ? "SELECT id FROM folders WHERE parent_id IS NULL AND drive = ? ORDER BY position ASC, name ASC"
       : "SELECT id FROM folders WHERE parent_id = ? ORDER BY position ASC, name ASC",
-    parentId === null ? [] : [parentId]
+    parentId === null ? [rows[0].drive] : [parentId]
   );
   const order = siblings.map((s) => s.id);
   const from = order.indexOf(id);
@@ -354,6 +392,13 @@ async function subtreeIds(id: string): Promise<string[]> {
  * revision that went with it so the caller can clear the objects.
  */
 export async function deleteFolder(id: string): Promise<string[]> {
+  const owner = await d1Query<{ drive: DriveKey }>(
+    "SELECT drive FROM folders WHERE id = ?",
+    [id]
+  );
+  if (!owner.length) throw new Error("Folder not found");
+  const drive = owner[0].drive;
+
   const ids = await subtreeIds(id);
   if (!ids.length) throw new Error("Folder not found");
 
@@ -380,7 +425,7 @@ export async function deleteFolder(id: string): Promise<string[]> {
   const freed = versions
     .filter((v) => v.uploaded === 1)
     .reduce((sum, v) => sum + v.size_bytes, 0);
-  await bumpUsedBytes(-freed);
+  await bumpUsedBytes(drive, -freed);
 
   return versions.map((v) => v.r2_key);
 }
@@ -396,12 +441,13 @@ export async function deleteFolder(id: string): Promise<string[]> {
  * abandoned upload never appears as a phantom file or a phantom revision.
  */
 export async function reserveFile(
+  drive: DriveKey,
   folderId: string | null,
   name: string,
   sizeBytes: number,
   contentType: string
 ): Promise<{ fileId: string; versionId: string; version: number; r2Key: string }> {
-  await assertFolderExists(folderId);
+  await assertFolderExists(drive, folderId);
 
   const clean = name.trim() || "untitled";
   const ext = clean.includes(".")
@@ -411,9 +457,9 @@ export async function reserveFile(
 
   const existing = await d1Query<{ id: string }>(
     folderId === null
-      ? "SELECT id FROM files WHERE folder_id IS NULL AND name = ?"
+      ? "SELECT id FROM files WHERE folder_id IS NULL AND drive = ? AND name = ?"
       : "SELECT id FROM files WHERE folder_id = ? AND name = ?",
-    folderId === null ? [clean] : [folderId, clean]
+    folderId === null ? [drive, clean] : [folderId, clean]
   );
 
   let fileId: string;
@@ -432,14 +478,16 @@ export async function reserveFile(
     fileId = newId();
     version = 1;
     await d1Execute(
-      `INSERT INTO files (id, folder_id, name, ext, current_version_id, version_count, created_at, modified_at)
-       VALUES (?, ?, ?, ?, NULL, 0, ?, ?)`,
-      [fileId, folderId, clean, ext, now, now]
+      `INSERT INTO files (id, folder_id, drive, name, ext, current_version_id, version_count, created_at, modified_at)
+       VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?)`,
+      [fileId, folderId, drive, clean, ext, now, now]
     );
   }
 
   const versionId = newId();
-  const r2Key = `${folderId ?? "root"}/${fileId}/v${version}/${clean}`;
+  // Objects of the other drives sit under their own prefix in the bucket, so
+  // they are as easy to tell apart in R2 as their rows are in D1.
+  const r2Key = `${drive === "main" ? "" : drive + "/"}${folderId ?? "root"}/${fileId}/v${version}/${clean}`;
 
   await d1Execute(
     `INSERT INTO file_versions (id, file_id, version, size_bytes, content_type, r2_key, uploaded, created_at, uploaded_at)
@@ -458,8 +506,9 @@ export async function confirmFile(
   fileId: string,
   versionId: string
 ): Promise<void> {
-  const rows = await d1Query<FileVersionRow>(
-    "SELECT * FROM file_versions WHERE id = ? AND file_id = ?",
+  const rows = await d1Query<FileVersionRow & { drive: DriveKey }>(
+    `SELECT v.*, f.drive FROM file_versions v JOIN files f ON f.id = v.file_id
+      WHERE v.id = ? AND v.file_id = ?`,
     [versionId, fileId]
   );
   const v = rows[0];
@@ -481,7 +530,7 @@ export async function confirmFile(
       WHERE id = ?`,
     [versionId, now, fileId]
   );
-  await bumpUsedBytes(v.size_bytes);
+  await bumpUsedBytes(v.drive, v.size_bytes);
 }
 
 function extOf(name: string): string {
@@ -590,17 +639,17 @@ export async function resolveDownload(
 
 /** Delete a file and every revision; returns their R2 keys. */
 export async function deleteFile(id: string): Promise<string[]> {
+  const owner = await d1Query<{ drive: DriveKey }>(
+    "SELECT drive FROM files WHERE id = ?",
+    [id]
+  );
+  if (!owner.length) return [];
+  const drive = owner[0].drive;
+
   const versions = await d1Query<{ r2_key: string; size_bytes: number; uploaded: number }>(
     "SELECT r2_key, size_bytes, uploaded FROM file_versions WHERE file_id = ?",
     [id]
   );
-  if (!versions.length) {
-    const exists = await d1Query<{ id: string }>(
-      "SELECT id FROM files WHERE id = ?",
-      [id]
-    );
-    if (!exists.length) return [];
-  }
 
   await d1Execute("DELETE FROM file_versions WHERE file_id = ?", [id]);
   await d1Execute("DELETE FROM files WHERE id = ?", [id]);
@@ -608,7 +657,7 @@ export async function deleteFile(id: string): Promise<string[]> {
   const freed = versions
     .filter((v) => v.uploaded === 1)
     .reduce((sum, v) => sum + v.size_bytes, 0);
-  await bumpUsedBytes(-freed);
+  await bumpUsedBytes(drive, -freed);
 
   return versions.map((v) => v.r2_key);
 }
@@ -627,8 +676,9 @@ export async function deleteVersion(
     size_bytes: number;
     uploaded: number;
     current_version_id: string | null;
+    drive: DriveKey;
   }>(
-    `SELECT v.r2_key, v.size_bytes, v.uploaded, f.current_version_id
+    `SELECT v.r2_key, v.size_bytes, v.uploaded, f.current_version_id, f.drive
        FROM file_versions v JOIN files f ON f.id = v.file_id
       WHERE v.id = ? AND v.file_id = ?`,
     [versionId, fileId]
@@ -647,7 +697,7 @@ export async function deleteVersion(
       "UPDATE files SET version_count = MAX(0, version_count - 1) WHERE id = ?",
       [fileId]
     );
-    await bumpUsedBytes(-v.size_bytes);
+    await bumpUsedBytes(v.drive, -v.size_bytes);
   }
   return v.r2_key;
 }

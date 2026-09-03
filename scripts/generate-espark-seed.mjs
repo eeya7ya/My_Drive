@@ -1,19 +1,23 @@
 /**
  * Emit seed.espark.sql and seed.espark.console.sql — the eSpark drive's
- * starting folder tree, taken from the Electrical Scope Register workbook
- * (sheet "Scope Register", columns No. and Package / Subject).
+ * folder tree, exactly as the Electrical Scope Register Rev2 workbook has it
+ * (sheet "Scope Register", columns Part / Sub / Deliverable).
  *
- * Level 1 is the equipment package, level 2 the subject within it. The drive
- * numbers folders from their position, so positions here follow the register's
- * own numbering and the app shows 1, 1.1, 1.2 … exactly as the workbook does.
+ * Part is the package (1–17), Sub the deliverable inside it, and every name
+ * is the register's own wording. The drive numbers folders from their
+ * position, so "9.5" in the workbook is folder 9.5 in the drive.
+ *
+ * Every row is inserted with drive = 'espark'. The main drive's queries never
+ * read that drive, so this tree cannot appear in the Power Systems drive
+ * whichever database it is loaded into. Requires migrations/003_drives.sql.
  *
  *   node scripts/generate-espark-seed.mjs
- *   npx wrangler d1 execute <ESPARK_DB> --remote --file=./seed.espark.sql
+ *   npx wrangler d1 execute <DB> --remote --file=./seed.espark.sql
  */
 
 import { writeFileSync } from "node:fs";
 
-const P = (name, children) => ({ name, children });
+const P = (name, subs) => ({ name, subs });
 
 export const TREE = [
   P("Alternator", [
@@ -25,12 +29,13 @@ export const TREE = [
     "Testing",
   ]),
   P("MV Switchgear (MVSG)", [
-    "Ratings",
-    "Busbar configuration",
-    "Breakers & interlocking",
-    "Protection & instrument transformers",
-    "Coordination & arc flash",
-    "Testing & room requirements",
+    "As-Built Survey Drawing of Existing MV Room - dimensions/access openings, existing floor construction, existing cable trench/duct routing, visible earthing conductor routing",
+    "Existing Cable Trench/Duct Bank Condition Survey and Compatibility Assessment for new cable sizes and routing",
+    "Existing Ventilation/HVAC Assessment against new switchgear heat load",
+    "HVAC and Ventilation Modification design and shop drawings includes, all supportive calculations, drawings, BOQ, and New Equipment Datasheet",
+    "Fire Detection & fighting system Assessment Report",
+    "Fire Detection & Fighting system Modification Design/shop drawings includes but not limited to all supportive Drawings, BOQs, Datasheets.",
+    "Outdoor lighting design includes lux calculation and drawings",
   ]),
   P("Aux Transformer", [
     "Rating & vector group",
@@ -41,27 +46,35 @@ export const TREE = [
     "Testing",
   ]),
   P("MV Cable & Termination", [
-    "Sizing",
-    "Construction",
-    "Screen bonding & earthing",
-    "Routing & installation",
-    "Terminations & joints",
-    "Testing",
+    "Data sheet and Samples",
+    "Routing & installation Layout",
+    "Routing Details",
+    "Cable Sizing",
+    "FAT test",
+    "Testing ITP and Method of Statement",
+    "Testing Report",
   ]),
   P("LV Cables", [
-    "Sizing",
-    "Fire performance",
-    "Containment & segregation",
-    "Cable schedule",
-    "Testing",
+    "Data sheet and Samples",
+    "Routing & installation Layout",
+    "Routing Details",
+    "Cable Sizing",
+    "FAT test",
+    "Testing ITP and Method of Statement",
+    "Testing Report",
   ]),
   P("Earthing", [
-    "Soil resistivity & grid design",
-    "Touch & step voltage",
-    "System / equipment / clean earth",
-    "Bonding & equipotential",
-    "Interface with LPS & SPD",
-    "Testing",
+    "Soil Resistivity Test procedures (ITP, MOS, Test Report Template), shall include the proposed test locations and depths across the sites.",
+    "Soil Resistivity Test Report, includes the results and testing equipment calibration certificate",
+    "Existing Earth system assessment and Test Report",
+    "Earthing System Design Calculation following the lastest version of IEEE 80, including the touch, step, mesh voltage, Ground Potential Rise (GPR), grid conductor sizing, fault current withstand, and calculated ground resistance.",
+    "Primary Earthing Grid Layout Drawing and details, showing grid conductor routing, buried depth, mesh spacing, earth pit/test pit locations, and Typical Details",
+    "Secondary earthing layout, showing the risers for each equipment, the size of risers, and Earth Bar locations with Equipment Earthing Connection Details",
+    "Earthing System Modification if required includes all design and shop drawing drawings, calculations, BOQ, new material datasheets.",
+    "Earthing system BOQ and Datasheets, includes cables, rods, pits, and clamps",
+    "Earthing System Test Procedures (ITP, MOS, Test Report Template)",
+    "Earthing System Test Reports",
+    "Earthing System maintainance plan",
   ]),
   P("Main Distribution Boards", [
     "Assembly standard",
@@ -73,20 +86,24 @@ export const TREE = [
     "Arc flash, access & ventilation",
   ]),
   P("Control Room", [
-    "Layout & ergonomics",
-    "HVAC",
     "Fire detection & suppression",
     "Power supplies",
     "Operator interface",
     "Access control & security",
   ]),
   P("MCC Panels", [
-    "Starter selection",
-    "Coordination type 1 / type 2",
-    "VFD issues",
-    "Construction",
-    "I/O & communications",
-    "Testing",
+    "MCC Panel General Arrangement Drawing showing dimensions, floor layout, cable entries, busbar details, equip segregation",
+    "MCC Panel Single Line Diagram (SLD) showing all incoming/outgoing feeders, ratings.",
+    "MCC Panel Schematics & Wiring Diagrams for all starters, control circuits, interlocks, and alarms.",
+    "MCC main component datasheets including but not limited to starter, CBs, Contactors, and VFDs, showing the rating and harmonic tables.",
+    "MCC Panel Protection Relay Settings & Coordination Study, including the coordination curves for all overcurrent protection.",
+    "MCC Panel Bill of Materials (Breakers, Contactors, Relays, Pushbuttons, Indicating Lamps, Terminals)",
+    "MCC Panel Cable Termination Schedule and Details",
+    "MCC Certified Type Test Reports",
+    "MCC Panel Factory Test Procedure detailing all required visual/mechanical, dielectric, functional, and operation tests",
+    "MCC Panel Factory Test Reports",
+    "MCC Panel Operation & Maintenance Manual",
+    "MCC Panel Spare Parts Recommendation List (2-year operation)",
   ]),
   P("Control Panels & Motors", [
     "Motor data",
@@ -97,41 +114,45 @@ export const TREE = [
     "Commissioning",
   ]),
   P("Charger & Batteries", [
-    "DC system definition",
-    "Battery sizing",
-    "Battery type",
-    "Charger",
-    "DC distribution",
-    "Battery room",
-    "Alarms & testing",
+    "System Datasheet including battery, chargers, inverters, DC/AC switchboards, CVT",
+    "Single Line Diagram for DC/UPS system",
+    "Installation and layout drawings: Arrangements outline dimensions, mounting details, cable entry areas and weights for all supplied equipment. The drawings shall provide sufficient and adequate information required for the interfaces including the following: a. Outline dimensions including front view, side views, top view and bottom view. b. Cable entry and location of all interface connections. c. Shipping sections and assembly drawings. d. Total weight and center of gravity of each switchboard panel board, enclosure and shipping section. e. Mounting details. f. Anchorage requirements (number of anchor bolts, type size, location)",
+    "Battery layout drawings showing details of intercell connections, Battery terminal plate layout including terminal locations and sizes connection of cables.",
+    "Schematic and Connection Drawings showing terminal designations for external cable connections and other information required to complete design interfaces.",
+    "Sizing calculations for the battery and battery charger in accordance with IEEE 485, including discharge curves and correction factors for temperature.",
+    "DC short-circuit calculations for polarity-to-polarity faults at the DC switchboard in accordance with IEEE 946",
+    "UPS/charger short-circuit calculations for faults at the Distribution Panel",
+    "Circuit breaker trip curves and coordination study for all circuit breakers supplied in DC switchboards, AC/DC panel boards and input/out breakers in chargers, inverters and CVT.",
+    "Sizing calculations (ampacity, voltage drop, and short time withstanding current) for all interconnecting cables within DC system",
+    "DC and UPS system test procedures",
+    "Certified production test Reports",
+    "Heat rejection loads in kW and Btu/hr for each piece of equipment supplied",
+    "Battery hydrogen evaluation calculation for worst case operating condition, which produces most hydrogen and battery room minimum ventilation requirements",
+    "Nameplate drawing and equipment nameplate list",
+    "Instruction manuals including catalogs for equipment showing theory of operation, erection, installation, troubleshooting guide, factory settings of all adjustable alarm and trip set points and maintenance instructions for all the supplied equipment",
+    "Control logic and system operation philosophy including SCADA interface",
   ]),
   P("SCADA System", [
-    "Architecture",
-    "Protocols & interoperability",
-    "Time synchronisation",
-    "Signal list & tagging",
-    "HMI & reporting",
-    "Cybersecurity",
-    "Testing",
+    "SCADA System Architecture including Control System Architecture, Communication Architecture, Redundancy Philosophy, Time Synchronization Philosophy (NTP/GPS)",
+    "Software Design including Functional Design Specification (FDS), Software Design Specification (SDS)",
+    "Philosophies: Control, Operator, Alarm, Historian, Event Logging, Reporting, User Management, Cybersecurity",
+    "Hardware Design including Hardware Datasheets, Server Datasheets, Workstation Datasheets, Engineering Station Datasheet, Network Switch Datasheets, Firewall Datasheets, Industrial PC Datasheets",
+    "SCADA Graphics including Screen Navigation, Plant Mimic & Process Mimics, Systems Screens, Electrical SLD Screens, Alarm Screens, Trend Screens, Historical Trend Screens, Maintenance Screens, Diagnostic Screens",
+    "Signal Interface List including IO List with Signal Exchange Matrix, Modbus Register List with Mapping",
   ]),
-  P("Lighting", [
-    "Illuminance design",
-    "Emergency & escape lighting",
-    "Luminaire selection",
-    "Lighting control",
-    "External & area lighting",
-    "Lighting & small power boards",
-    // The register's row 13.7 reads "If lightning protection is meant" — a
-    // note rather than a name. Its key points are all lightning protection
-    // (IEC 62305, air termination, down conductors), so that is the folder.
-    "Lightning Protection",
+  P("Lightning", [
+    "Lightning Risk Assessment Report per IEC 62305, determining required Lightning Protection Level (LPL I-IV)",
+    "Lightning Protection Design report includes the Basis and Philosophy as per IEC 62305",
+    "Lightning protection system layout, sections, and details drawing",
+    "Lightning Protection Component BOQ and Datasheets, includes but not limited to air rods, down conductors, test joints, bonding clamps, surge counters",
+    "Surge Protection Device (SPD) Coordination Study per IEC 62305",
+    "SPD Datasheets & Location Schedule",
+    "Lightning Protection System maintainance plan",
   ]),
   P("LV Equipment", [
     "Sub-boards & isolators",
     "UPS",
-    "Power factor correction",
     "Metering & energy monitoring",
-    "Environment & identification",
   ]),
   P("ELV Equipment", [
     "System list",
@@ -140,8 +161,9 @@ export const TREE = [
     "Cabling",
     "Integration boundaries",
   ]),
-  P("Cross-Cutting Items", [
-    "Single line diagram & load list",
+  P("General", [
+    "Single line diagram",
+    "Load List",
     "Studies",
     "Standards & specification register",
     "Interface / responsibility matrix",
@@ -150,35 +172,45 @@ export const TREE = [
     "Energisation & commissioning sequence",
     "O&M, spares & training",
   ]),
+  P("E-House", [
+    "E-House General Arrangement Drawings (Plan, Elevation, Sections), includes but not limited to the MCC room, Battery room, SCADA/Control room layout, equipment placement, access doors, escape/maintenance clearances",
+    "Painting & Corrosion Protection Specification (external cladding, internal surfaces)",
+    "HVAC Design Basis, including the cooling load calculation per room (MCC heat dissipation, SCADA/UPS rack heat load), redundancy philosophy (N+1)",
+    "HVAC Equipment Datasheets",
+    "Normal & Emergency Lighting Layout with Lux Calculation",
+    "Battery Room Ventilation Design",
+    "Battery Room Ventilation Fan & Ductwork Datasheet and Floor/Wall Chemically-Resistant Coating Specification",
+  ]),
 ];
 
+const DRIVE = "espark";
 const q = (s) => "'" + String(s).replace(/'/g, "''") + "'";
 // One fixed stamp so the file is reproducible; the drive shows it as the
 // folder's modified date until something changes inside it.
 const TS = Date.parse("2026-09-03T12:00:00Z");
 
+// Ids carry the outline number, prefixed for this revision of the register.
 const rows = [];
-TREE.forEach((pkg, i) => {
+TREE.forEach((part, i) => {
   const n = String(i + 1);
-  rows.push({ id: `esp-${n}`, parent: null, name: pkg.name, code: n, pos: i });
-  pkg.children.forEach((child, j) => {
-    const sub = `${n}.${j + 1}`;
-    rows.push({ id: `esp-${n}-${j + 1}`, parent: `esp-${n}`, name: child, code: sub, pos: j });
+  rows.push({ id: `r2-${n}`, parent: null, name: part.name, code: n, pos: i });
+  part.subs.forEach((sub, j) => {
+    rows.push({ id: `r2-${n}-${j + 1}`, parent: `r2-${n}`, name: sub, code: `${n}.${j + 1}`, pos: j });
   });
 });
 
 const statements = rows.map(
   (r) =>
-    `INSERT OR IGNORE INTO folders (id, parent_id, name, code, icon, position, created_at, modified_at) VALUES (` +
-    [q(r.id), r.parent === null ? "NULL" : q(r.parent), q(r.name), q(r.code), "'folder'", r.pos, TS, TS].join(", ") +
+    `INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES (` +
+    [q(r.id), r.parent === null ? "NULL" : q(r.parent), q(DRIVE), q(r.name), q(r.code), "'folder'", r.pos, TS, TS].join(", ") +
     ");"
 );
 
 const header = [
-  "-- eSpark Drive — starting folder tree, from the Electrical Scope Register.",
-  "-- Generated by scripts/generate-espark-seed.mjs. Load after schema.sql:",
-  "--   npx wrangler d1 execute <ESPARK_DB> --remote --file=./seed.espark.sql",
-  "-- INSERT OR IGNORE: safe to run twice, and never deletes anything.",
+  "-- eSpark Drive — folder tree, exactly as the Electrical Scope Register Rev2.",
+  "-- Generated by scripts/generate-espark-seed.mjs. Needs migrations/003_drives.sql.",
+  "--   npx wrangler d1 execute <DB> --remote --file=./seed.espark.sql",
+  "-- Every row is drive = 'espark'. INSERT OR IGNORE: safe to run twice; deletes nothing.",
   "",
 ];
 
@@ -187,7 +219,7 @@ writeFileSync("seed.espark.sql", [...header, ...statements, ""].join("\n"));
 // "--" comments out everything after it; this copy carries no comments.
 writeFileSync("seed.espark.console.sql", statements.join("\n") + "\n");
 
-const packages = TREE.length;
+const parts = TREE.length;
 console.log(
-  `seed.espark.sql written — ${packages} packages, ${rows.length - packages} subjects, ${rows.length} folders`
+  `seed.espark.sql written — ${parts} parts, ${rows.length - parts} deliverables, ${rows.length} folders, all drive = '${DRIVE}'`
 );

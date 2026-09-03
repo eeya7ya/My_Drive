@@ -58,9 +58,11 @@ export async function GET() {
         filesColumns: fileCols,
         hasFileVersions: names.includes("file_versions"),
         legacyColumnsStillPresent: legacy,
+        hasDriveColumn: fileCols.includes("drive"),
         migrationsNeeded: [
           !names.includes("file_versions") ? "001_file_versions" : null,
           legacy.length ? "002_drop_legacy_file_columns" : null,
+          !fileCols.includes("drive") ? "003_drives" : null,
         ].filter(Boolean),
       };
     } catch (e) {

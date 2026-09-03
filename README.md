@@ -111,14 +111,34 @@ take effect. Add your production domain to the R2 CORS policy above.
 
 ## A second drive: eSpark
 
-The same code serves more than one drive. Each drive is its own deployment
-with its own database and bucket; one environment variable decides which
-identity the app wears on top of that data.
+One deployment and one database hold two drives that never mix:
 
-| `DRIVE_VARIANT` | Drive |
-| --- | --- |
-| unset, or `yahya` | Yahya Khaled — Power Systems Drive, as above |
-| `espark` | the eSpark drive |
+| Drive | Address | Rows |
+| --- | --- | --- |
+| Yahya Khaled — Power Systems Drive | `/` | `drive = 'main'` |
+| eSpark | `/espark` | `drive = 'espark'` |
+
+Every folder and file row carries a `drive` column and every query in
+`lib/store.ts` is scoped by it, so the main drive cannot see an eSpark row and
+the other way round. Each drive has its own storage counter in `settings`
+(the main drive keeps the bare `used_bytes` / `quota_bytes` keys; eSpark's are
+`espark/used_bytes` / `espark/quota_bytes`) and its own prefix in the R2
+bucket. The client sends its drive with every request — `/api/drive?drive=…`,
+and a `drive` field when creating a folder or reserving an upload — and the
+server rejects an unknown key rather than falling through to the wrong tree.
+One admin password covers both; the padlock returns you to the drive you
+signed in from.
+
+The drives are declared in `lib/brand.ts`. Adding a third is a new entry
+there plus a route folder like `app/espark`.
+
+### Migrating an existing database
+
+A database from before this needs `migrations/003_drives.console.sql` run in
+the D1 console **before** the new code is deployed. It adds the `drive`
+column (every existing row becomes the main drive), two indexes, and the
+eSpark counters. Nothing is deleted or moved. Until it is run the app shows
+the folders with a banner naming the migration.
 
 On the eSpark drive:
 
@@ -136,38 +156,26 @@ On the eSpark drive:
 - The sidebar, sign-in card, tab title and home-screen name read **eSpark**,
   and **Powered by eSpark** sits in the bottom-right corner of the page.
 
-Setting it up is the same as the first drive, once more:
+### Seeding the eSpark tree
+
+`seed.espark.sql` is the eSpark drive's folder tree, exactly as the
+Electrical Scope Register Rev2 workbook has it: 17 parts (Alternator, MV
+Switchgear, …, E-House) at the root and their 127 deliverables beneath them,
+named with the register's own wording. Part and Sub numbers are the
+register's, so `9.5` in the workbook is folder 9.5 in the drive.
+
+Every row it inserts is `drive = 'espark'`, so it goes into the same database
+as the main drive and still never appears there. It only inserts —
+`INSERT OR IGNORE`, never a delete — so it is safe to run twice. Run
+migration 003 first. Regenerate it with `node scripts/generate-espark-seed.mjs`.
 
 ```bash
-wrangler d1 create espark-drive                   # a second database
-wrangler d1 execute espark-drive --remote --file=./schema.sql
-wrangler d1 execute espark-drive --remote --file=./seed.espark.sql
-wrangler r2 bucket create espark-drive            # a second bucket
+wrangler d1 execute my-drive --remote --file=./seed.espark.sql
 ```
-
-`seed.espark.sql` is the eSpark drive's starting tree: the 16 equipment
-packages and their 99 subjects from the Electrical Scope Register workbook
-(Alternator → Rating & site derating, Neutral earthing & NER, …; MV Switchgear
-→ Ratings, Busbar configuration, …; through Cross-Cutting Items). Positions
-follow the register's own numbering, so the drive shows 1, 1.1, 1.2 … exactly
-as the workbook does. It only inserts — `INSERT OR IGNORE`, never a delete —
-so it is safe to run twice. Regenerate it with
-`node scripts/generate-espark-seed.mjs`. Do **not** load `seed.sql` here; that
-is the Power Systems tree.
 
 For the D1 dashboard console, paste `seed.espark.console.sql`, the same
-statements with no comments (see the note on the console above).
-
-Then import the repo at Vercel a second time as a new project, add the same
-variables as before pointing at the new database and bucket, and add:
-
-```
-DRIVE_VARIANT=espark
-```
-
-Add the new project's domain to the new bucket's CORS policy. Both projects
-build from the same branch, so a change to the code reaches both drives on
-the next deploy.
+statements with no comments (see the note on the console above). `seed.sql`,
+the Power Systems tree, now clears and reseeds only `drive = 'main'`.
 
 ## Revisions and dates
 

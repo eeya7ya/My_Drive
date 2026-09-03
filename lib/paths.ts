@@ -82,11 +82,26 @@ export function resolveSegments(
   return { folderPath, fileId: null, exact: true };
 }
 
-/** Build the href for a folder path (ids), optionally focusing a file. */
+/**
+ * Strip a drive's base path ("/espark") off a pathname, so the remaining
+ * segments name folders. A pathname outside the base path is left as-is.
+ */
+export function stripBasePath(pathname: string, basePath: string): string {
+  if (!basePath) return pathname;
+  if (pathname === basePath) return "/";
+  if (pathname.startsWith(basePath + "/")) return pathname.slice(basePath.length);
+  return pathname;
+}
+
+/**
+ * Build the href for a folder path (ids), optionally focusing a file.
+ * `basePath` is the drive's prefix, "" for the main drive.
+ */
 export function hrefFor(
   tree: TreeNode[],
   folderPath: string[],
-  fileName?: string | null
+  fileName?: string | null,
+  basePath = ""
 ): string {
   const parts: string[] = [];
   let level = tree;
@@ -99,5 +114,7 @@ export function hrefFor(
   }
 
   if (fileName) parts.push(slugify(fileName));
-  return "/" + parts.join("/");
+  // The drive root is its base path itself ("/espark"), or "/" for the main drive.
+  if (!parts.length) return basePath || "/";
+  return basePath + "/" + parts.join("/");
 }

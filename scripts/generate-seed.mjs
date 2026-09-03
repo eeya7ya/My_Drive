@@ -15,7 +15,8 @@ const lines = [
   "-- Load after schema.sql:",
   "--   npx wrangler d1 execute <DB_NAME> --remote --file=./seed.sql",
   "",
-  "DELETE FROM folders;",
+  // Only the main drive's rows: the eSpark drive shares this database.
+  "DELETE FROM folders WHERE drive = 'main';",
   "",
 ];
 
