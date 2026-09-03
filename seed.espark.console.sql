@@ -1,3 +1,6 @@
+DELETE FROM file_versions WHERE file_id IN (SELECT id FROM files WHERE folder_id LIKE 'esp-%' OR folder_id LIKE 'r2-%');
+DELETE FROM files WHERE folder_id LIKE 'esp-%' OR folder_id LIKE 'r2-%';
+DELETE FROM folders WHERE id LIKE 'esp-%' OR id LIKE 'r2-%';
 INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1', NULL, 'espark', 'Alternator', '1', 'folder', 0, 1788436800000, 1788436800000);
 INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1-1', 'r2-1', 'espark', 'Rating & site derating', '1.1', 'folder', 0, 1788436800000, 1788436800000);
 INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1-2', 'r2-1', 'espark', 'Neutral earthing & NER', '1.2', 'folder', 1, 1788436800000, 1788436800000);

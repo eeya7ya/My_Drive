@@ -165,9 +165,12 @@ named with the register's own wording. Part and Sub numbers are the
 register's, so `9.5` in the workbook is folder 9.5 in the drive.
 
 Every row it inserts is `drive = 'espark'`, so it goes into the same database
-as the main drive and still never appears there. It only inserts —
-`INSERT OR IGNORE`, never a delete — so it is safe to run twice. Run
-migration 003 first. Regenerate it with `node scripts/generate-espark-seed.mjs`.
+as the main drive and still never appears there. It first removes rows left
+by earlier seed files (ids `esp-*` and `r2-*`) from whichever drive they sit
+in — migration 003 marks pre-existing rows as the main drive, seeded ones
+included — and never touches a folder the app created, so it is safe to run
+twice. Run migration 003 first. Regenerate it with
+`node scripts/generate-espark-seed.mjs`.
 
 ```bash
 wrangler d1 execute my-drive --remote --file=./seed.espark.sql
