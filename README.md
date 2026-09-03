@@ -116,13 +116,13 @@ One deployment and one database hold two drives that never mix:
 | Drive | Address | Rows |
 | --- | --- | --- |
 | Yahya Khaled — Power Systems Drive | `/` | `drive = 'main'` |
-| eSpark | `/espark` | `drive = 'espark'` |
+| eSpark | `/advec` | `drive = 'advec'` |
 
 Every folder and file row carries a `drive` column and every query in
 `lib/store.ts` is scoped by it, so the main drive cannot see an eSpark row and
 the other way round. Each drive has its own storage counter in `settings`
 (the main drive keeps the bare `used_bytes` / `quota_bytes` keys; eSpark's are
-`espark/used_bytes` / `espark/quota_bytes`) and its own prefix in the R2
+`advec/used_bytes` / `advec/quota_bytes`) and its own prefix in the R2
 bucket. The client sends its drive with every request — `/api/drive?drive=…`,
 and a `drive` field when creating a folder or reserving an upload — and the
 server rejects an unknown key rather than falling through to the wrong tree.
@@ -130,7 +130,7 @@ One admin password covers both; the padlock returns you to the drive you
 signed in from.
 
 The drives are declared in `lib/brand.ts`. Adding a third is a new entry
-there plus a route folder like `app/espark`.
+there plus a route folder like `app/advec`.
 
 ### Migrating an existing database
 
@@ -138,7 +138,10 @@ A database from before this needs `migrations/003_drives.console.sql` run in
 the D1 console **before** the new code is deployed. It adds the `drive`
 column (every existing row becomes the main drive), two indexes, and the
 eSpark counters. Nothing is deleted or moved. Until it is run the app shows
-the folders with a banner naming the migration.
+the folders with a banner naming the migration. A database that ran 003
+while the key was still `espark` also needs
+`migrations/004_rename_espark_to_advec.console.sql`, which moves those rows
+and counters to the `advec` key.
 
 On the eSpark drive:
 
@@ -158,16 +161,26 @@ On the eSpark drive:
 
 ### Seeding the eSpark tree
 
-`seed.espark.sql` is the eSpark drive's folder tree, exactly as the
-Electrical Scope Register Rev2 workbook has it: 17 parts (Alternator, MV
-Switchgear, …, E-House) at the root and their 127 deliverables beneath them,
-named with the register's own wording. Part and Sub numbers are the
-register's, so `9.5` in the workbook is folder 9.5 in the drive.
+`seed.espark.sql` is the eSpark drive's folder tree, from the Electrical
+Scope Register Rev2 workbook: 17 parts (Alternator, MV Switchgear, …,
+E-House) at the root, their 127 deliverables beneath them, and 189 point
+folders beneath those — 333 folders. Each deliverable is a short general
+folder and every point its description lists is a subfolder inside it, so
+"As-Built Survey Drawing of Existing MV Room - dimensions/access openings,
+existing floor construction, …" is 2.1 As-Built Survey of Existing MV Room
+holding 2.1.1 Dimensions & Access Openings, 2.1.2 Existing Floor
+Construction, and so on. A single-item deliverable stays a single folder.
+Part and Sub numbers are the register's, so `9.5` in the workbook is folder
+9.5 in the drive; the register's full wording is kept beside each entry in
+`scripts/generate-espark-seed.mjs`.
 
-Every row it inserts is `drive = 'espark'`, so it goes into the same database
-as the main drive and still never appears there. It only inserts —
-`INSERT OR IGNORE`, never a delete — so it is safe to run twice. Run
-migration 003 first. Regenerate it with `node scripts/generate-espark-seed.mjs`.
+Every row it inserts is `drive = 'advec'`, so it goes into the same database
+as the main drive and still never appears there. It first removes rows left
+by earlier seed files (ids `esp-*` and `r2-*`) from whichever drive they sit
+in — migration 003 marks pre-existing rows as the main drive, seeded ones
+included — and never touches a folder the app created, so it is safe to run
+twice. Run migration 003 first. Regenerate it with
+`node scripts/generate-espark-seed.mjs`.
 
 ```bash
 wrangler d1 execute my-drive --remote --file=./seed.espark.sql

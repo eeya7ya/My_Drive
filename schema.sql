@@ -9,7 +9,7 @@
 -- they ever drift.
 
 -- Folder tree. parent_id NULL = a root-level folder ("My Drive" is virtual).
--- drive says which drive the folder belongs to ('main' or 'espark'); every
+-- drive says which drive the folder belongs to ('main' or 'advec'); every
 -- read is scoped by it, so one database holds several drives that never mix.
 CREATE TABLE IF NOT EXISTS folders (
   id          TEXT PRIMARY KEY,
@@ -69,7 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_file_versions_file ON file_versions(file_id, vers
 -- Key/value settings. quota_bytes is the sidebar's denominator; used_bytes is
 -- the running storage total, kept current on upload and delete so the sidebar
 -- costs one row read instead of a SUM over every revision ever stored. The
--- main drive uses the bare keys; every other drive prefixes them ('espark/').
+-- main drive uses the bare keys; every other drive prefixes them ('advec/').
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -77,5 +77,5 @@ CREATE TABLE IF NOT EXISTS settings (
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('quota_bytes', '214748364800');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('used_bytes', '0');
-INSERT OR IGNORE INTO settings (key, value) VALUES ('espark/quota_bytes', '214748364800');
-INSERT OR IGNORE INTO settings (key, value) VALUES ('espark/used_bytes', '0');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('advec/quota_bytes', '214748364800');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('advec/used_bytes', '0');

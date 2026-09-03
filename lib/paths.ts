@@ -83,7 +83,7 @@ export function resolveSegments(
 }
 
 /**
- * Strip a drive's base path ("/espark") off a pathname, so the remaining
+ * Strip a drive's base path ("/advec") off a pathname, so the remaining
  * segments name folders. A pathname outside the base path is left as-is.
  */
 export function stripBasePath(pathname: string, basePath: string): string {
@@ -114,7 +114,7 @@ export function hrefFor(
   }
 
   if (fileName) parts.push(slugify(fileName));
-  // The drive root is its base path itself ("/espark"), or "/" for the main drive.
+  // The drive root is its base path itself ("/advec"), or "/" for the main drive.
   if (!parts.length) return basePath || "/";
   return basePath + "/" + parts.join("/");
 }

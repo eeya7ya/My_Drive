@@ -4,19 +4,19 @@
  * One app, one database, more than one drive. Every folder and file row
  * carries a `drive` key, every query is scoped by it, and each drive has its
  * own storage counter — so the trees can never mix. A drive is reached at
- * its own path: the main drive at "/", the eSpark drive at "/espark".
+ * its own path: the main drive at "/", the eSpark drive at "/advec".
  *
  * What differs per drive is the identity it wears: the name in the sidebar,
  * the tab title, whether folders are numbered, and whether a "powered by"
  * mark is shown.
  */
 
-export type DriveKey = "main" | "espark";
+export type DriveKey = "main" | "advec";
 
 export interface Brand {
   /** The value stored in folders.drive and files.drive. */
   key: DriveKey;
-  /** URL prefix, "" for the main drive or "/espark". Never ends in a slash. */
+  /** URL prefix, "" for the main drive or "/advec". Never ends in a slash. */
   basePath: string;
   /** The large line in the sidebar and on the sign-in card. */
   name: string;
@@ -49,9 +49,9 @@ export const DRIVES: Record<DriveKey, Brand> = {
     numbered: false,
     poweredBy: null,
   },
-  espark: {
-    key: "espark",
-    basePath: "/espark",
+  advec: {
+    key: "advec",
+    basePath: "/advec",
     name: "eSpark",
     tagline: "Drive",
     title: "eSpark Drive",
