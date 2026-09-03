@@ -1,5 +1,5 @@
 import { getTree, getUsage } from "@/lib/store";
-import { isAdmin } from "@/lib/auth";
+import { isAdmin, requireDriveAccess } from "@/lib/auth";
 import { isD1Configured } from "@/lib/d1";
 import { parseDrive } from "@/lib/brand";
 import { ok, fail } from "@/lib/api";
@@ -14,6 +14,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const drive = parseDrive(new URL(req.url).searchParams.get("drive"));
+    // A private drive answers nobody but the admin — not even with an empty tree.
+    await requireDriveAccess(drive);
     const admin = await isAdmin();
 
     // Before Cloudflare credentials are set the app should still render the

@@ -609,6 +609,15 @@ export async function renameFile(id: string, rawName: string): Promise<void> {
   if (!changed) throw new Error("File not found");
 }
 
+/** Which drive a file belongs to, or null for an unknown id. One indexed row. */
+export async function fileDrive(fileId: string): Promise<DriveKey | null> {
+  const rows = await d1Query<{ drive: DriveKey }>(
+    "SELECT drive FROM files WHERE id = ?",
+    [fileId]
+  );
+  return rows[0]?.drive ?? null;
+}
+
 /** The R2 key for a specific revision, or the current one when unspecified. */
 export async function resolveDownload(
   fileId: string,

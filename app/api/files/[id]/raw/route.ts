@@ -1,6 +1,6 @@
 import { resolveDownload } from "@/lib/store";
 import { getObjectStream } from "@/lib/r2";
-import { fail } from "@/lib/api";
+import { fail, requireFileAccess } from "@/lib/api";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,7 @@ const MAX_PROXY_BYTES = 25 * 1024 * 1024;
 export async function GET(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    await requireFileAccess(id);
     const versionId = new URL(req.url).searchParams.get("version");
 
     const target = await resolveDownload(id, versionId);

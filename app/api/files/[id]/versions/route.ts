@@ -1,5 +1,5 @@
 import { listVersions } from "@/lib/store";
-import { ok, fail } from "@/lib/api";
+import { ok, fail, requireFileAccess } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,7 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function GET(_req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    await requireFileAccess(id);
     const versions = await listVersions(id);
     return ok({ versions });
   } catch (err) {

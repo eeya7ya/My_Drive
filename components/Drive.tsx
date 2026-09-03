@@ -156,6 +156,12 @@ export default function Drive({
         cache: "no-store",
       });
       const body = await res.json();
+      if (res.status === 401 && brand.private) {
+        // The session ended while the drive was open: back to the sign-in
+        // card, and back here afterwards.
+        window.location.href = `/admin/login?next=${encodeURIComponent(window.location.pathname)}`;
+        return;
+      }
       if (!res.ok) throw new Error(body?.error || "Could not load the drive");
       setData(body as DrivePayload);
       setNotice(typeof body?.notice === "string" ? body.notice : null);
@@ -165,7 +171,7 @@ export default function Drive({
     } finally {
       setLoaded(true);
     }
-  }, [driveKey]);
+  }, [driveKey, brand.private]);
 
   useEffect(() => {
     refresh();

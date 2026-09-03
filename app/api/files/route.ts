@@ -2,6 +2,7 @@ import { reserveFile, getUsage } from "@/lib/store";
 import { presignUpload } from "@/lib/r2";
 import { parseDrive } from "@/lib/brand";
 import { ok, fail, readJson, badRequest } from "@/lib/api";
+import { requireDriveAccess } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
       contentType?: string;
     }>(req);
     const drive = parseDrive(rawDrive);
+    await requireDriveAccess(drive);
 
     if (typeof name !== "string" || !name.trim()) badRequest("name is required");
     if (typeof size !== "number" || !Number.isFinite(size) || size < 0) {

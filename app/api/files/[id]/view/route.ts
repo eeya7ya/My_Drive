@@ -1,6 +1,6 @@
 import { resolveDownload } from "@/lib/store";
 import { presignInline } from "@/lib/r2";
-import { fail } from "@/lib/api";
+import { fail, requireFileAccess } from "@/lib/api";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,7 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function GET(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    await requireFileAccess(id);
     const versionId = new URL(req.url).searchParams.get("version");
 
     const target = await resolveDownload(id, versionId);

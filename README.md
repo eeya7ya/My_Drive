@@ -132,6 +132,15 @@ signed in from.
 The drives are declared in `lib/brand.ts`. Adding a third is a new entry
 there plus a route folder like `app/advec`.
 
+**The main drive is private.** Its pages send anyone without the admin
+session to the sign-in card and bring them back to the same link after the
+password, and every API route that touches its data — the drive payload,
+uploads, file view/download/raw, revision history — answers 401 without that
+session, so a file id alone is never enough to fetch bytes out of it. The
+eSpark drive is public: anyone with the link can browse it and upload to it,
+and only management needs the password. Which is which is the `private` flag
+on each drive in `lib/brand.ts`.
+
 ### Migrating an existing database
 
 A database from before this needs `migrations/003_drives.console.sql` run in

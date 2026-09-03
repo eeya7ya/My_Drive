@@ -34,6 +34,12 @@ export interface Brand {
   numbered: boolean;
   /** Text of the mark in the bottom-right corner, or null for none. */
   poweredBy: string | null;
+  /**
+   * A private drive is invisible without the admin session: its pages send
+   * a visitor to the sign-in card, and its API refuses with 401. A public
+   * drive can be browsed and uploaded to by anyone with the link.
+   */
+  private: boolean;
 }
 
 export const DRIVES: Record<DriveKey, Brand> = {
@@ -48,6 +54,8 @@ export const DRIVES: Record<DriveKey, Brand> = {
       "Power systems study drive: folders, files, and admin management.",
     numbered: false,
     poweredBy: null,
+    // The personal drive: nobody enters it without the password.
+    private: true,
   },
   advec: {
     key: "advec",
@@ -59,6 +67,8 @@ export const DRIVES: Record<DriveKey, Brand> = {
     description: "eSpark drive: numbered folders, files, and revisions.",
     numbered: true,
     poweredBy: "eSpark",
+    // Shared with the people who hold the link.
+    private: false,
   },
 };
 

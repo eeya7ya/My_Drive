@@ -8,6 +8,7 @@
  */
 
 import { cookies } from "next/headers";
+import { DriveKey, driveFor } from "./brand";
 
 const COOKIE = "drive_session";
 const MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
@@ -114,6 +115,20 @@ export async function isAdmin(): Promise<boolean> {
 export async function requireAdmin(): Promise<void> {
   if (!(await isAdmin())) {
     const err = new Error("Admin session required");
+    (err as Error & { status?: number }).status = 401;
+    throw err;
+  }
+}
+
+/**
+ * Throws 401 when `drive` is private and the caller holds no admin session.
+ * Every route that reads or writes a drive's data goes through this, so a
+ * private drive cannot be reached by calling the API directly either.
+ */
+export async function requireDriveAccess(drive: DriveKey): Promise<void> {
+  if (!driveFor(drive).private) return;
+  if (!(await isAdmin())) {
+    const err = new Error("Sign in to open this drive");
     (err as Error & { status?: number }).status = 401;
     throw err;
   }

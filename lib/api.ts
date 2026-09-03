@@ -1,6 +1,8 @@
 /** Shared helpers for the route handlers. */
 
 import { NextResponse } from "next/server";
+import { requireDriveAccess } from "./auth";
+import { fileDrive } from "./store";
 
 export function ok<T>(data: T) {
   return NextResponse.json(data);
@@ -30,6 +32,20 @@ export async function readJson<T>(req: Request): Promise<T> {
     (err as Error & { status?: number }).status = 400;
     throw err;
   }
+}
+
+/**
+ * Refuse a file request unless its drive is open to the caller. A file id
+ * alone must never be enough to fetch bytes out of a private drive.
+ */
+export async function requireFileAccess(fileId: string): Promise<void> {
+  const drive = await fileDrive(fileId);
+  if (drive === null) {
+    const err = new Error("File not found");
+    (err as Error & { status?: number }).status = 404;
+    throw err;
+  }
+  await requireDriveAccess(drive);
 }
 
 export function badRequest(message: string): never {
