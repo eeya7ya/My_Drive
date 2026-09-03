@@ -158,11 +158,18 @@ On the eSpark drive:
 
 ### Seeding the eSpark tree
 
-`seed.espark.sql` is the eSpark drive's folder tree, exactly as the
-Electrical Scope Register Rev2 workbook has it: 17 parts (Alternator, MV
-Switchgear, …, E-House) at the root and their 127 deliverables beneath them,
-named with the register's own wording. Part and Sub numbers are the
-register's, so `9.5` in the workbook is folder 9.5 in the drive.
+`seed.espark.sql` is the eSpark drive's folder tree, from the Electrical
+Scope Register Rev2 workbook: 17 parts (Alternator, MV Switchgear, …,
+E-House) at the root, their 127 deliverables beneath them, and 189 point
+folders beneath those — 333 folders. Each deliverable is a short general
+folder and every point its description lists is a subfolder inside it, so
+"As-Built Survey Drawing of Existing MV Room - dimensions/access openings,
+existing floor construction, …" is 2.1 As-Built Survey of Existing MV Room
+holding 2.1.1 Dimensions & Access Openings, 2.1.2 Existing Floor
+Construction, and so on. A single-item deliverable stays a single folder.
+Part and Sub numbers are the register's, so `9.5` in the workbook is folder
+9.5 in the drive; the register's full wording is kept beside each entry in
+`scripts/generate-espark-seed.mjs`.
 
 Every row it inserts is `drive = 'espark'`, so it goes into the same database
 as the main drive and still never appears there. It first removes rows left

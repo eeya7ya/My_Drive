@@ -1,147 +1,353 @@
 DELETE FROM file_versions WHERE file_id IN (SELECT id FROM files WHERE folder_id LIKE 'esp-%' OR folder_id LIKE 'r2-%');
 DELETE FROM files WHERE folder_id LIKE 'esp-%' OR folder_id LIKE 'r2-%';
 DELETE FROM folders WHERE id LIKE 'esp-%' OR id LIKE 'r2-%';
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1', NULL, 'espark', 'Alternator', '1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1-1', 'r2-1', 'espark', 'Rating & site derating', '1.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1-2', 'r2-1', 'espark', 'Neutral earthing & NER', '1.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1-3', 'r2-1', 'espark', 'Excitation, AVR & governor', '1.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1-4', 'r2-1', 'espark', 'Fault contribution', '1.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1-5', 'r2-1', 'espark', 'Generator protection', '1.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-1-6', 'r2-1', 'espark', 'Testing', '1.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-2', NULL, 'espark', 'MV Switchgear (MVSG)', '2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-2-1', 'r2-2', 'espark', 'As-Built Survey Drawing of Existing MV Room - dimensions/access openings, existing floor construction, existing cable trench/duct routing, visible earthing conductor routing', '2.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-2-2', 'r2-2', 'espark', 'Existing Cable Trench/Duct Bank Condition Survey and Compatibility Assessment for new cable sizes and routing', '2.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-2-3', 'r2-2', 'espark', 'Existing Ventilation/HVAC Assessment against new switchgear heat load', '2.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-2-4', 'r2-2', 'espark', 'HVAC and Ventilation Modification design and shop drawings includes, all supportive calculations, drawings, BOQ, and New Equipment Datasheet', '2.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-2-5', 'r2-2', 'espark', 'Fire Detection & fighting system Assessment Report', '2.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-2-6', 'r2-2', 'espark', 'Fire Detection & Fighting system Modification Design/shop drawings includes but not limited to all supportive Drawings, BOQs, Datasheets.', '2.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-2-7', 'r2-2', 'espark', 'Outdoor lighting design includes lux calculation and drawings', '2.7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-3', NULL, 'espark', 'Aux Transformer', '3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-3-1', 'r2-3', 'espark', 'Rating & vector group', '3.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-3-2', 'r2-3', 'espark', 'Dry vs oil-filled', '3.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-3-3', 'r2-3', 'espark', 'Protection', '3.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-3-4', 'r2-3', 'espark', 'Inrush & through-fault', '3.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-3-5', 'r2-3', 'espark', 'Losses & noise', '3.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-3-6', 'r2-3', 'espark', 'Testing', '3.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-4', NULL, 'espark', 'MV Cable & Termination', '4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-4-1', 'r2-4', 'espark', 'Data sheet and Samples', '4.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-4-2', 'r2-4', 'espark', 'Routing & installation Layout', '4.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-4-3', 'r2-4', 'espark', 'Routing Details', '4.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-4-4', 'r2-4', 'espark', 'Cable Sizing', '4.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-4-5', 'r2-4', 'espark', 'FAT test', '4.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-4-6', 'r2-4', 'espark', 'Testing ITP and Method of Statement', '4.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-4-7', 'r2-4', 'espark', 'Testing Report', '4.7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-5', NULL, 'espark', 'LV Cables', '5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-5-1', 'r2-5', 'espark', 'Data sheet and Samples', '5.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-5-2', 'r2-5', 'espark', 'Routing & installation Layout', '5.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-5-3', 'r2-5', 'espark', 'Routing Details', '5.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-5-4', 'r2-5', 'espark', 'Cable Sizing', '5.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-5-5', 'r2-5', 'espark', 'FAT test', '5.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-5-6', 'r2-5', 'espark', 'Testing ITP and Method of Statement', '5.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-5-7', 'r2-5', 'espark', 'Testing Report', '5.7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6', NULL, 'espark', 'Earthing', '6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-1', 'r2-6', 'espark', 'Soil Resistivity Test procedures (ITP, MOS, Test Report Template), shall include the proposed test locations and depths across the sites.', '6.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-2', 'r2-6', 'espark', 'Soil Resistivity Test Report, includes the results and testing equipment calibration certificate', '6.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-3', 'r2-6', 'espark', 'Existing Earth system assessment and Test Report', '6.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-4', 'r2-6', 'espark', 'Earthing System Design Calculation following the lastest version of IEEE 80, including the touch, step, mesh voltage, Ground Potential Rise (GPR), grid conductor sizing, fault current withstand, and calculated ground resistance.', '6.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-5', 'r2-6', 'espark', 'Primary Earthing Grid Layout Drawing and details, showing grid conductor routing, buried depth, mesh spacing, earth pit/test pit locations, and Typical Details', '6.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-6', 'r2-6', 'espark', 'Secondary earthing layout, showing the risers for each equipment, the size of risers, and Earth Bar locations with Equipment Earthing Connection Details', '6.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-7', 'r2-6', 'espark', 'Earthing System Modification if required includes all design and shop drawing drawings, calculations, BOQ, new material datasheets.', '6.7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-8', 'r2-6', 'espark', 'Earthing system BOQ and Datasheets, includes cables, rods, pits, and clamps', '6.8', 'folder', 7, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-9', 'r2-6', 'espark', 'Earthing System Test Procedures (ITP, MOS, Test Report Template)', '6.9', 'folder', 8, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-10', 'r2-6', 'espark', 'Earthing System Test Reports', '6.10', 'folder', 9, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-6-11', 'r2-6', 'espark', 'Earthing System maintainance plan', '6.11', 'folder', 10, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-7', NULL, 'espark', 'Main Distribution Boards', '7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-7-1', 'r2-7', 'espark', 'Assembly standard', '7.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-7-2', 'r2-7', 'espark', 'Ratings', '7.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-7-3', 'r2-7', 'espark', 'Feeder schedule', '7.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-7-4', 'r2-7', 'espark', 'Discrimination & cascading', '7.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-7-5', 'r2-7', 'espark', 'Changeover / ATS', '7.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-7-6', 'r2-7', 'espark', 'Metering & monitoring', '7.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-7-7', 'r2-7', 'espark', 'Arc flash, access & ventilation', '7.7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-8', NULL, 'espark', 'Control Room', '8', 'folder', 7, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-8-1', 'r2-8', 'espark', 'Fire detection & suppression', '8.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-8-2', 'r2-8', 'espark', 'Power supplies', '8.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-8-3', 'r2-8', 'espark', 'Operator interface', '8.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-8-4', 'r2-8', 'espark', 'Access control & security', '8.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9', NULL, 'espark', 'MCC Panels', '9', 'folder', 8, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-1', 'r2-9', 'espark', 'MCC Panel General Arrangement Drawing showing dimensions, floor layout, cable entries, busbar details, equip segregation', '9.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-2', 'r2-9', 'espark', 'MCC Panel Single Line Diagram (SLD) showing all incoming/outgoing feeders, ratings.', '9.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-3', 'r2-9', 'espark', 'MCC Panel Schematics & Wiring Diagrams for all starters, control circuits, interlocks, and alarms.', '9.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-4', 'r2-9', 'espark', 'MCC main component datasheets including but not limited to starter, CBs, Contactors, and VFDs, showing the rating and harmonic tables.', '9.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-5', 'r2-9', 'espark', 'MCC Panel Protection Relay Settings & Coordination Study, including the coordination curves for all overcurrent protection.', '9.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-6', 'r2-9', 'espark', 'MCC Panel Bill of Materials (Breakers, Contactors, Relays, Pushbuttons, Indicating Lamps, Terminals)', '9.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-7', 'r2-9', 'espark', 'MCC Panel Cable Termination Schedule and Details', '9.7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-8', 'r2-9', 'espark', 'MCC Certified Type Test Reports', '9.8', 'folder', 7, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-9', 'r2-9', 'espark', 'MCC Panel Factory Test Procedure detailing all required visual/mechanical, dielectric, functional, and operation tests', '9.9', 'folder', 8, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-10', 'r2-9', 'espark', 'MCC Panel Factory Test Reports', '9.10', 'folder', 9, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-11', 'r2-9', 'espark', 'MCC Panel Operation & Maintenance Manual', '9.11', 'folder', 10, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-9-12', 'r2-9', 'espark', 'MCC Panel Spare Parts Recommendation List (2-year operation)', '9.12', 'folder', 11, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-10', NULL, 'espark', 'Control Panels & Motors', '10', 'folder', 9, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-10-1', 'r2-10', 'espark', 'Motor data', '10.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-10-2', 'r2-10', 'espark', 'Hazardous area', '10.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-10-3', 'r2-10', 'espark', 'Accessories', '10.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-10-4', 'r2-10', 'espark', 'Control philosophy', '10.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-10-5', 'r2-10', 'espark', 'Motor starting study', '10.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-10-6', 'r2-10', 'espark', 'Commissioning', '10.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11', NULL, 'espark', 'Charger & Batteries', '11', 'folder', 10, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-1', 'r2-11', 'espark', 'System Datasheet including battery, chargers, inverters, DC/AC switchboards, CVT', '11.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-2', 'r2-11', 'espark', 'Single Line Diagram for DC/UPS system', '11.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-3', 'r2-11', 'espark', 'Installation and layout drawings: Arrangements outline dimensions, mounting details, cable entry areas and weights for all supplied equipment. The drawings shall provide sufficient and adequate information required for the interfaces including the following: a. Outline dimensions including front view, side views, top view and bottom view. b. Cable entry and location of all interface connections. c. Shipping sections and assembly drawings. d. Total weight and center of gravity of each switchboard panel board, enclosure and shipping section. e. Mounting details. f. Anchorage requirements (number of anchor bolts, type size, location)', '11.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-4', 'r2-11', 'espark', 'Battery layout drawings showing details of intercell connections, Battery terminal plate layout including terminal locations and sizes connection of cables.', '11.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-5', 'r2-11', 'espark', 'Schematic and Connection Drawings showing terminal designations for external cable connections and other information required to complete design interfaces.', '11.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-6', 'r2-11', 'espark', 'Sizing calculations for the battery and battery charger in accordance with IEEE 485, including discharge curves and correction factors for temperature.', '11.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-7', 'r2-11', 'espark', 'DC short-circuit calculations for polarity-to-polarity faults at the DC switchboard in accordance with IEEE 946', '11.7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-8', 'r2-11', 'espark', 'UPS/charger short-circuit calculations for faults at the Distribution Panel', '11.8', 'folder', 7, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-9', 'r2-11', 'espark', 'Circuit breaker trip curves and coordination study for all circuit breakers supplied in DC switchboards, AC/DC panel boards and input/out breakers in chargers, inverters and CVT.', '11.9', 'folder', 8, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-10', 'r2-11', 'espark', 'Sizing calculations (ampacity, voltage drop, and short time withstanding current) for all interconnecting cables within DC system', '11.10', 'folder', 9, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-11', 'r2-11', 'espark', 'DC and UPS system test procedures', '11.11', 'folder', 10, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-12', 'r2-11', 'espark', 'Certified production test Reports', '11.12', 'folder', 11, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-13', 'r2-11', 'espark', 'Heat rejection loads in kW and Btu/hr for each piece of equipment supplied', '11.13', 'folder', 12, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-14', 'r2-11', 'espark', 'Battery hydrogen evaluation calculation for worst case operating condition, which produces most hydrogen and battery room minimum ventilation requirements', '11.14', 'folder', 13, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-15', 'r2-11', 'espark', 'Nameplate drawing and equipment nameplate list', '11.15', 'folder', 14, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-16', 'r2-11', 'espark', 'Instruction manuals including catalogs for equipment showing theory of operation, erection, installation, troubleshooting guide, factory settings of all adjustable alarm and trip set points and maintenance instructions for all the supplied equipment', '11.16', 'folder', 15, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-11-17', 'r2-11', 'espark', 'Control logic and system operation philosophy including SCADA interface', '11.17', 'folder', 16, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-12', NULL, 'espark', 'SCADA System', '12', 'folder', 11, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-12-1', 'r2-12', 'espark', 'SCADA System Architecture including Control System Architecture, Communication Architecture, Redundancy Philosophy, Time Synchronization Philosophy (NTP/GPS)', '12.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-12-2', 'r2-12', 'espark', 'Software Design including Functional Design Specification (FDS), Software Design Specification (SDS)', '12.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-12-3', 'r2-12', 'espark', 'Philosophies: Control, Operator, Alarm, Historian, Event Logging, Reporting, User Management, Cybersecurity', '12.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-12-4', 'r2-12', 'espark', 'Hardware Design including Hardware Datasheets, Server Datasheets, Workstation Datasheets, Engineering Station Datasheet, Network Switch Datasheets, Firewall Datasheets, Industrial PC Datasheets', '12.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-12-5', 'r2-12', 'espark', 'SCADA Graphics including Screen Navigation, Plant Mimic & Process Mimics, Systems Screens, Electrical SLD Screens, Alarm Screens, Trend Screens, Historical Trend Screens, Maintenance Screens, Diagnostic Screens', '12.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-12-6', 'r2-12', 'espark', 'Signal Interface List including IO List with Signal Exchange Matrix, Modbus Register List with Mapping', '12.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-13', NULL, 'espark', 'Lightning', '13', 'folder', 12, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-13-1', 'r2-13', 'espark', 'Lightning Risk Assessment Report per IEC 62305, determining required Lightning Protection Level (LPL I-IV)', '13.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-13-2', 'r2-13', 'espark', 'Lightning Protection Design report includes the Basis and Philosophy as per IEC 62305', '13.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-13-3', 'r2-13', 'espark', 'Lightning protection system layout, sections, and details drawing', '13.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-13-4', 'r2-13', 'espark', 'Lightning Protection Component BOQ and Datasheets, includes but not limited to air rods, down conductors, test joints, bonding clamps, surge counters', '13.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-13-5', 'r2-13', 'espark', 'Surge Protection Device (SPD) Coordination Study per IEC 62305', '13.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-13-6', 'r2-13', 'espark', 'SPD Datasheets & Location Schedule', '13.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-13-7', 'r2-13', 'espark', 'Lightning Protection System maintainance plan', '13.7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-14', NULL, 'espark', 'LV Equipment', '14', 'folder', 13, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-14-1', 'r2-14', 'espark', 'Sub-boards & isolators', '14.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-14-2', 'r2-14', 'espark', 'UPS', '14.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-14-3', 'r2-14', 'espark', 'Metering & energy monitoring', '14.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-15', NULL, 'espark', 'ELV Equipment', '15', 'folder', 14, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-15-1', 'r2-15', 'espark', 'System list', '15.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-15-2', 'r2-15', 'espark', 'Cause & effect matrix', '15.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-15-3', 'r2-15', 'espark', 'Power & backup', '15.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-15-4', 'r2-15', 'espark', 'Cabling', '15.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-15-5', 'r2-15', 'espark', 'Integration boundaries', '15.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16', NULL, 'espark', 'General', '16', 'folder', 15, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16-1', 'r2-16', 'espark', 'Single line diagram', '16.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16-2', 'r2-16', 'espark', 'Load List', '16.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16-3', 'r2-16', 'espark', 'Studies', '16.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16-4', 'r2-16', 'espark', 'Standards & specification register', '16.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16-5', 'r2-16', 'espark', 'Interface / responsibility matrix', '16.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16-6', 'r2-16', 'espark', 'Vendor document review', '16.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16-7', 'r2-16', 'espark', 'ITP & hold points', '16.7', 'folder', 6, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16-8', 'r2-16', 'espark', 'Energisation & commissioning sequence', '16.8', 'folder', 7, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-16-9', 'r2-16', 'espark', 'O&M, spares & training', '16.9', 'folder', 8, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-17', NULL, 'espark', 'E-House', '17', 'folder', 16, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-17-1', 'r2-17', 'espark', 'E-House General Arrangement Drawings (Plan, Elevation, Sections), includes but not limited to the MCC room, Battery room, SCADA/Control room layout, equipment placement, access doors, escape/maintenance clearances', '17.1', 'folder', 0, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-17-2', 'r2-17', 'espark', 'Painting & Corrosion Protection Specification (external cladding, internal surfaces)', '17.2', 'folder', 1, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-17-3', 'r2-17', 'espark', 'HVAC Design Basis, including the cooling load calculation per room (MCC heat dissipation, SCADA/UPS rack heat load), redundancy philosophy (N+1)', '17.3', 'folder', 2, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-17-4', 'r2-17', 'espark', 'HVAC Equipment Datasheets', '17.4', 'folder', 3, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-17-5', 'r2-17', 'espark', 'Normal & Emergency Lighting Layout with Lux Calculation', '17.5', 'folder', 4, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-17-6', 'r2-17', 'espark', 'Battery Room Ventilation Design', '17.6', 'folder', 5, 1788436800000, 1788436800000);
-INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES ('r2-17-7', 'r2-17', 'espark', 'Battery Room Ventilation Fan & Ductwork Datasheet and Floor/Wall Chemically-Resistant Coating Specification', '17.7', 'folder', 6, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-1', NULL, 'espark', 'Alternator', '1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-1-1', 'r2-1', 'espark', 'Rating & Site Derating', '1.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-1-2', 'r2-1', 'espark', 'Neutral Earthing & NER', '1.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-1-3', 'r2-1', 'espark', 'Excitation, AVR & Governor', '1.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-1-4', 'r2-1', 'espark', 'Fault Contribution', '1.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-1-5', 'r2-1', 'espark', 'Generator Protection', '1.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-1-6', 'r2-1', 'espark', 'Testing', '1.6', 'folder', 5, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-2', NULL, 'espark', 'MV Switchgear (MVSG)', '2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-2-1', 'r2-2', 'espark', 'As-Built Survey of Existing MV Room', '2.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-2-1-1', 'r2-2-1', 'espark', 'Dimensions & Access Openings', '2.1.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-2-1-2', 'r2-2-1', 'espark', 'Existing Floor Construction', '2.1.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-2-1-3', 'r2-2-1', 'espark', 'Existing Cable Trench & Duct Routing', '2.1.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-2-1-4', 'r2-2-1', 'espark', 'Visible Earthing Conductor Routing', '2.1.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-2-2', 'r2-2', 'espark', 'Existing Cable Trench & Duct Bank Survey', '2.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-2-2-1', 'r2-2-2', 'espark', 'Condition Survey', '2.2.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-2-2-2', 'r2-2-2', 'espark', 'Compatibility Assessment for New Cables', '2.2.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-2-3', 'r2-2', 'espark', 'Existing HVAC Assessment', '2.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-2-4', 'r2-2', 'espark', 'HVAC Modification Design', '2.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-2-4-1', 'r2-2-4', 'espark', 'Design & Shop Drawings', '2.4.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-2-4-2', 'r2-2-4', 'espark', 'Calculations', '2.4.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-2-4-3', 'r2-2-4', 'espark', 'BOQ', '2.4.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-2-4-4', 'r2-2-4', 'espark', 'New Equipment Datasheets', '2.4.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-2-5', 'r2-2', 'espark', 'Fire Detection & Fighting Assessment', '2.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-2-6', 'r2-2', 'espark', 'Fire Detection & Fighting Modification Design', '2.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-2-6-1', 'r2-2-6', 'espark', 'Design & Shop Drawings', '2.6.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-2-6-2', 'r2-2-6', 'espark', 'BOQ', '2.6.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-2-6-3', 'r2-2-6', 'espark', 'Datasheets', '2.6.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-2-7', 'r2-2', 'espark', 'Outdoor Lighting Design', '2.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-2-7-1', 'r2-2-7', 'espark', 'Lux Calculation', '2.7.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-2-7-2', 'r2-2-7', 'espark', 'Drawings', '2.7.2', 'folder', 1, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-3', NULL, 'espark', 'Aux Transformer', '3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-3-1', 'r2-3', 'espark', 'Rating & Vector Group', '3.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-3-2', 'r2-3', 'espark', 'Dry vs Oil-Filled', '3.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-3-3', 'r2-3', 'espark', 'Protection', '3.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-3-4', 'r2-3', 'espark', 'Inrush & Through-Fault', '3.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-3-5', 'r2-3', 'espark', 'Losses & Noise', '3.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-3-6', 'r2-3', 'espark', 'Testing', '3.6', 'folder', 5, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-4', NULL, 'espark', 'MV Cable & Termination', '4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-4-1', 'r2-4', 'espark', 'Datasheets & Samples', '4.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-4-1-1', 'r2-4-1', 'espark', 'Datasheets', '4.1.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-4-1-2', 'r2-4-1', 'espark', 'Samples', '4.1.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-4-2', 'r2-4', 'espark', 'Routing & Installation Layout', '4.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-4-3', 'r2-4', 'espark', 'Routing Details', '4.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-4-4', 'r2-4', 'espark', 'Cable Sizing', '4.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-4-5', 'r2-4', 'espark', 'FAT Test', '4.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-4-6', 'r2-4', 'espark', 'Testing ITP & Method of Statement', '4.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-4-6-1', 'r2-4-6', 'espark', 'ITP', '4.6.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-4-6-2', 'r2-4-6', 'espark', 'Method of Statement', '4.6.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-4-7', 'r2-4', 'espark', 'Testing Report', '4.7', 'folder', 6, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-5', NULL, 'espark', 'LV Cables', '5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-5-1', 'r2-5', 'espark', 'Datasheets & Samples', '5.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-5-1-1', 'r2-5-1', 'espark', 'Datasheets', '5.1.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-5-1-2', 'r2-5-1', 'espark', 'Samples', '5.1.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-5-2', 'r2-5', 'espark', 'Routing & Installation Layout', '5.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-5-3', 'r2-5', 'espark', 'Routing Details', '5.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-5-4', 'r2-5', 'espark', 'Cable Sizing', '5.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-5-5', 'r2-5', 'espark', 'FAT Test', '5.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-5-6', 'r2-5', 'espark', 'Testing ITP & Method of Statement', '5.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-5-6-1', 'r2-5-6', 'espark', 'ITP', '5.6.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-5-6-2', 'r2-5-6', 'espark', 'Method of Statement', '5.6.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-5-7', 'r2-5', 'espark', 'Testing Report', '5.7', 'folder', 6, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-6', NULL, 'espark', 'Earthing', '6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-6-1', 'r2-6', 'espark', 'Soil Resistivity Test Procedures', '6.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-1-1', 'r2-6-1', 'espark', 'ITP', '6.1.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-1-2', 'r2-6-1', 'espark', 'Method of Statement', '6.1.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-1-3', 'r2-6-1', 'espark', 'Test Report Template', '6.1.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-6-1-4', 'r2-6-1', 'espark', 'Proposed Test Locations & Depths', '6.1.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-6-2', 'r2-6', 'espark', 'Soil Resistivity Test Report', '6.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-2-1', 'r2-6-2', 'espark', 'Test Results', '6.2.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-2-2', 'r2-6-2', 'espark', 'Equipment Calibration Certificates', '6.2.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-3', 'r2-6', 'espark', 'Existing Earth System Assessment', '6.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-6-3-1', 'r2-6-3', 'espark', 'Assessment', '6.3.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-3-2', 'r2-6-3', 'espark', 'Test Report', '6.3.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-4', 'r2-6', 'espark', 'Earthing Design Calculation (IEEE 80)', '6.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-6-4-1', 'r2-6-4', 'espark', 'Touch, Step & Mesh Voltage', '6.4.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-4-2', 'r2-6-4', 'espark', 'Ground Potential Rise (GPR)', '6.4.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-4-3', 'r2-6-4', 'espark', 'Grid Conductor Sizing', '6.4.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-6-4-4', 'r2-6-4', 'espark', 'Fault Current Withstand', '6.4.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-6-4-5', 'r2-6-4', 'espark', 'Calculated Ground Resistance', '6.4.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-6-5', 'r2-6', 'espark', 'Primary Earthing Grid Layout & Details', '6.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-6-5-1', 'r2-6-5', 'espark', 'Grid Conductor Routing', '6.5.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-5-2', 'r2-6-5', 'espark', 'Buried Depth & Mesh Spacing', '6.5.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-5-3', 'r2-6-5', 'espark', 'Earth Pit & Test Pit Locations', '6.5.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-6-5-4', 'r2-6-5', 'espark', 'Typical Details', '6.5.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-6-6', 'r2-6', 'espark', 'Secondary Earthing Layout', '6.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-6-6-1', 'r2-6-6', 'espark', 'Equipment Risers & Sizes', '6.6.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-6-2', 'r2-6-6', 'espark', 'Earth Bar Locations', '6.6.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-6-3', 'r2-6-6', 'espark', 'Equipment Earthing Connection Details', '6.6.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-6-7', 'r2-6', 'espark', 'Earthing System Modification', '6.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-6-7-1', 'r2-6-7', 'espark', 'Design & Shop Drawings', '6.7.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-7-2', 'r2-6-7', 'espark', 'Calculations', '6.7.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-7-3', 'r2-6-7', 'espark', 'BOQ', '6.7.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-6-7-4', 'r2-6-7', 'espark', 'New Material Datasheets', '6.7.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-6-8', 'r2-6', 'espark', 'Earthing BOQ & Datasheets', '6.8', 'folder', 7, 1788436800000, 1788436800000),
+('r2-6-8-1', 'r2-6-8', 'espark', 'BOQ', '6.8.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-8-2', 'r2-6-8', 'espark', 'Cables', '6.8.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-8-3', 'r2-6-8', 'espark', 'Rods', '6.8.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-6-8-4', 'r2-6-8', 'espark', 'Pits', '6.8.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-6-8-5', 'r2-6-8', 'espark', 'Clamps', '6.8.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-6-9', 'r2-6', 'espark', 'Earthing Test Procedures', '6.9', 'folder', 8, 1788436800000, 1788436800000),
+('r2-6-9-1', 'r2-6-9', 'espark', 'ITP', '6.9.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-6-9-2', 'r2-6-9', 'espark', 'Method of Statement', '6.9.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-6-9-3', 'r2-6-9', 'espark', 'Test Report Template', '6.9.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-6-10', 'r2-6', 'espark', 'Earthing Test Reports', '6.10', 'folder', 9, 1788436800000, 1788436800000),
+('r2-6-11', 'r2-6', 'espark', 'Earthing Maintenance Plan', '6.11', 'folder', 10, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-7', NULL, 'espark', 'Main Distribution Boards', '7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-7-1', 'r2-7', 'espark', 'Assembly Standard', '7.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-7-2', 'r2-7', 'espark', 'Ratings', '7.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-7-3', 'r2-7', 'espark', 'Feeder Schedule', '7.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-7-4', 'r2-7', 'espark', 'Discrimination & Cascading', '7.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-7-5', 'r2-7', 'espark', 'Changeover / ATS', '7.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-7-6', 'r2-7', 'espark', 'Metering & Monitoring', '7.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-7-7', 'r2-7', 'espark', 'Arc Flash, Access & Ventilation', '7.7', 'folder', 6, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-8', NULL, 'espark', 'Control Room', '8', 'folder', 7, 1788436800000, 1788436800000),
+('r2-8-1', 'r2-8', 'espark', 'Fire Detection & Suppression', '8.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-8-2', 'r2-8', 'espark', 'Power Supplies', '8.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-8-3', 'r2-8', 'espark', 'Operator Interface', '8.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-8-4', 'r2-8', 'espark', 'Access Control & Security', '8.4', 'folder', 3, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-9', NULL, 'espark', 'MCC Panels', '9', 'folder', 8, 1788436800000, 1788436800000),
+('r2-9-1', 'r2-9', 'espark', 'General Arrangement Drawing', '9.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-9-1-1', 'r2-9-1', 'espark', 'Dimensions', '9.1.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-9-1-2', 'r2-9-1', 'espark', 'Floor Layout', '9.1.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-9-1-3', 'r2-9-1', 'espark', 'Cable Entries', '9.1.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-9-1-4', 'r2-9-1', 'espark', 'Busbar Details', '9.1.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-9-1-5', 'r2-9-1', 'espark', 'Equipment Segregation', '9.1.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-9-2', 'r2-9', 'espark', 'Single Line Diagram', '9.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-9-2-1', 'r2-9-2', 'espark', 'Incoming & Outgoing Feeders', '9.2.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-9-2-2', 'r2-9-2', 'espark', 'Ratings', '9.2.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-9-3', 'r2-9', 'espark', 'Schematics & Wiring Diagrams', '9.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-9-3-1', 'r2-9-3', 'espark', 'Starters', '9.3.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-9-3-2', 'r2-9-3', 'espark', 'Control Circuits', '9.3.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-9-3-3', 'r2-9-3', 'espark', 'Interlocks', '9.3.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-9-3-4', 'r2-9-3', 'espark', 'Alarms', '9.3.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-9-4', 'r2-9', 'espark', 'Main Component Datasheets', '9.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-9-4-1', 'r2-9-4', 'espark', 'Starters', '9.4.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-9-4-2', 'r2-9-4', 'espark', 'Circuit Breakers', '9.4.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-9-4-3', 'r2-9-4', 'espark', 'Contactors', '9.4.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-9-4-4', 'r2-9-4', 'espark', 'VFDs', '9.4.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-9-4-5', 'r2-9-4', 'espark', 'Rating & Harmonic Tables', '9.4.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-9-5', 'r2-9', 'espark', 'Protection Settings & Coordination Study', '9.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-9-5-1', 'r2-9-5', 'espark', 'Relay Settings', '9.5.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-9-5-2', 'r2-9-5', 'espark', 'Coordination Curves', '9.5.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-9-6', 'r2-9', 'espark', 'Bill of Materials', '9.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-9-6-1', 'r2-9-6', 'espark', 'Breakers', '9.6.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-9-6-2', 'r2-9-6', 'espark', 'Contactors', '9.6.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-9-6-3', 'r2-9-6', 'espark', 'Relays', '9.6.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-9-6-4', 'r2-9-6', 'espark', 'Pushbuttons', '9.6.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-9-6-5', 'r2-9-6', 'espark', 'Indicating Lamps', '9.6.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-9-6-6', 'r2-9-6', 'espark', 'Terminals', '9.6.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-9-7', 'r2-9', 'espark', 'Cable Termination Schedule & Details', '9.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-9-7-1', 'r2-9-7', 'espark', 'Termination Schedule', '9.7.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-9-7-2', 'r2-9-7', 'espark', 'Termination Details', '9.7.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-9-8', 'r2-9', 'espark', 'Certified Type Test Reports', '9.8', 'folder', 7, 1788436800000, 1788436800000),
+('r2-9-9', 'r2-9', 'espark', 'Factory Test Procedure', '9.9', 'folder', 8, 1788436800000, 1788436800000),
+('r2-9-9-1', 'r2-9-9', 'espark', 'Visual & Mechanical Tests', '9.9.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-9-9-2', 'r2-9-9', 'espark', 'Dielectric Tests', '9.9.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-9-9-3', 'r2-9-9', 'espark', 'Functional Tests', '9.9.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-9-9-4', 'r2-9-9', 'espark', 'Operation Tests', '9.9.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-9-10', 'r2-9', 'espark', 'Factory Test Reports', '9.10', 'folder', 9, 1788436800000, 1788436800000),
+('r2-9-11', 'r2-9', 'espark', 'Operation & Maintenance Manual', '9.11', 'folder', 10, 1788436800000, 1788436800000),
+('r2-9-12', 'r2-9', 'espark', 'Spare Parts List (2-Year)', '9.12', 'folder', 11, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-10', NULL, 'espark', 'Control Panels & Motors', '10', 'folder', 9, 1788436800000, 1788436800000),
+('r2-10-1', 'r2-10', 'espark', 'Motor Data', '10.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-10-2', 'r2-10', 'espark', 'Hazardous Area', '10.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-10-3', 'r2-10', 'espark', 'Accessories', '10.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-10-4', 'r2-10', 'espark', 'Control Philosophy', '10.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-10-5', 'r2-10', 'espark', 'Motor Starting Study', '10.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-10-6', 'r2-10', 'espark', 'Commissioning', '10.6', 'folder', 5, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-11', NULL, 'espark', 'Charger & Batteries', '11', 'folder', 10, 1788436800000, 1788436800000),
+('r2-11-1', 'r2-11', 'espark', 'System Datasheets', '11.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-1-1', 'r2-11-1', 'espark', 'Batteries', '11.1.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-1-2', 'r2-11-1', 'espark', 'Chargers', '11.1.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-1-3', 'r2-11-1', 'espark', 'Inverters', '11.1.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-11-1-4', 'r2-11-1', 'espark', 'DC/AC Switchboards', '11.1.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-11-1-5', 'r2-11-1', 'espark', 'CVT', '11.1.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-11-2', 'r2-11', 'espark', 'DC/UPS Single Line Diagram', '11.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-3', 'r2-11', 'espark', 'Installation & Layout Drawings', '11.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-11-3-1', 'r2-11-3', 'espark', 'Outline Dimensions (Front, Side, Top, Bottom Views)', '11.3.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-3-2', 'r2-11-3', 'espark', 'Cable Entry & Interface Connections', '11.3.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-3-3', 'r2-11-3', 'espark', 'Shipping Sections & Assembly Drawings', '11.3.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-11-3-4', 'r2-11-3', 'espark', 'Weight & Centre of Gravity', '11.3.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-11-3-5', 'r2-11-3', 'espark', 'Mounting Details', '11.3.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-11-3-6', 'r2-11-3', 'espark', 'Anchorage Requirements', '11.3.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-11-4', 'r2-11', 'espark', 'Battery Layout Drawings', '11.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-11-4-1', 'r2-11-4', 'espark', 'Intercell Connections', '11.4.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-4-2', 'r2-11-4', 'espark', 'Terminal Plate Layout & Cable Connections', '11.4.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-5', 'r2-11', 'espark', 'Schematic & Connection Drawings', '11.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-11-5-1', 'r2-11-5', 'espark', 'External Cable Terminal Designations', '11.5.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-5-2', 'r2-11-5', 'espark', 'Design Interface Information', '11.5.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-6', 'r2-11', 'espark', 'Battery & Charger Sizing (IEEE 485)', '11.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-11-6-1', 'r2-11-6', 'espark', 'Battery Sizing', '11.6.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-6-2', 'r2-11-6', 'espark', 'Charger Sizing', '11.6.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-6-3', 'r2-11-6', 'espark', 'Discharge Curves', '11.6.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-11-6-4', 'r2-11-6', 'espark', 'Temperature Correction Factors', '11.6.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-11-7', 'r2-11', 'espark', 'DC Short-Circuit Calculations (IEEE 946)', '11.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-11-8', 'r2-11', 'espark', 'UPS/Charger Short-Circuit Calculations', '11.8', 'folder', 7, 1788436800000, 1788436800000),
+('r2-11-9', 'r2-11', 'espark', 'Breaker Trip Curves & Coordination Study', '11.9', 'folder', 8, 1788436800000, 1788436800000),
+('r2-11-9-1', 'r2-11-9', 'espark', 'DC Switchboards', '11.9.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-9-2', 'r2-11-9', 'espark', 'AC/DC Panel Boards', '11.9.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-9-3', 'r2-11-9', 'espark', 'Charger, Inverter & CVT Breakers', '11.9.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-11-10', 'r2-11', 'espark', 'DC Cable Sizing Calculations', '11.10', 'folder', 9, 1788436800000, 1788436800000),
+('r2-11-10-1', 'r2-11-10', 'espark', 'Ampacity', '11.10.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-10-2', 'r2-11-10', 'espark', 'Voltage Drop', '11.10.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-10-3', 'r2-11-10', 'espark', 'Short-Time Withstand Current', '11.10.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-11-11', 'r2-11', 'espark', 'DC & UPS Test Procedures', '11.11', 'folder', 10, 1788436800000, 1788436800000),
+('r2-11-11-1', 'r2-11-11', 'espark', 'DC System', '11.11.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-11-2', 'r2-11-11', 'espark', 'UPS System', '11.11.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-12', 'r2-11', 'espark', 'Certified Production Test Reports', '11.12', 'folder', 11, 1788436800000, 1788436800000),
+('r2-11-13', 'r2-11', 'espark', 'Heat Rejection Loads', '11.13', 'folder', 12, 1788436800000, 1788436800000),
+('r2-11-14', 'r2-11', 'espark', 'Battery Hydrogen & Ventilation Calculation', '11.14', 'folder', 13, 1788436800000, 1788436800000),
+('r2-11-14-1', 'r2-11-14', 'espark', 'Hydrogen Evaluation (Worst Case)', '11.14.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-14-2', 'r2-11-14', 'espark', 'Battery Room Minimum Ventilation', '11.14.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-15', 'r2-11', 'espark', 'Nameplate Drawing & List', '11.15', 'folder', 14, 1788436800000, 1788436800000),
+('r2-11-15-1', 'r2-11-15', 'espark', 'Nameplate Drawing', '11.15.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-15-2', 'r2-11-15', 'espark', 'Equipment Nameplate List', '11.15.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-16', 'r2-11', 'espark', 'Instruction Manuals', '11.16', 'folder', 15, 1788436800000, 1788436800000),
+('r2-11-16-1', 'r2-11-16', 'espark', 'Catalogs', '11.16.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-16-2', 'r2-11-16', 'espark', 'Theory of Operation', '11.16.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-16-3', 'r2-11-16', 'espark', 'Erection & Installation', '11.16.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-11-16-4', 'r2-11-16', 'espark', 'Troubleshooting Guide', '11.16.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-11-16-5', 'r2-11-16', 'espark', 'Factory Settings (Alarm & Trip Set Points)', '11.16.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-11-16-6', 'r2-11-16', 'espark', 'Maintenance Instructions', '11.16.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-11-17', 'r2-11', 'espark', 'Control Logic & Operation Philosophy', '11.17', 'folder', 16, 1788436800000, 1788436800000),
+('r2-11-17-1', 'r2-11-17', 'espark', 'Control Logic', '11.17.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-11-17-2', 'r2-11-17', 'espark', 'System Operation Philosophy', '11.17.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-11-17-3', 'r2-11-17', 'espark', 'SCADA Interface', '11.17.3', 'folder', 2, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-12', NULL, 'espark', 'SCADA System', '12', 'folder', 11, 1788436800000, 1788436800000),
+('r2-12-1', 'r2-12', 'espark', 'System Architecture', '12.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-12-1-1', 'r2-12-1', 'espark', 'Control System Architecture', '12.1.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-12-1-2', 'r2-12-1', 'espark', 'Communication Architecture', '12.1.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-12-1-3', 'r2-12-1', 'espark', 'Redundancy Philosophy', '12.1.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-12-1-4', 'r2-12-1', 'espark', 'Time Synchronization Philosophy (NTP/GPS)', '12.1.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-12-2', 'r2-12', 'espark', 'Software Design', '12.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-12-2-1', 'r2-12-2', 'espark', 'Functional Design Specification (FDS)', '12.2.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-12-2-2', 'r2-12-2', 'espark', 'Software Design Specification (SDS)', '12.2.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-12-3', 'r2-12', 'espark', 'Philosophies', '12.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-12-3-1', 'r2-12-3', 'espark', 'Control', '12.3.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-12-3-2', 'r2-12-3', 'espark', 'Operator', '12.3.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-12-3-3', 'r2-12-3', 'espark', 'Alarm', '12.3.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-12-3-4', 'r2-12-3', 'espark', 'Historian', '12.3.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-12-3-5', 'r2-12-3', 'espark', 'Event Logging', '12.3.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-12-3-6', 'r2-12-3', 'espark', 'Reporting', '12.3.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-12-3-7', 'r2-12-3', 'espark', 'User Management', '12.3.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-12-3-8', 'r2-12-3', 'espark', 'Cybersecurity', '12.3.8', 'folder', 7, 1788436800000, 1788436800000),
+('r2-12-4', 'r2-12', 'espark', 'Hardware Design', '12.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-12-4-1', 'r2-12-4', 'espark', 'Hardware Datasheets', '12.4.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-12-4-2', 'r2-12-4', 'espark', 'Server Datasheets', '12.4.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-12-4-3', 'r2-12-4', 'espark', 'Workstation Datasheets', '12.4.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-12-4-4', 'r2-12-4', 'espark', 'Engineering Station Datasheet', '12.4.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-12-4-5', 'r2-12-4', 'espark', 'Network Switch Datasheets', '12.4.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-12-4-6', 'r2-12-4', 'espark', 'Firewall Datasheets', '12.4.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-12-4-7', 'r2-12-4', 'espark', 'Industrial PC Datasheets', '12.4.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-12-5', 'r2-12', 'espark', 'SCADA Graphics', '12.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-12-5-1', 'r2-12-5', 'espark', 'Screen Navigation', '12.5.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-12-5-2', 'r2-12-5', 'espark', 'Plant & Process Mimics', '12.5.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-12-5-3', 'r2-12-5', 'espark', 'System Screens', '12.5.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-12-5-4', 'r2-12-5', 'espark', 'Electrical SLD Screens', '12.5.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-12-5-5', 'r2-12-5', 'espark', 'Alarm Screens', '12.5.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-12-5-6', 'r2-12-5', 'espark', 'Trend Screens', '12.5.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-12-5-7', 'r2-12-5', 'espark', 'Historical Trend Screens', '12.5.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-12-5-8', 'r2-12-5', 'espark', 'Maintenance Screens', '12.5.8', 'folder', 7, 1788436800000, 1788436800000),
+('r2-12-5-9', 'r2-12-5', 'espark', 'Diagnostic Screens', '12.5.9', 'folder', 8, 1788436800000, 1788436800000),
+('r2-12-6', 'r2-12', 'espark', 'Signal Interface List', '12.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-12-6-1', 'r2-12-6', 'espark', 'IO List & Signal Exchange Matrix', '12.6.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-12-6-2', 'r2-12-6', 'espark', 'Modbus Register List & Mapping', '12.6.2', 'folder', 1, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-13', NULL, 'espark', 'Lightning', '13', 'folder', 12, 1788436800000, 1788436800000),
+('r2-13-1', 'r2-13', 'espark', 'Risk Assessment Report (IEC 62305)', '13.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-13-2', 'r2-13', 'espark', 'Design Report', '13.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-13-2-1', 'r2-13-2', 'espark', 'Design Basis', '13.2.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-13-2-2', 'r2-13-2', 'espark', 'Design Philosophy', '13.2.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-13-3', 'r2-13', 'espark', 'Layout, Sections & Details', '13.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-13-3-1', 'r2-13-3', 'espark', 'Layout', '13.3.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-13-3-2', 'r2-13-3', 'espark', 'Sections', '13.3.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-13-3-3', 'r2-13-3', 'espark', 'Details', '13.3.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-13-4', 'r2-13', 'espark', 'Component BOQ & Datasheets', '13.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-13-4-1', 'r2-13-4', 'espark', 'BOQ', '13.4.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-13-4-2', 'r2-13-4', 'espark', 'Air Rods', '13.4.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-13-4-3', 'r2-13-4', 'espark', 'Down Conductors', '13.4.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-13-4-4', 'r2-13-4', 'espark', 'Test Joints', '13.4.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-13-4-5', 'r2-13-4', 'espark', 'Bonding Clamps', '13.4.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-13-4-6', 'r2-13-4', 'espark', 'Surge Counters', '13.4.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-13-5', 'r2-13', 'espark', 'SPD Coordination Study', '13.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-13-6', 'r2-13', 'espark', 'SPD Datasheets & Location Schedule', '13.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-13-6-1', 'r2-13-6', 'espark', 'SPD Datasheets', '13.6.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-13-6-2', 'r2-13-6', 'espark', 'Location Schedule', '13.6.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-13-7', 'r2-13', 'espark', 'Maintenance Plan', '13.7', 'folder', 6, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-14', NULL, 'espark', 'LV Equipment', '14', 'folder', 13, 1788436800000, 1788436800000),
+('r2-14-1', 'r2-14', 'espark', 'Sub-Boards & Isolators', '14.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-14-2', 'r2-14', 'espark', 'UPS', '14.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-14-3', 'r2-14', 'espark', 'Metering & Energy Monitoring', '14.3', 'folder', 2, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-15', NULL, 'espark', 'ELV Equipment', '15', 'folder', 14, 1788436800000, 1788436800000),
+('r2-15-1', 'r2-15', 'espark', 'System List', '15.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-15-2', 'r2-15', 'espark', 'Cause & Effect Matrix', '15.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-15-3', 'r2-15', 'espark', 'Power & Backup', '15.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-15-4', 'r2-15', 'espark', 'Cabling', '15.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-15-5', 'r2-15', 'espark', 'Integration Boundaries', '15.5', 'folder', 4, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-16', NULL, 'espark', 'General', '16', 'folder', 15, 1788436800000, 1788436800000),
+('r2-16-1', 'r2-16', 'espark', 'Single Line Diagram', '16.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-16-2', 'r2-16', 'espark', 'Load List', '16.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-16-3', 'r2-16', 'espark', 'Studies', '16.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-16-4', 'r2-16', 'espark', 'Standards & Specification Register', '16.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-16-5', 'r2-16', 'espark', 'Interface / Responsibility Matrix', '16.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-16-6', 'r2-16', 'espark', 'Vendor Document Review', '16.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-16-7', 'r2-16', 'espark', 'ITP & Hold Points', '16.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-16-8', 'r2-16', 'espark', 'Energisation & Commissioning Sequence', '16.8', 'folder', 7, 1788436800000, 1788436800000),
+('r2-16-9', 'r2-16', 'espark', 'O&M, Spares & Training', '16.9', 'folder', 8, 1788436800000, 1788436800000);
+INSERT OR IGNORE INTO folders (id, parent_id, drive, name, code, icon, position, created_at, modified_at) VALUES
+('r2-17', NULL, 'espark', 'E-House', '17', 'folder', 16, 1788436800000, 1788436800000),
+('r2-17-1', 'r2-17', 'espark', 'General Arrangement Drawings', '17.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-17-1-1', 'r2-17-1', 'espark', 'Plans', '17.1.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-17-1-2', 'r2-17-1', 'espark', 'Elevations', '17.1.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-17-1-3', 'r2-17-1', 'espark', 'Sections', '17.1.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-17-1-4', 'r2-17-1', 'espark', 'MCC Room', '17.1.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-17-1-5', 'r2-17-1', 'espark', 'Battery Room', '17.1.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-17-1-6', 'r2-17-1', 'espark', 'SCADA / Control Room', '17.1.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-17-1-7', 'r2-17-1', 'espark', 'Equipment Placement', '17.1.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-17-1-8', 'r2-17-1', 'espark', 'Access Doors', '17.1.8', 'folder', 7, 1788436800000, 1788436800000),
+('r2-17-1-9', 'r2-17-1', 'espark', 'Escape & Maintenance Clearances', '17.1.9', 'folder', 8, 1788436800000, 1788436800000),
+('r2-17-2', 'r2-17', 'espark', 'Painting & Corrosion Protection Spec', '17.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-17-2-1', 'r2-17-2', 'espark', 'External Cladding', '17.2.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-17-2-2', 'r2-17-2', 'espark', 'Internal Surfaces', '17.2.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-17-3', 'r2-17', 'espark', 'HVAC Design Basis', '17.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-17-3-1', 'r2-17-3', 'espark', 'Cooling Load Calculation per Room', '17.3.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-17-3-2', 'r2-17-3', 'espark', 'MCC Heat Dissipation', '17.3.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-17-3-3', 'r2-17-3', 'espark', 'SCADA/UPS Rack Heat Load', '17.3.3', 'folder', 2, 1788436800000, 1788436800000),
+('r2-17-3-4', 'r2-17-3', 'espark', 'Redundancy Philosophy (N+1)', '17.3.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-17-4', 'r2-17', 'espark', 'HVAC Equipment Datasheets', '17.4', 'folder', 3, 1788436800000, 1788436800000),
+('r2-17-5', 'r2-17', 'espark', 'Normal & Emergency Lighting', '17.5', 'folder', 4, 1788436800000, 1788436800000),
+('r2-17-5-1', 'r2-17-5', 'espark', 'Lighting Layout', '17.5.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-17-5-2', 'r2-17-5', 'espark', 'Lux Calculation', '17.5.2', 'folder', 1, 1788436800000, 1788436800000),
+('r2-17-6', 'r2-17', 'espark', 'Battery Room Ventilation Design', '17.6', 'folder', 5, 1788436800000, 1788436800000),
+('r2-17-7', 'r2-17', 'espark', 'Battery Room Ventilation Datasheets & Coating Spec', '17.7', 'folder', 6, 1788436800000, 1788436800000),
+('r2-17-7-1', 'r2-17-7', 'espark', 'Fan & Ductwork Datasheets', '17.7.1', 'folder', 0, 1788436800000, 1788436800000),
+('r2-17-7-2', 'r2-17-7', 'espark', 'Floor/Wall Chemically-Resistant Coating Spec', '17.7.2', 'folder', 1, 1788436800000, 1788436800000);
