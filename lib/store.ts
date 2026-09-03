@@ -95,7 +95,18 @@ export async function getTree(drive: DriveKey): Promise<{
     d1Query<FolderRow>(
       "SELECT * FROM folders WHERE drive = ? ORDER BY position ASC, name ASC",
       [drive]
-    ),
+    ).catch(async (e: unknown) => {
+      // A database that predates migration 003 has no drive column. Every
+      // row in it belongs to the main drive, so show the main drive whole
+      // and the others empty, and let the files query report the migration.
+      // A blank drive with a red error looks like data loss; it is not.
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/no such column.*drive/i.test(msg)) throw e;
+      if (drive !== "main") return [] as FolderRow[];
+      return d1Query<FolderRow>(
+        "SELECT * FROM folders ORDER BY position ASC, name ASC"
+      );
+    }),
     // Joining on current_version_id reads exactly one version row per file —
     // never the whole history.
     d1Query<FileWithVersion>(
