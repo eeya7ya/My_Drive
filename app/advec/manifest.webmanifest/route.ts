@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
  * convention only covers the app root, hence a plain route here.
  */
 export function GET() {
-  const b = driveFor("espark");
+  const b = driveFor("advec");
   const manifest = {
     name: b.title,
     short_name: b.shortName,

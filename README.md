@@ -116,13 +116,13 @@ One deployment and one database hold two drives that never mix:
 | Drive | Address | Rows |
 | --- | --- | --- |
 | Yahya Khaled — Power Systems Drive | `/` | `drive = 'main'` |
-| eSpark | `/advec` | `drive = 'espark'` |
+| eSpark | `/advec` | `drive = 'advec'` |
 
 Every folder and file row carries a `drive` column and every query in
 `lib/store.ts` is scoped by it, so the main drive cannot see an eSpark row and
 the other way round. Each drive has its own storage counter in `settings`
 (the main drive keeps the bare `used_bytes` / `quota_bytes` keys; eSpark's are
-`espark/used_bytes` / `espark/quota_bytes`) and its own prefix in the R2
+`advec/used_bytes` / `advec/quota_bytes`) and its own prefix in the R2
 bucket. The client sends its drive with every request — `/api/drive?drive=…`,
 and a `drive` field when creating a folder or reserving an upload — and the
 server rejects an unknown key rather than falling through to the wrong tree.
@@ -138,7 +138,10 @@ A database from before this needs `migrations/003_drives.console.sql` run in
 the D1 console **before** the new code is deployed. It adds the `drive`
 column (every existing row becomes the main drive), two indexes, and the
 eSpark counters. Nothing is deleted or moved. Until it is run the app shows
-the folders with a banner naming the migration.
+the folders with a banner naming the migration. A database that ran 003
+while the key was still `espark` also needs
+`migrations/004_rename_espark_to_advec.console.sql`, which moves those rows
+and counters to the `advec` key.
 
 On the eSpark drive:
 
@@ -171,7 +174,7 @@ Part and Sub numbers are the register's, so `9.5` in the workbook is folder
 9.5 in the drive; the register's full wording is kept beside each entry in
 `scripts/generate-espark-seed.mjs`.
 
-Every row it inserts is `drive = 'espark'`, so it goes into the same database
+Every row it inserts is `drive = 'advec'`, so it goes into the same database
 as the main drive and still never appears there. It first removes rows left
 by earlier seed files (ids `esp-*` and `r2-*`) from whichever drive they sit
 in — migration 003 marks pre-existing rows as the main drive, seeded ones

@@ -11,7 +11,7 @@
  * mark is shown.
  */
 
-export type DriveKey = "main" | "espark";
+export type DriveKey = "main" | "advec";
 
 export interface Brand {
   /** The value stored in folders.drive and files.drive. */
@@ -49,8 +49,8 @@ export const DRIVES: Record<DriveKey, Brand> = {
     numbered: false,
     poweredBy: null,
   },
-  espark: {
-    key: "espark",
+  advec: {
+    key: "advec",
     basePath: "/advec",
     name: "eSpark",
     tagline: "Drive",

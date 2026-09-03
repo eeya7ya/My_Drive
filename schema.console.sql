@@ -44,5 +44,5 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 INSERT OR IGNORE INTO settings (key, value) VALUES ('quota_bytes', '214748364800');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('used_bytes', '0');
-INSERT OR IGNORE INTO settings (key, value) VALUES ('espark/quota_bytes', '214748364800');
-INSERT OR IGNORE INTO settings (key, value) VALUES ('espark/used_bytes', '0');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('advec/quota_bytes', '214748364800');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('advec/used_bytes', '0');

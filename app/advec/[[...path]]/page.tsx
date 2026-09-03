@@ -4,7 +4,7 @@ import { driveFor } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
 
-const brand = driveFor("espark");
+const brand = driveFor("advec");
 
 /** The eSpark drive's own tab title, icon and manifest. */
 export const metadata: Metadata = {
