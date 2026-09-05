@@ -16,6 +16,7 @@ import { kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
 import { hrefFor, resolveSegments, segmentsOf, slugify, stripBasePath } from "@/lib/paths";
 import { Brand, DEFAULT_BRAND } from "@/lib/brand";
+import NoteEditor, { noteContentType } from "./NoteEditor";
 import {
   DrivePayload,
   DriveFile,
@@ -137,6 +138,8 @@ export default function Drive({
 
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<string[]>([]);
+  /** The folder a note is being written into, or null when the editor is shut. */
+  const [noteIn, setNoteIn] = useState<string[] | null>(null);
   // enter() builds hrefs from the tree; a ref keeps it from re-creating on
   // every data change and re-triggering effects that depend on it.
   const treeRef = useRef<TreeNode[]>([]);
@@ -412,9 +415,64 @@ export default function Drive({
   }, []);
 
   /**
-   * Upload straight to R2 with a presigned PUT: file bytes never pass through
-   * the Vercel function, which caps request bodies around 4.5 MB.
+   * Reserve a revision, PUT the bytes straight to R2, then confirm the row.
+   *
+   * Shared by the file picker and the note editor, because a note is not a
+   * different kind of thing once it has been written — it takes the same three
+   * steps, so it gets revisions and previews for free and there is only one
+   * path that can be wrong. The bytes never pass through the Vercel function,
+   * which caps request bodies around 4.5 MB.
    */
+  const storeBlob = useCallback(
+    async (
+      folderId: string | null,
+      name: string,
+      body: Blob,
+      contentType: string,
+      onRevision?: (version: number) => void,
+      /**
+       * Bounds the whole round trip. Passed for a note, whose bytes are small
+       * and whose author is sitting in front of a dialog waiting to be let go;
+       * left off for uploads, where a large file legitimately takes as long as
+       * it takes and a deadline would abort a working transfer.
+       */
+      signal?: AbortSignal
+    ) => {
+      const { fileId, versionId, version, uploadUrl } = await call("/api/files", {
+        method: "POST",
+        signal,
+        body: JSON.stringify({
+          drive: driveKey,
+          folderId,
+          name,
+          size: body.size,
+          contentType,
+        }),
+      });
+      if (version > 1) onRevision?.(version);
+
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        body,
+        signal,
+        headers: { "Content-Type": contentType },
+      });
+      if (!put.ok) {
+        throw new Error(
+          `R2 rejected the upload (${put.status}). Check the bucket's CORS rules.`
+        );
+      }
+
+      await call(`/api/files/${fileId}/confirm`, {
+        method: "POST",
+        signal,
+        body: JSON.stringify({ versionId }),
+      });
+      return { fileId, version } as { fileId: string; version: number };
+    },
+    [call, driveKey]
+  );
+
   const onUpload = useCallback(
     async (ev: React.ChangeEvent<HTMLInputElement>) => {
       const picked = Array.from(ev.target.files || []);
@@ -434,40 +492,13 @@ export default function Drive({
             : `Uploading ${file.name}`
         );
         try {
-          const { fileId, versionId, version, uploadUrl } = await call(
-            "/api/files",
-            {
-              method: "POST",
-              body: JSON.stringify({
-                drive: driveKey,
-                folderId,
-                name: file.name,
-                size: file.size,
-                contentType: file.type || "application/octet-stream",
-              }),
-            }
+          await storeBlob(
+            folderId,
+            file.name,
+            file,
+            file.type || "application/octet-stream",
+            (version) => setBusy(`Uploading ${file.name} — revision ${version}`)
           );
-          if (version > 1) {
-            setBusy(`Uploading ${file.name} — revision ${version}`);
-          }
-
-          const put = await fetch(uploadUrl, {
-            method: "PUT",
-            body: file,
-            headers: {
-              "Content-Type": file.type || "application/octet-stream",
-            },
-          });
-          if (!put.ok) {
-            throw new Error(
-              `R2 rejected the upload (${put.status}). Check the bucket's CORS rules.`
-            );
-          }
-
-          await call(`/api/files/${fileId}/confirm`, {
-            method: "POST",
-            body: JSON.stringify({ versionId }),
-          });
         } catch (e) {
           failed = true;
           setError(
@@ -480,8 +511,57 @@ export default function Drive({
       setBusy(null);
       await refresh(failed);
     },
-    [call, refresh, driveKey]
+    [storeBlob, refresh]
   );
+
+  /**
+   * Store what the editor produced. A note goes in as a file, so saving over a
+   * name that already exists in the folder makes a revision of it rather than a
+   * second copy — the same rule an upload follows, and the reason the editor
+   * does not have to ask whether it is creating or replacing.
+   */
+  const saveNote = useCallback(
+    async (name: string, text: string) => {
+      const target = noteIn ?? [];
+      const folderId = target.length ? target[target.length - 1] : null;
+      const type = noteContentType(name);
+
+      setError(null);
+      setBusy(`Saving ${name}`);
+
+      // A request that neither succeeds nor fails would leave the editor stuck
+      // on "Saving" with no way out, holding the only copy of what was typed.
+      // A note is a few kilobytes, so a minute is already generous.
+      const deadline = new AbortController();
+      const timer = setTimeout(() => deadline.abort(), 60000);
+      try {
+        await storeBlob(
+          folderId,
+          name,
+          new Blob([text], { type }),
+          type,
+          (version) => setBusy(`Saving ${name} — revision ${version}`),
+          deadline.signal
+        );
+      } catch (e) {
+        throw deadline.signal.aborted
+          ? new Error("Saving took too long. Your note is still here — try again.")
+          : e;
+      } finally {
+        clearTimeout(timer);
+        setBusy(null);
+      }
+
+      setNoteIn(null);
+      await refresh();
+    },
+    [noteIn, storeBlob, refresh]
+  );
+
+  const newNote = useCallback((p: string[]) => {
+    setNavOpen(false);
+    setNoteIn(p);
+  }, []);
 
   const renameFileAction = useCallback(
     (file: DriveFile) => {
@@ -715,11 +795,10 @@ export default function Drive({
         { label: "Open", icon: "open", action: () => enter(p) },
         { label: "Copy link", icon: "link", action: () => copyLink(p) },
       ];
-      items.push({
-        label: "Upload file",
-        icon: "upload",
-        action: () => triggerUpload(p),
-      });
+      items.push(
+        { label: "Upload file", icon: "upload", action: () => triggerUpload(p) },
+        { label: "New note", icon: "file", action: () => newNote(p) }
+      );
       if (isAdmin) {
         items.push(
           { label: "New folder", icon: "plus", action: () => addFolder(p) },
@@ -747,7 +826,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [isAdmin, numbered, listAt, enter, copyLink, addFolder, triggerUpload, renameNode, moveNode, deleteNode, openMenu]
+    [isAdmin, numbered, listAt, enter, copyLink, addFolder, triggerUpload, newNote, renameNode, moveNode, deleteNode, openMenu]
   );
 
   const fileMenu = useCallback(
@@ -789,26 +868,28 @@ export default function Drive({
     (ev: React.MouseEvent) => {
       const items: MenuItem[] = [
         { label: "Upload file", icon: "upload", action: () => triggerUpload(path) },
+        { label: "New note", icon: "file", action: () => newNote(path) },
       ];
       if (isAdmin) {
         items.push({ label: "New folder", icon: "plus", action: () => addFolder(path) });
       }
       openMenu(ev, items);
     },
-    [isAdmin, openMenu, addFolder, triggerUpload, path]
+    [isAdmin, openMenu, addFolder, triggerUpload, newNote, path]
   );
 
   const rootMenu = useCallback(
     (ev: React.MouseEvent) => {
       const items: MenuItem[] = [
         { label: "Upload file", icon: "upload", action: () => triggerUpload([]) },
+        { label: "New note", icon: "file", action: () => newNote([]) },
       ];
       if (isAdmin) {
         items.push({ label: "New folder", icon: "plus", action: () => addFolder([]) });
       }
       openMenu(ev, items);
     },
-    [isAdmin, openMenu, addFolder, triggerUpload]
+    [isAdmin, openMenu, addFolder, triggerUpload, newNote]
   );
 
   // Touch equivalents of right-click. Declared here so each has its menu
@@ -1740,6 +1821,12 @@ export default function Drive({
                     Upload
                   </button>
                 )}
+                {showUpload && (
+                  <button className="btn btn-secondary" onClick={() => newNote(path)}>
+                    <Icon name="file" size={14} />
+                    Note
+                  </button>
+                )}
                 {showNewFolder && (
                   <button className="btn btn-primary" onClick={() => addFolder(path)}>
                     <Icon name="plus" size={14} />
@@ -2224,8 +2311,8 @@ export default function Drive({
                   {searching
                     ? "No folder names match your search. Try a shorter term."
                     : isAdmin
-                      ? "Use the buttons above to add a folder or upload files."
-                      : "Nothing here yet — use Upload file to add something."}
+                      ? "Use the buttons above to add a folder, upload files, or write a note."
+                      : "Nothing here yet — upload a file, or write a note."}
                 </div>
                 {showActions && (
                   <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
@@ -2236,6 +2323,15 @@ export default function Drive({
                       >
                         <Icon name="upload" size={14} />
                         Upload file
+                      </button>
+                    )}
+                    {showUpload && (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => newNote(path)}
+                      >
+                        <Icon name="file" size={14} />
+                        New note
                       </button>
                     )}
                     {showNewFolder && (
@@ -2398,6 +2494,27 @@ export default function Drive({
             )}
           </div>
         </div>
+      )}
+
+      {noteIn && (
+        <NoteEditor
+          // Named for the folder the note is going into, which is not always the
+          // one on screen — the tree's right-click menu can aim it elsewhere.
+          folderName={
+            noteIn.length
+              ? (() => {
+                  const node = nodeAt(noteIn);
+                  return node ? labelOf(node) : "this folder";
+                })()
+              : "My Drive"
+          }
+          existingNames={(noteIn.length
+            ? (findNode(data.tree, noteIn[noteIn.length - 1])?.files ?? [])
+            : data.rootFiles
+          ).map((f) => f.name)}
+          onCancel={() => setNoteIn(null)}
+          onSave={saveNote}
+        />
       )}
 
       {viewing && (

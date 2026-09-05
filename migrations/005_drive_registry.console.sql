@@ -8,15 +8,9 @@ CREATE TABLE IF NOT EXISTS drives (
   description   TEXT NOT NULL DEFAULT '',
   numbered      INTEGER NOT NULL DEFAULT 0,
   powered_by    TEXT,
-  -- 'public' opens to anyone with the link; 'private' asks for the passcode.
   visibility    TEXT NOT NULL DEFAULT 'public',
-  -- Whether the dashboard names it at all. A private drive may still be
-  -- listed, so visitors can see it exists and ask for access.
   listed        INTEGER NOT NULL DEFAULT 1,
-  -- HMAC of the passcode under SESSION_SECRET; NULL on a public drive.
   passcode_hash TEXT,
-  -- Exactly one drive may carry this: the drive whose folders used to sit at
-  -- the site root, so /literature/papers still redirects to its new address.
   legacy_root   INTEGER NOT NULL DEFAULT 0,
   position      INTEGER NOT NULL DEFAULT 0,
   created_at    INTEGER NOT NULL,
@@ -30,12 +24,10 @@ CREATE TABLE IF NOT EXISTS drive_slugs (
 CREATE INDEX IF NOT EXISTS idx_drive_slugs_drive ON drive_slugs(drive_key);
 CREATE TABLE IF NOT EXISTS drive_requests (
   id         TEXT PRIMARY KEY,
-  -- The drive asked for, or NULL when someone is asking for a drive of their own.
   drive_key  TEXT,
   name       TEXT NOT NULL,
   email      TEXT NOT NULL,
   note       TEXT NOT NULL DEFAULT '',
-  -- 'new' until the admin acts on it, then 'approved' or 'dismissed'.
   status     TEXT NOT NULL DEFAULT 'new',
   created_at INTEGER NOT NULL,
   handled_at INTEGER
