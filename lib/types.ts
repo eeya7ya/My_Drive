@@ -1,5 +1,16 @@
 /** Shapes shared between the API routes and the client. */
 
+import type { Brand } from "./brand";
+
+/**
+ * A drive as the dashboard shows it: its public identity plus whether this
+ * visitor can already open it. `unlocked` is true for every public drive, and
+ * for a private one the viewer holds a pass to.
+ */
+export interface DriveCard extends Brand {
+  unlocked: boolean;
+}
+
 export interface FolderRow {
   id: string;
   parent_id: string | null;

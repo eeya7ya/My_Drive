@@ -1,13 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { driveFor } from "@/lib/brand";
+import { SITE } from "@/lib/brand";
 import "./globals.css";
 
-const main = driveFor("main");
-
-/** Defaults for the main drive; the eSpark route sets its own title and manifest. */
+/**
+ * The shell wears the site's identity, not a drive's. Drives are rows now, so
+ * the layout cannot know which one — if any — is about to render; each drive
+ * route overrides the title, description and manifest with its own.
+ */
 export const metadata: Metadata = {
-  title: main.title,
-  description: main.description,
+  title: SITE.title,
+  description: SITE.description,
   icons: {
     icon: "/assets/espark-bright.png",
     apple: "/assets/espark-bright.png",
@@ -15,7 +17,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: main.shortName,
+    title: SITE.name,
     statusBarStyle: "default",
   },
 };

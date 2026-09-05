@@ -1,5 +1,7 @@
-import { resolveDownload } from "@/lib/store";
+import { driveOfFile, resolveDownload } from "@/lib/store";
 import { getObjectStream } from "@/lib/r2";
+import { getDrive } from "@/lib/drives";
+import { requireDriveAccess } from "@/lib/auth";
 import { fail } from "@/lib/api";
 import { NextResponse } from "next/server";
 
@@ -26,6 +28,16 @@ export async function GET(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
     const versionId = new URL(req.url).searchParams.get("version");
+
+    // Nothing in the URL says which drive this file belongs to, so it has to
+    // be asked before any bytes move. A file whose drive has gone missing is
+    // a 404 like any other, and says no more than that.
+    const owner = await driveOfFile(id);
+    const brand = owner ? await getDrive(owner) : null;
+    if (!brand) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+    await requireDriveAccess(brand);
 
     const target = await resolveDownload(id, versionId);
     if (!target) {
