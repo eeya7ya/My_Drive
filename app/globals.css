@@ -21,6 +21,18 @@ body[data-theme="dark"] {
   --side-icon:rgba(238,244,250,.6); --side-rule:rgba(238,244,250,.18); --side-border:var(--color-divider);
   --side-track:rgba(238,244,250,.14); --side-track-border:rgba(238,244,250,.22);
 }
+/* The neutral ramp is a light-theme ramp: --color-neutral-100 is near-white and
+   --color-neutral-800 near-black, which is right for a chip on a pale card and
+   wrong on a dark one, where it lands as a bright block beside accent chips
+   that do flip. The ramp itself is deliberately left alone — the dialog
+   backdrop reads --color-neutral-900 as "the darkest neutral" and would invert
+   with it — so the one component that uses the ramp as a surface is restated
+   here instead. */
+body[data-theme="dark"] .tag-neutral {
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+  color: color-mix(in srgb, var(--color-text) 88%, transparent);
+}
+
 a { color: var(--color-accent); text-underline-offset:3px; }
 a:hover { color: var(--color-accent-600); }
 .brand-dark { display: none; }

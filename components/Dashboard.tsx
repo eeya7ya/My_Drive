@@ -11,11 +11,13 @@
  * tagline, so a drive is recognisable the moment it opens rather than looking
  * like somewhere else entirely.
  *
- * A drive this viewer can open is one large link; a locked one is a panel with
- * labelled controls instead. The distinction is deliberate: a card that
+ * A drive whose only question is whether to open it is one large link; a locked
+ * one, and an unlocked private one that can also hand its pass back, are panels
+ * with labelled controls instead. The distinction is deliberate: a card that
  * navigated straight to a passcode prompt would read as having opened the drive
- * and then changed its mind. Both shapes sit in the same grid, so what differs
- * is only what can be clicked.
+ * and then changed its mind, and a button buried inside a card-sized link has no
+ * honest way to be pressed. Both shapes sit in the same grid, so what differs is
+ * only what can be clicked.
  */
 
 import React, { useEffect, useRef, useState } from "react";
@@ -389,9 +391,9 @@ export default function Dashboard({
 }
 
 /**
- * One drive in the grid. The card is the link when the drive can be opened,
- * and a plain panel carrying its own controls when it cannot — see the note at
- * the top of the file for why the two are not the same shape.
+ * One drive in the grid. The card is the link when opening it is the only thing
+ * on offer, and a plain panel carrying its own controls when it is not — see the
+ * note at the top of the file for why the two are not the same shape.
  */
 function DriveTile({
   drive,
@@ -408,6 +410,33 @@ function DriveTile({
   // A private drive with no passcode set has no way in at all, so offering to
   // enter one would send the visitor to a door that cannot open.
   const shut = isPrivate && !drive.unlocked && !drive.hasPasscode;
+
+  const [locking, setLocking] = useState(false);
+  const [lockError, setLockError] = useState<string | null>(null);
+
+  /**
+   * The pass is a thirty-day cookie, and this card is the only place a viewer
+   * ever sees they are still holding one, so it is also where they can give it
+   * back. A reload afterwards is deliberate: whether a drive is open is decided
+   * on the server, and asking again is the only way to be sure the page and the
+   * cookie agree. Only a failure lets the button go live again — a call that
+   * worked is replaced by the reload, and re-enabling it first would flicker.
+   */
+  async function lockAgain() {
+    setLocking(true);
+    setLockError(null);
+    try {
+      const res = await fetch(`/api/drives/${encodeURIComponent(drive.key)}/unlock`, {
+        method: "DELETE",
+      });
+      const body: { error?: string } = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Could not lock this drive again");
+      window.location.reload();
+    } catch (e) {
+      setLockError(e instanceof Error ? e.message : "Could not lock this drive again");
+      setLocking(false);
+    }
+  }
 
   const badges = (
     <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -476,6 +505,36 @@ function DriveTile({
       {badges}
     </div>
   );
+
+  if (isPrivate && drive.unlocked) {
+    return (
+      <div className="dc-card" style={{ animationDelay: delay, cursor: "default" }}>
+        {head}
+        {identity}
+        {lockError && (
+          <div style={{ fontSize: 12, color: "#c0492f" }} role="alert">
+            {lockError}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto" }}>
+          <a className="btn btn-primary" href={drive.basePath}>
+            Open drive
+            <Icon name="chevron" size={13} />
+          </a>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={lockAgain}
+            disabled={locking}
+            title="Hand this drive's pass back"
+          >
+            <Icon name="logout" size={13} />
+            {locking ? "Locking…" : "Lock again"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (drive.unlocked) {
     return (

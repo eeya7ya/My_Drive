@@ -44,6 +44,14 @@ const TAGLINE: React.CSSProperties = {
 
 /** The one red in the system, used for refusals and for destructive controls. */
 const DANGER = "#c0492f";
+/**
+ * A confirm button paints DANGER over `.btn-primary`, which colours its label
+ * with `--color-bg` — nearly black under the dark theme, and unreadable on the
+ * red. The two go together, so both are stated here rather than at either call
+ * site, and white is the one that holds in both themes because the background
+ * behind it is the same red whatever the page is doing.
+ */
+const DANGER_TEXT = "#fff";
 
 /**
  * A group of radios is a fieldset with a legend rather than a label, since a
@@ -153,7 +161,10 @@ function patchFor(
   if (form.listed !== brand.listed) patch.listed = form.listed;
   if (form.visibility !== brand.visibility) patch.visibility = form.visibility;
 
-  if (mode === "set") patch.passcode = passcode;
+  // The unlock form trims what the visitor types and the server compares the
+  // hashes exactly, so a passcode saved with a space around it could never be
+  // entered again. It is trimmed on the way in as well, and the two ends agree.
+  if (mode === "set") patch.passcode = passcode.trim();
   if (mode === "clear") patch.passcode = null;
 
   return patch;
@@ -237,7 +248,11 @@ export default function AdminPanel({
   async function signOut() {
     setBusy("sign-out");
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      // Leaving for the dashboard on a logout that did not happen would look
+      // like a sign-out while the admin cookie is still being carried, so the
+      // navigation waits on the answer the way every other write here does.
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      if (!res.ok) throw new Error("Could not sign out.");
       window.location.href = "/";
     } catch {
       setBusy(null);
@@ -345,7 +360,9 @@ export default function AdminPanel({
 
         {note && (
           <div
-            role="status"
+            // A refusal has to interrupt whatever is being read; a confirmation
+            // can wait for a pause, so the two tones announce differently.
+            role={note.tone === "bad" ? "alert" : "status"}
             style={{
               display: "flex",
               alignItems: "flex-start",
@@ -756,7 +773,7 @@ function DriveRow({
               if (done) setConfirming(false);
             }}
             disabled={locked}
-            style={{ background: DANGER, borderColor: DANGER }}
+            style={{ background: DANGER, borderColor: DANGER, color: DANGER_TEXT }}
           >
             <Icon name="trash" size={14} />
             {deleting ? "Deleting…" : "Delete the drive"}
@@ -809,10 +826,17 @@ function DriveEditor({
   // string, which it reads as "clear it" — the exact accident this control was
   // shaped to prevent. So the save waits rather than guessing which was meant.
   const blank = mode === "set" && !passcode.trim();
+  // Clearing the passcode on a drive that stays private leaves it with no door
+  // at all, and the API refuses exactly that. The form refuses it first, since
+  // an admin reads a disabled button as a choice still to be made and a failed
+  // save as something having gone wrong. The visibility read here is the one
+  // the form is holding rather than the saved one, so clearing the passcode and
+  // making the drive public in the same edit remains a legitimate thing to do.
+  const shutOut = mode === "clear" && form.visibility === "private";
 
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
-    if (blank) return;
+    if (blank || shutOut) return;
     await onSave(patchFor(brand, form, mode, passcode));
   }
 
@@ -1045,10 +1069,10 @@ function DriveEditor({
         </label>
       </div>
 
-      {mode === "clear" && form.visibility === "private" && (
+      {shutOut && (
         <div style={{ marginTop: 10, fontSize: 13, color: DANGER }}>
-          A private drive with no passcode shuts everyone out, so this will be refused until the
-          drive is public again.
+          Removing the passcode would shut this private drive to everyone, so the panel will not
+          send it. Make the drive public first, or set a new passcode instead.
         </div>
       )}
 
@@ -1059,7 +1083,7 @@ function DriveEditor({
       )}
 
       <div style={{ display: "flex", gap: 9, marginTop: 24, flexWrap: "wrap" }}>
-        <button className="btn btn-primary" type="submit" disabled={locked || blank}>
+        <button className="btn btn-primary" type="submit" disabled={locked || blank || shutOut}>
           <Icon name="edit" size={14} />
           {saving ? "Saving…" : "Save changes"}
         </button>
@@ -1100,7 +1124,12 @@ function CreateDrive({
   // which typing the name no longer rewrites what they chose.
   const [slugTouched, setSlugTouched] = useState(false);
 
-  const preview = slugifyDrive((slugTouched ? slug : name).trim());
+  // slugifyDrive answers "drive" for an empty string, which on an untouched
+  // form would put an address nobody chose in the field and promise /drive
+  // underneath it. Nothing is slugified until there is something to slugify, so
+  // the field's placeholder stands until the drive is actually named.
+  const typed = (slugTouched ? slug : name).trim();
+  const preview = typed ? slugifyDrive(typed) : "";
 
   /**
    * Nothing is cleared on success because the panel closes this form when the
@@ -1110,13 +1139,18 @@ function CreateDrive({
    */
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
+    // What the visitor types is trimmed before it is checked, so the passcode
+    // is trimmed before it is stored. It also decides emptiness here: a
+    // passcode of nothing but spaces would otherwise pass for one and open a
+    // private drive that not even the person sent it could unlock.
+    const secret = passcode.trim();
     await onCreate({
       name: name.trim(),
       slug: preview,
       visibility,
       // An empty passcode is left out entirely: the API reads its absence as
       // "no passcode", and refuses that on a private drive.
-      ...(visibility === "private" && passcode ? { passcode } : {}),
+      ...(visibility === "private" && secret ? { passcode: secret } : {}),
     });
   }
 
@@ -1408,7 +1442,7 @@ function RequestRow({
               if (done) setConfirming(false);
             }}
             disabled={locked}
-            style={{ background: DANGER, borderColor: DANGER }}
+            style={{ background: DANGER, borderColor: DANGER, color: DANGER_TEXT }}
           >
             <Icon name="trash" size={14} />
             {deleting ? "Deleting…" : "Delete"}

@@ -27,7 +27,12 @@ export async function PATCH(req: Request, { params }: Ctx) {
     await requireAdmin();
     const { id } = await params;
 
-    const { status } = await readJson<{ status?: unknown }>(req);
+    const body = await readJson<Record<string, unknown>>(req);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      badRequest("Expected a JSON object.");
+    }
+
+    const status = body.status;
     if (!isStatus(status)) badRequest('status must be "new", "approved" or "dismissed".');
 
     await setRequestStatus(id, status);
