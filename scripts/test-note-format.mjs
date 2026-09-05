@@ -31,7 +31,8 @@ const tmp = join(tmpdir(), `note-format-${process.pid}.mjs`);
 writeFileSync(tmp, js);
 const m = await import(pathToFileURL(tmp).href);
 try { rmSync(tmp); } catch { /* a leftover temp file is not a test failure */ }
-const { applyWrap, applyHeading, applyBullets, applyNumbers, applyQuote, applyLink, applyImage, noteFileName } = m;
+const { applyWrap, applyHeading, applyBullets, applyNumbers, applyQuote, applyLink, applyImage,
+        applyAttachment, noteFileName, noteContentType, extensionOf, withExtension } = m;
 
 let pass = 0, fail = 0;
 const eq = (label, got, want) => {
@@ -75,7 +76,22 @@ eq("image after a blank line adds no more", applyImage("a\n\n", 3, 3, "s", "/u")
    "a\n\n![s](/u)\n");
 eq("caret lands after the image", (() => { const r = applyImage("", 0, 0, "s", "/u"); return r.start === r.text.length; })(), true);
 
+eq("a non-image attaches as an inline link", applyAttachment("see ", 4, 4, "spec.pdf", "/u").text,
+   "see [spec.pdf](/u)");
+
+// The format is a choice, so an unextended name takes whichever one is chosen.
 eq("plain name gets .md", noteFileName("Meeting"), "Meeting.md");
+eq("plain name takes the chosen format", noteFileName("Meeting", "txt"), "Meeting.txt");
+eq("a typed extension beats the chosen format", noteFileName("Meeting.csv", "txt"), "Meeting.csv");
+eq("an empty name is dated in the chosen format", noteFileName("", "txt").endsWith(".txt"), true);
+eq("extensionOf reads the tail", extensionOf("Alternator Notes.md"), "md");
+eq("extensionOf on a bare name", extensionOf("Alternator Notes"), "");
+eq("extensionOf ignores a leading dot", extensionOf(".env"), "");
+eq("withExtension swaps it", withExtension("Notes.md", "txt"), "Notes.txt");
+eq("withExtension adds one when absent", withExtension("Notes", "txt"), "Notes.txt");
+eq("markdown keeps its type", noteContentType("a.md"), "text/markdown; charset=utf-8");
+eq("csv gets its own type", noteContentType("a.csv"), "text/csv; charset=utf-8");
+eq("an unknown extension falls back to plain text", noteContentType("a.bib"), "text/plain; charset=utf-8");
 eq("a dotfile keeps its own name", noteFileName(".env"), ".env");
 eq("a dotfile with an extension is untouched", noteFileName(".env.local"), ".env.local");
 eq("an existing note round-trips unchanged", noteFileName("Alternator Notes.md"), "Alternator Notes.md");

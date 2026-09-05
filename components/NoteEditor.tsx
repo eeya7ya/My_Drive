@@ -18,9 +18,34 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { kindFor } from "@/lib/preview";
 
-/** What a note is saved as when the name does not say. Markdown previews. */
+/** What a note is saved as when nothing says otherwise. The editor offers a choice. */
 const DEFAULT_EXT = "md";
+
+/**
+ * The formats the editor offers by name. Anything else a person types is kept
+ * as typed — this is a shortcut, not a list of what is allowed.
+ */
+export const NOTE_FORMATS: { ext: string; label: string; note: string }[] = [
+  { ext: "md", label: "Markdown (.md)", note: "shown formatted" },
+  { ext: "txt", label: "Plain text (.txt)", note: "shown as written" },
+  { ext: "csv", label: "CSV (.csv)", note: "shown as a table" },
+  { ext: "json", label: "JSON (.json)", note: "shown as written" },
+];
+
+/** The extension a stored name ends in, lowercased, or "" when it has none. */
+export function extensionOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+/** Swap a name's extension, keeping everything before it. */
+export function withExtension(name: string, ext: string): string {
+  const dot = name.lastIndexOf(".");
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  return `${base}.${ext}`;
+}
 
 /**
  * Only the two the editor can honestly claim to produce. Anything else the
@@ -31,6 +56,8 @@ const TYPES: Record<string, string> = {
   md: "text/markdown; charset=utf-8",
   markdown: "text/markdown; charset=utf-8",
   txt: "text/plain; charset=utf-8",
+  csv: "text/csv; charset=utf-8",
+  json: "application/json; charset=utf-8",
 };
 
 /**
@@ -41,16 +68,16 @@ const TYPES: Record<string, string> = {
  * an extension, and taking it for one leaves the file unpreviewable by the app
  * that just wrote it — so only a short alphanumeric tail counts.
  */
-export function noteFileName(raw: string): string {
+export function noteFileName(raw: string, fallbackExt: string = DEFAULT_EXT): string {
   const name = raw.trim().replace(/[\\/]+/g, "-").replace(/\.+$/, "");
-  if (!name) return defaultNoteName();
+  if (!name) return defaultNoteName(fallbackExt);
   const dot = name.lastIndexOf(".");
   // A leading dot names the file rather than introducing an extension, so
   // ".env" is already complete — appending to it would rename the file on
   // save, which for an edit means a second file instead of a revision.
   if (dot === 0) return name;
   const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-  if (!/^[a-z0-9]{1,8}$/.test(ext)) return `${name}.${DEFAULT_EXT}`;
+  if (!/^[a-z0-9]{1,8}$/.test(ext)) return `${name}.${fallbackExt}`;
   return name;
 }
 
@@ -59,14 +86,14 @@ export function noteFileName(raw: string): string {
  * unnamed note in a folder is the same file — the second one silently becoming
  * revision two of the first is not what anyone means by "just jot this down".
  */
-export function defaultNoteName(): string {
+export function defaultNoteName(ext: string = DEFAULT_EXT): string {
   const today = new Date();
   const stamp = [
     today.getFullYear(),
     String(today.getMonth() + 1).padStart(2, "0"),
     String(today.getDate()).padStart(2, "0"),
   ].join("-");
-  return `Note ${stamp}.${DEFAULT_EXT}`;
+  return `Note ${stamp}.${ext}`;
 }
 
 /** The content type for a stored note, from the extension it ended up with. */
@@ -207,6 +234,17 @@ export function applyImage(text: string, start: number, end: number, alt: string
   return { text: text.slice(0, start) + inserted + text.slice(end), start: at, end: at };
 }
 
+/**
+ * Anything that is not a picture goes in as a link, in line rather than as its
+ * own block — a reference to a drawing or a datasheet usually belongs inside a
+ * sentence, where an image does not.
+ */
+export function applyAttachment(text: string, start: number, end: number, label: string, url: string): Edit {
+  const inserted = `[${label}](${url})`;
+  const at = start + inserted.length;
+  return { text: text.slice(0, start) + inserted + text.slice(end), start: at, end: at };
+}
+
 /** A link keeps the selected words as the label and leaves the caret on "url". */
 export function applyLink(text: string, start: number, end: number): Edit {
   const label = text.slice(start, end) || "text";
@@ -258,6 +296,12 @@ export default function NoteEditor({
   const area = useRef<HTMLTextAreaElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const [mode, setMode] = useState<"write" | "preview">("write");
+  /**
+   * The extension a name with none typed will take. An existing note keeps its
+   * own; a new one starts at Markdown, which is a default rather than a rule —
+   * the control beside the name changes it, and typing an extension wins.
+   */
+  const [format, setFormat] = useState(() => extensionOf(initialName) || DEFAULT_EXT);
   const [placing, setPlacing] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState("");
@@ -274,7 +318,10 @@ export default function NoteEditor({
     ? text !== initialText || name.trim() !== initialName.trim()
     : Boolean(text.trim()) || name.trim() !== initialName.trim();
   const empty = !text.trim();
-  const finalName = noteFileName(name);
+  const finalName = noteFileName(name, format);
+  const ext = extensionOf(finalName);
+  const isMarkdown = ext === "md" || ext === "markdown";
+  const known = NOTE_FORMATS.find((f) => f.ext === ext);
 
   // Saving an edit back over its own name is the point, not a collision. Any
   // other match still is, including renaming an edit onto a neighbour.
@@ -301,7 +348,7 @@ export default function NoteEditor({
    * not worth carrying for a note nobody previews.
    */
   useEffect(() => {
-    if (mode !== "preview") return;
+    if (mode !== "preview" || !isMarkdown) return;
     let stale = false;
     (async () => {
       const [{ marked }, mod] = await Promise.all([import("marked"), import("dompurify")]);
@@ -313,7 +360,7 @@ export default function NoteEditor({
     return () => {
       stale = true;
     };
-  }, [mode, text]);
+  }, [mode, text, isMarkdown]);
 
   /**
    * The browser's own ways of leaving take the note with them — a reload, a
@@ -364,6 +411,17 @@ export default function NoteEditor({
     }
   }
 
+  /**
+   * Picking a format both sets what an unextended name will take and rewrites
+   * an extension already typed — otherwise the control and the name would say
+   * different things and the name would quietly win.
+   */
+  function chooseFormat(next: string) {
+    setFormat(next);
+    if (name.trim()) setName(withExtension(noteFileName(name, format), next));
+    if (next !== "md" && next !== "markdown") setMode("write");
+  }
+
   function attemptCancel() {
     if (busy) return;
     onCancel({ name, text });
@@ -406,19 +464,24 @@ export default function NoteEditor({
   }
 
   /**
-   * Store an image and write a reference to it where the caret is.
+   * Store a file and write a reference to it where the caret is.
    *
-   * The picture becomes an ordinary file in the note's folder rather than
-   * bytes hidden inside the note, so it can be opened, downloaded and replaced
-   * like anything else in the drive — and the note stays a plain Markdown file
-   * that means the same thing in any editor.
+   * Anything can go in, not only pictures — a note about a machine wants the
+   * datasheet and the drawing beside it. What differs is the reference: an
+   * image is embedded so it shows in the note, and everything else is linked.
+   *
+   * Whether it is an image is decided by the name as well as the reported
+   * type, because a browser hands over an empty type often enough — HEIC from
+   * a phone, files dragged from some applications, images off the clipboard —
+   * and refusing those was the bug this replaces.
+   *
+   * The file becomes an ordinary file in the note's folder rather than bytes
+   * hidden inside the note, so it can be opened, downloaded and replaced like
+   * anything else in the drive, and the note stays a plain Markdown file that
+   * means the same thing in any editor.
    */
-  async function placeImage(file: File) {
+  async function placeFile(file: File) {
     if (!onInsertImage || placing) return;
-    if (!file.type.startsWith("image/")) {
-      setError("That is not an image.");
-      return;
-    }
     setPlacing(file.name);
     setError(null);
     try {
@@ -426,9 +489,14 @@ export default function NoteEditor({
       const el = area.current;
       const start = el ? el.selectionStart : text.length;
       const end = el ? el.selectionEnd : text.length;
-      apply(applyImage(text, start, end, name, url));
+      const isImage = file.type.startsWith("image/") || kindFor(file.name) === "image";
+      apply(
+        isImage
+          ? applyImage(text, start, end, name, url)
+          : applyAttachment(text, start, end, file.name, url)
+      );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The image could not be added.");
+      setError(e instanceof Error ? e.message : "The file could not be added.");
     } finally {
       setPlacing(null);
     }
@@ -436,14 +504,24 @@ export default function NoteEditor({
 
   /**
    * Pasting is how a screenshot actually arrives — nobody saves one to disk
-   * first to pick it out of a file dialog.
+   * first to pick it out of a file dialog. Any pasted file is taken, not only
+   * an image; text on the clipboard is left to the textarea.
    */
   function onPaste(ev: React.ClipboardEvent<HTMLTextAreaElement>) {
     if (!onInsertImage) return;
-    const image = Array.from(ev.clipboardData.files).find((f) => f.type.startsWith("image/"));
-    if (!image) return;
+    const file = ev.clipboardData.files[0];
+    if (!file) return;
     ev.preventDefault();
-    placeImage(image);
+    placeFile(file);
+  }
+
+  /** Dropping a file onto the text is the other way people expect to do this. */
+  function onDrop(ev: React.DragEvent<HTMLTextAreaElement>) {
+    if (!onInsertImage) return;
+    const file = ev.dataTransfer.files[0];
+    if (!file) return;
+    ev.preventDefault();
+    placeFile(file);
   }
 
   /**
@@ -521,17 +599,42 @@ export default function NoteEditor({
         </div>
 
         <div className="field">
-          <label htmlFor="note-name">Name</label>
-          <input
-            id="note-name"
+          <div style={{ display: "flex", alignItems: "end", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+              <label htmlFor="note-name">Name</label>
+              <input
+                id="note-name"
             className="input"
             value={name}
-            placeholder={defaultNoteName()}
+            placeholder={defaultNoteName(format)}
             onChange={(e) => setName(e.target.value)}
             readOnly={busy}
-            autoComplete="off"
-            spellCheck={false}
-          />
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+            <div style={{ flex: "0 0 auto" }}>
+              <label htmlFor="note-format">Format</label>
+              <select
+                id="note-format"
+                className="input"
+                value={known ? known.ext : ext}
+                onChange={(e) => chooseFormat(e.target.value)}
+                disabled={busy}
+                style={{ width: "auto", minWidth: 168 }}
+              >
+                {NOTE_FORMATS.map((f) => (
+                  <option key={f.ext} value={f.ext}>
+                    {f.label}
+                  </option>
+                ))}
+                {/* Whatever was typed or opened, when it is not one of the
+                    shortcuts — so an existing .sql or .bib note keeps its own
+                    kind instead of being pushed towards Markdown. */}
+                {!known && ext && <option value={ext}>.{ext}</option>}
+              </select>
+            </div>
+          </div>
           <div
             style={{
               marginTop: 5,
@@ -541,7 +644,7 @@ export default function NoteEditor({
           >
             {/* What it will actually be called, since the name is normalised. */}
             Saved as {finalName}
-            {finalName.toLowerCase().endsWith(".md") && " — Markdown, shown formatted"}
+            {known ? ` — ${known.note}` : ""}
           </div>
           {collides && (
             <div
@@ -568,7 +671,12 @@ export default function NoteEditor({
             <label htmlFor="note-text" style={{ marginBottom: 0 }}>
               Text
             </label>
-            <div className="seg" role="group" aria-label="Write or preview">
+            <div
+              className="seg"
+              role="group"
+              aria-label="Write or preview"
+              hidden={!isMarkdown}
+            >
               {(["write", "preview"] as const).map((m) => (
                 <label key={m} className="seg-opt">
                   <input
@@ -598,6 +706,8 @@ export default function NoteEditor({
                 background: "var(--color-bg)",
               }}
             >
+              {isMarkdown && (
+                <>
               <Tool label="Heading" hint="Heading" onClick={() => at((t, a, b) => applyHeading(t, a, b, 1))}>
                 <span style={{ fontSize: 14, fontWeight: 700 }}>H1</span>
               </Tool>
@@ -642,10 +752,12 @@ export default function NoteEditor({
               <Tool label="Link" hint="Link" onClick={() => at(applyLink)}>
                 <Icon name="link" size={15} />
               </Tool>
+                </>
+              )}
               {onInsertImage && (
                 <Tool
-                  label="Image"
-                  hint="Add an image — or just paste one"
+                  label="Attach a file"
+                  hint="Attach a file — images embed, anything else links. Paste or drop one too."
                   onClick={() => picker.current?.click()}
                 >
                   <Icon name="upload" size={15} />
@@ -657,16 +769,15 @@ export default function NoteEditor({
           <input
             ref={picker}
             type="file"
-            accept="image/*"
             hidden
             onChange={(ev) => {
               const file = ev.target.files?.[0];
               ev.target.value = "";
-              if (file) placeImage(file);
+              if (file) placeFile(file);
             }}
           />
 
-          {mode === "preview" ? (
+          {mode === "preview" && isMarkdown ? (
             <div
               className="dc-doc"
               style={{
@@ -688,6 +799,10 @@ export default function NoteEditor({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onAreaKey}
             onPaste={onPaste}
+            onDrop={onDrop}
+            onDragOver={(ev) => {
+              if (onInsertImage && ev.dataTransfer.types.includes("Files")) ev.preventDefault();
+            }}
             // readOnly rather than disabled: a disabled textarea's contents
             // cannot be selected or copied, so a save that is merely slow would
             // hold the author's only copy of their words out of reach.
