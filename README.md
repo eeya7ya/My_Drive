@@ -445,6 +445,23 @@ because nothing is thrown away: the words are kept and put back the next time
 it opens. `npm test` checks the formatting helpers, which are pure functions
 over a text selection for exactly that reason.
 
+#### Editing one, and putting pictures in it
+
+Any file the drive reads as text — Markdown or plain — carries a pencil in its
+row and an **Edit** entry in its menu. Saving writes the same name back into the
+same folder, which the store already treats as the next revision, so editing a
+note keeps its history rather than starting a second file beside it. That is
+also why the name is left exactly as it was found: a note called `.env` is not
+quietly saved as `.env.md`.
+
+An image goes in from the toolbar or, more usefully, by pasting one — which is
+how a screenshot actually arrives. The picture is stored as an ordinary file in
+the note's folder rather than as bytes hidden inside the note, so it can be
+opened, downloaded and replaced like anything else, and the note stays a plain
+Markdown file that means the same thing in any editor. It is referenced through
+`/api/files/<id>/view` rather than a signed URL: signed URLs expire, and a note
+is meant to still work next year.
+
 ### Reading DWG drawings
 
 AutoCAD's DWG is a closed binary format with no browser support, so the drive

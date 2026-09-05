@@ -31,7 +31,7 @@ const tmp = join(tmpdir(), `note-format-${process.pid}.mjs`);
 writeFileSync(tmp, js);
 const m = await import(pathToFileURL(tmp).href);
 try { rmSync(tmp); } catch { /* a leftover temp file is not a test failure */ }
-const { applyWrap, applyHeading, applyBullets, applyNumbers, applyQuote, applyLink, noteFileName } = m;
+const { applyWrap, applyHeading, applyBullets, applyNumbers, applyQuote, applyLink, applyImage, noteFileName } = m;
 
 let pass = 0, fail = 0;
 const eq = (label, got, want) => {
@@ -64,7 +64,21 @@ r = applyLink("see docs here", 4, 8);
 eq("link keeps the label", r.text, "see [docs](url) here");
 eq("link puts the caret on url", r.text.slice(r.start, r.end), "url");
 
+// An image is a block, and an edit must be able to round-trip a name unchanged.
+eq("image opens its own block", applyImage("text here", 9, 9, "shot", "/api/files/x/view").text,
+   "text here\n\n![shot](/api/files/x/view)\n");
+eq("image on an empty note adds no leading blank", applyImage("", 0, 0, "shot", "/u").text,
+   "![shot](/u)\n");
+eq("image gets a blank line above, not just a newline", applyImage("a\nb", 2, 2, "s", "/u").text,
+   "a\n\n![s](/u)\n\nb");
+eq("image after a blank line adds no more", applyImage("a\n\n", 3, 3, "s", "/u").text,
+   "a\n\n![s](/u)\n");
+eq("caret lands after the image", (() => { const r = applyImage("", 0, 0, "s", "/u"); return r.start === r.text.length; })(), true);
+
 eq("plain name gets .md", noteFileName("Meeting"), "Meeting.md");
+eq("a dotfile keeps its own name", noteFileName(".env"), ".env");
+eq("a dotfile with an extension is untouched", noteFileName(".env.local"), ".env.local");
+eq("an existing note round-trips unchanged", noteFileName("Alternator Notes.md"), "Alternator Notes.md");
 eq("interior dot is not an extension", noteFileName("IEC 61850.8.1 notes"), "IEC 61850.8.1 notes.md");
 eq("a real extension is kept", noteFileName("readme.txt"), "readme.txt");
 eq("trailing dot is trimmed", noteFileName("draft."), "draft.md");
