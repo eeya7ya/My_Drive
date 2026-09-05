@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node scripts/test-note-format.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.699.0",
