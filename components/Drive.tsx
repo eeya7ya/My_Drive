@@ -127,6 +127,8 @@ export default function Drive({
   const [focusFile, setFocusFile] = useState<string | null>(null);
   // Guards the first URL resolution so it runs once, after data lands.
   const urlApplied = useRef(false);
+  /** Whether the last /api/drive call failed, so the address is not judged against an empty tree. */
+  const loadFailed = useRef(false);
 
   // Revision history is fetched per file, only when opened.
   const [openHistory, setOpenHistory] = useState<string | null>(null);
@@ -159,8 +161,14 @@ export default function Drive({
       if (!res.ok) throw new Error(body?.error || "Could not load the drive");
       setData(body as DrivePayload);
       setNotice(typeof body?.notice === "string" ? body.notice : null);
+      loadFailed.current = false;
       if (!keepError) setError(null);
     } catch (e) {
+      // Remembered, because the address is resolved against the tree once the
+      // load settles either way. Against an empty tree every path looks stale,
+      // and the notice for that would otherwise overwrite the real reason
+      // nothing is on screen.
+      loadFailed.current = true;
       setError(e instanceof Error ? e.message : "Could not load the drive");
     } finally {
       setLoaded(true);
@@ -647,9 +655,18 @@ export default function Drive({
         if (target) setViewing({ file: target, versionId: null, label: null });
       }
 
-      if (!r.exact) {
+      // What "unresolved" means depends on how far the walk got, and the two
+      // cases call for different words. Nothing matched at all — a typo, or an
+      // address from somewhere else — is not a rename, and saying so sends
+      // people looking for folders that were never missing.
+      if (!r.exact && !loadFailed.current) {
+        const deepest = r.folderPath.length
+          ? findNode(data.tree, r.folderPath[r.folderPath.length - 1])
+          : null;
         setError(
-          "That link no longer matches a folder — showing the closest match. A folder may have been renamed."
+          deepest
+            ? `Couldn't find the rest of that address — showing ${deepest.name}. Something below it may have been renamed or removed.`
+            : "Nothing here matches that address — showing My Drive."
         );
       }
     },
