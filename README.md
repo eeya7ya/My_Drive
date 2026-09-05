@@ -387,6 +387,41 @@ Two paths, chosen per format:
 object as `attachment`. That header is the whole difference between rendering a
 PDF and saving it.
 
+### Reading DWG drawings
+
+AutoCAD's DWG is a closed binary format with no browser support, so the drive
+converts one to SVG on the server and shows that. The conversion runs once per
+revision and the result is kept in R2 beside the drawing under the same key
+with a `.svg` suffix, so the first person to open a drawing waits a second or
+two and everyone after them gets a stored file. Tying the cache to the revision
+rather than the file is what keeps it honest: a new revision has a new key, so
+it can never be served an older revision's picture.
+
+The viewer places the drawing once to fit and then pans and zooms it under a
+fixed window — drag or swipe to pan, scroll or pinch to zoom, and arrow keys,
+`+`, `-` and `0` do the same from the keyboard. Drawing coordinates can span
+millions of units, so the picture is never rescaled to the window; that is what
+lets a title block be readable at one zoom and the whole sheet at another.
+
+**The conversion must stay on the server.** It uses
+[`@mlightcad/libredwg-web`](https://github.com/mlightcad/libredwg-web), which is
+LibreDWG compiled to WebAssembly and **GPL-3**. Sending that to a browser is
+distribution and would put this app's client bundle under GPL-3 obligations;
+running it server-side is not, since GPL-3 has no network clause — that is the
+AGPL — and the SVG it emits is output rather than a derived work. So `lib/dwg.ts`
+is imported only by its route, and `next.config.mjs` keeps the package external
+and out of the client bundle. Moving that import into a client component would
+change the licensing position of the whole front end.
+
+Two practical notes. The WASM is ten megabytes and its own glue loads it by
+path rather than by import, so `outputFileTracingIncludes` in `next.config.mjs`
+names it explicitly for the one route that converts — without that the route
+builds cleanly and fails on the first drawing. And coverage is LibreDWG's, which
+is not complete: some drawings parse and then fail to render, and one of the two
+AutoCAD sample files used in testing does exactly that. Those are reported as
+"this drawing could not be shown" rather than dressed up, and the file can still
+be downloaded and opened in a real CAD program.
+
 ### A note on safety
 
 Markdown and .docx become HTML, and an uploaded file is untrusted input. Left
@@ -461,9 +496,12 @@ app/
     files/[id]/versions/       history, restore, delete a revision
     files/[id]/view            signed inline URL, for media previews
     files/[id]/raw             same-origin bytes, for parsed previews
+    files/[id]/drawing         a DWG converted to SVG, cached in R2
     admin/recalc/              rebuild the counters (admin)
 components/
   Drive.tsx                    the ported design
+  DrawingCanvas.tsx            pan and zoom for a converted drawing
+  NoteEditor.tsx               writing a text note into the drive
   Dashboard.tsx                the front door
   UnlockForm.tsx               a private drive's passcode gate
   AdminPanel.tsx               drives and requests, for the owner
@@ -472,6 +510,7 @@ components/
   icons.tsx                    the canvas's Lucide paths
 lib/
   d1.ts  r2.ts  store.ts  auth.ts  types.ts  api.ts
+  dwg.ts                       DWG to SVG, server-side only (GPL-3, see above)
   brand.ts                     the shape of a drive's identity, and the fallback
   drives.ts                    the drive registry — rows, slugs, requests
   paths.ts                     URL <-> folder/file resolution

@@ -17,6 +17,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { DriveFile } from "@/lib/types";
 import { kindFor, isMediaKind, whyNoPreview, PreviewKind } from "@/lib/preview";
+import DrawingCanvas from "./DrawingCanvas";
 
 interface Props {
   file: DriveFile;
@@ -36,6 +37,7 @@ export default function FileViewer({
   const kind: PreviewKind = kindFor(file.name);
   const [html, setHtml] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
+  const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const cancelled = useRef(false);
@@ -43,6 +45,8 @@ export default function FileViewer({
   const qs = versionId ? `?version=${encodeURIComponent(versionId)}` : "";
   const viewUrl = `/api/files/${file.id}/view${qs}`;
   const rawUrl = `/api/files/${file.id}/raw${qs}`;
+  // A drawing is converted server-side rather than proxied as-is; see lib/dwg.ts.
+  const drawingUrl = `/api/files/${file.id}/drawing${qs}`;
 
   // Escape closes, matching every other viewer people use.
   useEffect(() => {
@@ -64,7 +68,7 @@ export default function FileViewer({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(rawUrl);
+      const res = await fetch(kind === "drawing" ? drawingUrl : rawUrl);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error || `Could not read the file (${res.status})`);
@@ -76,7 +80,15 @@ export default function FileViewer({
       ]);
       const DOMPurify = DOMPurifyMod.default;
 
-      if (kind === "text") {
+      if (kind === "drawing") {
+        // Sanitised like every other markup this viewer injects. The converter
+        // is ours, but what it draws comes from a file someone uploaded, and
+        // SVG is a scripting surface.
+        const markup = await res.text();
+        if (!cancelled.current) {
+          setSvg(DOMPurify.sanitize(markup, { USE_PROFILES: { svg: true, svgFilters: true } }));
+        }
+      } else if (kind === "text") {
         const t = await res.text();
         if (!cancelled.current) setText(t);
       } else if (kind === "markdown") {
@@ -105,7 +117,7 @@ export default function FileViewer({
     } finally {
       if (!cancelled.current) setLoading(false);
     }
-  }, [kind, rawUrl]);
+  }, [kind, rawUrl, drawingUrl]);
 
   useEffect(() => {
     cancelled.current = false;
@@ -134,13 +146,45 @@ export default function FileViewer({
     }
     if (loading) {
       return (
-        <div style={{ display: "grid", placeItems: "center", height: "100%", opacity: 0.6 }}>
-          Opening {file.name}…
+        <div
+          style={{
+            display: "grid",
+            placeItems: "center",
+            height: "100%",
+            opacity: 0.6,
+            textAlign: "center",
+            padding: 24,
+          }}
+        >
+          <div>
+            {kind === "drawing" ? `Converting ${file.name}…` : `Opening ${file.name}…`}
+            {kind === "drawing" && (
+              <div style={{ marginTop: 8, fontSize: 12 }}>
+                {/* Converting is seconds, not milliseconds, and only the first
+                    reader of a revision pays for it. Saying so stops the wait
+                    reading as a hang. */}
+                A drawing is converted once, then kept — this is quick after the
+                first time.
+              </div>
+            )}
+          </div>
         </div>
       );
     }
     if (error) {
-      return <Empty title="Could not open this file" detail={error} onDownload={onDownload} />;
+      return (
+        <Empty
+          title={
+            kind === "drawing" ? "This drawing could not be shown" : "Could not open this file"
+          }
+          detail={
+            kind === "drawing"
+              ? `${error} You can still download it and open it in a CAD program.`
+              : error
+          }
+          onDownload={onDownload}
+        />
+      );
     }
 
     switch (kind) {
@@ -169,6 +213,16 @@ export default function FileViewer({
               <audio src={viewUrl} controls style={{ width: 420, maxWidth: "100%" }} />
             </div>
           </div>
+        );
+      case "drawing":
+        return svg ? (
+          <DrawingCanvas svg={svg} />
+        ) : (
+          <Empty
+            title="This drawing could not be shown"
+            detail="The conversion produced nothing to draw. Download it to open it in a CAD program."
+            onDownload={onDownload}
+          />
         );
       case "pdf":
         // The browser's own PDF viewer, from a different origin, so the

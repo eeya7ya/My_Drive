@@ -18,6 +18,7 @@ export type PreviewKind =
   | "text"
   | "docx"
   | "sheet"
+  | "drawing"
   | "none";
 
 const BY_EXT: Record<string, PreviewKind> = {
@@ -44,6 +45,10 @@ const BY_EXT: Record<string, PreviewKind> = {
   scss: "text", html: "text", htm: "text", m: "text", r: "text",
   tex: "text", bib: "text", cfgx: "text", scl: "text", cid: "text",
   icd: "text", ssd: "text",
+
+  // AutoCAD drawings. The browser cannot open one, so the server converts it
+  // to SVG first; see lib/dwg.ts for why that conversion stays server-side.
+  dwg: "drawing",
 
   docx: "docx",
 
@@ -79,8 +84,6 @@ export function isMediaKind(kind: PreviewKind): boolean {
 export function whyNoPreview(name: string): string {
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
   switch (ext) {
-    case "dwg":
-      return "DWG is a closed AutoCAD format with no practical in-browser renderer. Export it to DXF or PDF to preview it here.";
     case "pptx":
     case "ppt":
       return "PowerPoint files have no reliable in-browser renderer. Export to PDF to preview it here.";

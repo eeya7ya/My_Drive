@@ -116,6 +116,30 @@ export async function getObjectStream(key: string) {
   );
 }
 
+/**
+ * Write an object from the server.
+ *
+ * The upload path deliberately never does this — file bytes go browser to R2
+ * directly, because a Vercel function caps request bodies at about 4.5 MB. This
+ * is for the things the server itself makes: a drawing converted to SVG, which
+ * is derived from a file already in the bucket and has to be produced where the
+ * converter runs.
+ */
+export async function putObject(
+  key: string,
+  body: Uint8Array | string,
+  contentType: string
+): Promise<void> {
+  await client().send(
+    new PutObjectCommand({
+      Bucket: bucket(),
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    })
+  );
+}
+
 export async function deleteObject(key: string): Promise<void> {
   await client().send(
     new DeleteObjectCommand({ Bucket: bucket(), Key: key })

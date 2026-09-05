@@ -429,10 +429,18 @@ export default function Drive({
       name: string,
       body: Blob,
       contentType: string,
-      onRevision?: (version: number) => void
+      onRevision?: (version: number) => void,
+      /**
+       * Bounds the whole round trip. Passed for a note, whose bytes are small
+       * and whose author is sitting in front of a dialog waiting to be let go;
+       * left off for uploads, where a large file legitimately takes as long as
+       * it takes and a deadline would abort a working transfer.
+       */
+      signal?: AbortSignal
     ) => {
       const { fileId, versionId, version, uploadUrl } = await call("/api/files", {
         method: "POST",
+        signal,
         body: JSON.stringify({
           drive: driveKey,
           folderId,
@@ -446,6 +454,7 @@ export default function Drive({
       const put = await fetch(uploadUrl, {
         method: "PUT",
         body,
+        signal,
         headers: { "Content-Type": contentType },
       });
       if (!put.ok) {
@@ -456,6 +465,7 @@ export default function Drive({
 
       await call(`/api/files/${fileId}/confirm`, {
         method: "POST",
+        signal,
         body: JSON.stringify({ versionId }),
       });
       return { fileId, version } as { fileId: string; version: number };
@@ -518,11 +528,27 @@ export default function Drive({
 
       setError(null);
       setBusy(`Saving ${name}`);
+
+      // A request that neither succeeds nor fails would leave the editor stuck
+      // on "Saving" with no way out, holding the only copy of what was typed.
+      // A note is a few kilobytes, so a minute is already generous.
+      const deadline = new AbortController();
+      const timer = setTimeout(() => deadline.abort(), 60000);
       try {
-        await storeBlob(folderId, name, new Blob([text], { type }), type, (version) =>
-          setBusy(`Saving ${name} — revision ${version}`)
+        await storeBlob(
+          folderId,
+          name,
+          new Blob([text], { type }),
+          type,
+          (version) => setBusy(`Saving ${name} — revision ${version}`),
+          deadline.signal
         );
+      } catch (e) {
+        throw deadline.signal.aborted
+          ? new Error("Saving took too long. Your note is still here — try again.")
+          : e;
       } finally {
+        clearTimeout(timer);
         setBusy(null);
       }
 
@@ -532,7 +558,10 @@ export default function Drive({
     [noteIn, storeBlob, refresh]
   );
 
-  const newNote = useCallback((p: string[]) => setNoteIn(p), []);
+  const newNote = useCallback((p: string[]) => {
+    setNavOpen(false);
+    setNoteIn(p);
+  }, []);
 
   const renameFileAction = useCallback(
     (file: DriveFile) => {

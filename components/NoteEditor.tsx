@@ -33,17 +33,36 @@ const TYPES: Record<string, string> = {
   txt: "text/plain; charset=utf-8",
 };
 
-/** The name as it will be stored: trimmed, and given an extension if it has none. */
+/**
+ * The name as it will be stored: trimmed, and given an extension if it has none.
+ *
+ * "Has none" has to mean more than "contains no dot". A note called
+ * "Meeting 3.2 actions" or "IEC 61850.8.1 notes" ends in something that is not
+ * an extension, and taking it for one leaves the file unpreviewable by the app
+ * that just wrote it — so only a short alphanumeric tail counts.
+ */
 export function noteFileName(raw: string): string {
-  const name = raw.trim().replace(/[\\/]+/g, "-");
-  if (!name) return `Note.${DEFAULT_EXT}`;
-  // A trailing dot is a typed extension the author has not finished; a name
-  // with no dot at all is one they never intended to type.
+  const name = raw.trim().replace(/[\\/]+/g, "-").replace(/\.+$/, "");
+  if (!name) return defaultNoteName();
   const dot = name.lastIndexOf(".");
-  if (dot <= 0 || dot === name.length - 1) {
-    return `${name.replace(/\.$/, "")}.${DEFAULT_EXT}`;
-  }
+  const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+  if (!/^[a-z0-9]{1,8}$/.test(ext)) return `${name}.${DEFAULT_EXT}`;
   return name;
+}
+
+/**
+ * What an unnamed note is called. Dated, because the alternative is that every
+ * unnamed note in a folder is the same file — the second one silently becoming
+ * revision two of the first is not what anyone means by "just jot this down".
+ */
+export function defaultNoteName(): string {
+  const today = new Date();
+  const stamp = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+  return `Note ${stamp}.${DEFAULT_EXT}`;
 }
 
 /** The content type for a stored note, from the extension it ended up with. */
@@ -80,6 +99,7 @@ export default function NoteEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
+  const form = useRef<HTMLFormElement>(null);
 
   const dirty = text !== initialText || name.trim() !== initialName.trim();
   const empty = !text.trim();
@@ -97,6 +117,18 @@ export default function NoteEditor({
   }, []);
 
   /**
+   * The browser's own ways of leaving take the note with them — a reload, a
+   * closed tab, or the sidebar link behind this dialog, which is a full
+   * navigation by design. The in-app confirm cannot see any of them.
+   */
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (ev: BeforeUnloadEvent) => ev.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  /**
    * Escape closes, but not out from under unsaved words — losing a note to a
    * stray keypress is the one failure this editor must not have.
    */
@@ -109,6 +141,29 @@ export default function NoteEditor({
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   });
+
+  /**
+   * Keep Tab inside the dialog. aria-modal says the rest of the page is out of
+   * reach, but nothing enforces that for the keyboard, and the first thing Tab
+   * finds behind this is the sidebar's "All drives" link — one Enter away from
+   * navigating off and taking the note with it.
+   */
+  function onFormKeyDown(ev: React.KeyboardEvent) {
+    if (ev.key !== "Tab" || !form.current) return;
+    const focusable = form.current.querySelectorAll<HTMLElement>(
+      'input, textarea, button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!ev.shiftKey && document.activeElement === last) {
+      ev.preventDefault();
+      first.focus();
+    } else if (ev.shiftKey && document.activeElement === first) {
+      ev.preventDefault();
+      last.focus();
+    }
+  }
 
   function attemptCancel() {
     if (busy) return;
@@ -145,14 +200,33 @@ export default function NoteEditor({
   return (
     <div
       className="dialog-backdrop"
+      style={{
+        // Above the file viewer, and above the mobile drawer, which otherwise
+        // paints over a dialog that declares no stacking of its own.
+        zIndex: 95,
+        // A landscape phone is shorter than this dialog. Centring it there puts
+        // Save and Cancel below the fold with nothing able to scroll to them.
+        alignItems: "start",
+        overflowY: "auto",
+      }}
       onMouseDown={(ev) => {
         if (ev.target === ev.currentTarget) attemptCancel();
       }}
     >
       <form
+        ref={form}
         className="dialog blueprint"
-        style={{ width: "min(680px, 100%)", gap: "var(--space-3)" }}
+        style={{
+          width: "min(680px, 100%)",
+          gap: "var(--space-3)",
+          // The design system's later rule resets .dialog's background to
+          // none, so every dialog states its own — as the sign-in card and the
+          // file viewer already do.
+          background: "var(--color-surface)",
+          margin: "auto 0",
+        }}
         onSubmit={submit}
+        onKeyDown={onFormKeyDown}
         role="dialog"
         aria-modal="true"
         aria-label={initialName ? `Edit ${initialName}` : "New note"}
@@ -180,9 +254,9 @@ export default function NoteEditor({
             id="note-name"
             className="input"
             value={name}
-            placeholder={`Note.${DEFAULT_EXT}`}
+            placeholder={defaultNoteName()}
             onChange={(e) => setName(e.target.value)}
-            disabled={busy}
+            readOnly={busy}
             autoComplete="off"
             spellCheck={false}
           />
@@ -217,7 +291,10 @@ export default function NoteEditor({
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onAreaKey}
-            disabled={busy}
+            // readOnly rather than disabled: a disabled textarea's contents
+            // cannot be selected or copied, so a save that is merely slow would
+            // hold the author's only copy of their words out of reach.
+            readOnly={busy}
             spellCheck
             style={{
               minHeight: 260,
