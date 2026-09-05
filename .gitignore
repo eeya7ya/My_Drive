@@ -13,3 +13,7 @@ design-handoff/
 
 # Local verification screenshots
 .verify/
+
+# Written by `next dev` / `next build` on every run, not by hand.
+/AGENTS.md
+/CLAUDE.md
