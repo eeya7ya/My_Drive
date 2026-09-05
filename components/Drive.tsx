@@ -16,7 +16,7 @@ import { kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
 import { hrefFor, resolveSegments, segmentsOf, slugify, stripBasePath } from "@/lib/paths";
 import { Brand, DEFAULT_BRAND } from "@/lib/brand";
-import NoteEditor, { noteContentType } from "./NoteEditor";
+import NoteEditor, { freeFileName, noteContentType } from "./NoteEditor";
 import {
   DrivePayload,
   DriveFile,
@@ -483,7 +483,11 @@ export default function Drive({
         signal,
         body: JSON.stringify({ versionId }),
       });
-      return { fileId, version } as { fileId: string; version: number };
+      return { fileId, versionId, version } as {
+        fileId: string;
+        versionId: string;
+        version: number;
+      };
     },
     [call, driveKey]
   );
@@ -612,7 +616,10 @@ export default function Drive({
       setError(null);
       setBusy(`Opening ${file.name}`);
       try {
-        const res = await fetch(`/api/files/${file.id}/raw`);
+        // no-store because this is the read half of a read-modify-write: a
+        // cached body from before the last save would be edited and written
+        // back, silently reverting it.
+        const res = await fetch(`/api/files/${file.id}/raw`, { cache: "no-store" });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error || `Could not read the note (${res.status})`);
@@ -640,16 +647,37 @@ export default function Drive({
     async (file: File): Promise<{ name: string; url: string }> => {
       const target = noteIn ?? [];
       const folderId = target.length ? target[target.length - 1] : null;
-      const { fileId } = await storeBlob(
+
+      // Everything off a clipboard is called "image.png", and the store treats
+      // a repeated name in one folder as the next revision — which is right
+      // for a note saving over itself and quite wrong here. It would bury the
+      // first screenshot under the second, and repaint any older note in the
+      // folder that already pointed at that name.
+      const taken = (
+        target.length
+          ? (findNode(treeRef.current, target[target.length - 1])?.files ?? [])
+          : data.rootFiles
+      ).map((f) => f.name);
+      const name = freeFileName(file.name, taken);
+      const base = name.replace(/\.[^.]+$/, "");
+
+      const { fileId, versionId } = await storeBlob(
         folderId,
-        file.name,
+        name,
         file,
         file.type || "application/octet-stream"
       );
       await refresh();
-      return { name: file.name.replace(/\.[^.]+$/, ""), url: `/api/files/${fileId}/view` };
+
+      // Pinned to the revision it just wrote. A name can still be reused by
+      // someone uploading over it later, and a note should keep showing the
+      // picture it was written about.
+      return {
+        name: base,
+        url: `/api/files/${fileId}/view?version=${encodeURIComponent(versionId)}`,
+      };
     },
-    [noteIn, storeBlob, refresh]
+    [noteIn, storeBlob, refresh, data.rootFiles]
   );
 
   const newNote = useCallback((p: string[]) => {
@@ -2628,6 +2656,7 @@ export default function Drive({
             : data.rootFiles
           ).map((f) => f.name)}
           editing={Boolean(noteEdit)}
+          currentName={noteEdit?.name ?? null}
           // A draft belongs to the note it came from, so dismissing an edit and
           // then starting a new note does not offer the edit's text back.
           initialName={
