@@ -71,7 +71,7 @@ const EMPTY: DrivePayload = {
 };
 
 export default function Drive({
-  defaultTheme = "light",
+  defaultTheme = "dark",
   defaultView = "grid",
   brand = DEFAULT_BRAND,
 }: {
@@ -189,7 +189,10 @@ export default function Drive({
   }, [refresh]);
 
   useEffect(() => {
+    // On both, because the canvas behind a short page is painted from html
+    // and html cannot read tokens defined on body.
     document.body.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
   useEffect(() => {
@@ -1748,9 +1751,9 @@ export default function Drive({
                   gap: 9,
                   marginTop: busy ? 8 : 0,
                   padding: "10px 13px",
-                  border: "1px solid color-mix(in srgb, #c0492f 45%, transparent)",
-                  background: "color-mix(in srgb, #c0492f 8%, transparent)",
-                  color: "#c0492f",
+                  border: "1px solid color-mix(in srgb, var(--color-danger) 45%, transparent)",
+                  background: "color-mix(in srgb, var(--color-danger) 8%, transparent)",
+                  color: "var(--color-danger)",
                   fontSize: 13,
                 }}
               >
@@ -2485,7 +2488,7 @@ export default function Drive({
                   }}
                   style={
                     {
-                      "--item-color": m.danger ? "#c0492f" : "inherit",
+                      "--item-color": m.danger ? "var(--color-danger)" : "inherit",
                       "--item-hover-bg": m.danger
                         ? "rgba(192,73,47,.12)"
                         : "color-mix(in srgb, var(--color-accent) 12%, transparent)",

@@ -30,8 +30,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dri
     scope: b.basePath + "/",
     display: "standalone",
     orientation: "any",
-    background_color: "#f2f2f3",
-    theme_color: "#5980a6",
+    background_color: "#1B1E20",
+    theme_color: "#1B1E20",
     icons: [
       {
         src: "/assets/espark-bright.png",

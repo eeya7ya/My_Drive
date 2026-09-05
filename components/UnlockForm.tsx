@@ -168,7 +168,7 @@ export default function UnlockForm({
 
           {error && (
             <div
-              style={{ marginTop: 12, fontSize: 12, color: "#c0492f" }}
+              style={{ marginTop: 12, fontSize: 12, color: "var(--color-danger)" }}
               role="alert"
             >
               {error}

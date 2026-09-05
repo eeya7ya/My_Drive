@@ -31,6 +31,44 @@ URL → browser PUTs to R2 → confirm the row (`uploaded = 1`). A row stays
 invisible until confirmed, so an abandoned upload never appears as a phantom
 file.
 
+## The look
+
+The palette is **Grounded in Grey**. Four brand colours, written into
+`app/design-system.css` exactly as the brand sheet names them and never
+recomputed:
+
+| Name | Hex | Role |
+| --- | --- | --- |
+| St. Pauls Blue | `#5B7884` | primary |
+| Arctic Grey | `#93A3A4` | primary light |
+| Minty Breeze | `#8A9B8D` | accent |
+| Sage Light | `#AEBCAB` | accent light |
+
+The dark neutrals are the sheet's too — Background `#1B1E20`, Surface `#232729`,
+Surface Light `#2D3234`, Border `#3A4143`, Foreground `#E9E4E0` — and dark is
+the default, because dark is the only theme the sheet specifies. The toggle
+stays for anyone who wants otherwise; the light neutrals behind it are derived
+from the foreground's own warmth, so both themes share one hue instead of
+reading as two different products.
+
+Everything between those anchors is generated in OKLab on a single lightness
+scale, so the same step of any role matches the others in visual value, and the
+steps the sheet names are pinned to its exact hexes rather than computed near
+them.
+
+**One deliberate departure.** St. Pauls Blue is 3.56:1 on the dark ground and
+4.33:1 on the light one — sound for a large shape, short of AA for words. So the
+identity keeps its exact value in `--brand-primary` and fills the shapes, while
+what carries text is the adjacent step: Arctic Grey at 6.40:1 on dark, and
+`--color-accent-700` at 5.96:1 on light. Nothing sits on `#5B7884` at 4.5:1, so
+this is a choice between the exact colour and legible text, made per role rather
+than once for both.
+
+The type is **Geist**, with Geist Mono for tokens and specs and Cairo behind
+both so Arabic sets in a face designed for it. The scale is the sheet's, written
+as clamps because it gives both ends of each step: display 40–72, h1 32–48, h2
+28–36, subhead 20, body 16–18, and an 11px eyebrow tracked out to 0.18em.
+
 ## Setup
 
 ### 1. Cloudflare

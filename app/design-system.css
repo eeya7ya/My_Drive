@@ -1,49 +1,73 @@
 /* Industry — design-system tokens and component classes. This file is the source of truth for the system's look; retune it here and see readme.md. */
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&family=Cairo:wght@400;600;700&display=swap');
 
 :root {
-  --color-bg: #f2f2f3;
-  --color-surface: #e9e9ea;
-  --color-text: #1d1f20;
-  --color-accent: #5980a6;
-  --color-accent-2: #728fab;
-  --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+  /* ── the palette, as the brand sheet names it ─────────────────────────────
+     These four are the brand and are written exactly as specified; nothing
+     below recomputes them. Everything else on this page is derived from them.
+     ─────────────────────────────────────────────────────────────────────── */
+  --brand-primary: #5B7884;        /* St. Pauls Blue */
+  --brand-primary-light: #93A3A4;  /* Arctic Grey */
+  --brand-accent: #8A9B8D;         /* Minty Breeze */
+  --brand-accent-light: #AEBCAB;   /* Sage Light */
+
+  /* Light theme. The brand sheet specifies dark neutrals only, so these are
+     derived from the foreground's own warmth — one hue across both themes,
+     rather than a warm dark and a cold light reading as two products. */
+  --color-bg: #F8F5F3;
+  --color-surface: #EAE7E5;
+  --color-text: #1B1E20;
+  /* St. Pauls Blue reaches only 4.33:1 on this ground, just under AA for text.
+     The identity keeps its exact value in --brand-primary; what carries words
+     is the next step down, which clears it at 5.96:1. */
+  --color-accent: #48626D;
+  --color-accent-2: #546157;
+  --color-divider: color-mix(in srgb, #1B1E20 16%, transparent);
 
   /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
-     same step of any role matches the others in visual value. */
-  --color-neutral-100: #f5f5f8;
-  --color-neutral-200: #e7e7ea;
-  --color-neutral-300: #d4d4d7;
-  --color-neutral-400: #b7b7ba;
-  --color-neutral-500: #98989b;
-  --color-neutral-600: #7a7a7d;
-  --color-neutral-700: #5d5d60;
-  --color-neutral-800: #424244;
-  --color-neutral-900: #2b2b2d;
+     same step of any role matches the others in visual value. The steps the
+     brand sheet names are pinned to its exact hexes rather than computed. */
+  --color-neutral-100: #F8F5F3;
+  --color-neutral-200: #EAE7E5;
+  --color-neutral-300: #D7D4D2;
+  --color-neutral-400: #B9B7B5;
+  --color-neutral-500: #9A9896;
+  --color-neutral-600: #7C7A78;
+  --color-neutral-700: #5F5D5B;
+  --color-neutral-800: #444240;
+  --color-neutral-900: #2D2B29;
 
-  --color-accent-100: #eef6ff;
-  --color-accent-200: #d6ebff;
-  --color-accent-300: #b5d9fd;
-  --color-accent-400: #94bce3;
-  --color-accent-500: #749dc4;
-  --color-accent-600: #597ea3;
-  --color-accent-700: #416180;
-  --color-accent-800: #2c455d;
-  --color-accent-900: #1d2d3d;
+  --color-accent-100: #E6F9FF;
+  --color-accent-200: #D7EBF4;
+  --color-accent-300: #C3D9E2;
+  --color-accent-400: #A4BCC6;
+  --color-accent-500: #93A3A4;   /* Arctic Grey */
+  --color-accent-600: #5B7884;   /* St. Pauls Blue */
+  --color-accent-700: #48626D;
+  --color-accent-800: #30464F;
+  --color-accent-900: #1B2E36;
 
-  --color-accent-2-100: #eef6ff;
-  --color-accent-2-200: #d6ebff;
-  --color-accent-2-300: #bdd8f2;
-  --color-accent-2-400: #9ebbd8;
-  --color-accent-2-500: #7e9cb8;
-  --color-accent-2-600: #627d98;
-  --color-accent-2-700: #486077;
-  --color-accent-2-800: #314457;
-  --color-accent-2-900: #1f2d3a;
+  --color-accent-2-100: #ECFAEE;
+  --color-accent-2-200: #DEECE0;
+  --color-accent-2-300: #CAD9CD;
+  --color-accent-2-400: #AEBCAB;  /* Sage Light */
+  --color-accent-2-500: #8A9B8D;  /* Minty Breeze */
+  --color-accent-2-600: #707F73;
+  --color-accent-2-700: #546157;
+  --color-accent-2-800: #3A463C;
+  --color-accent-2-900: #252E26;
 
-  --font-heading: "Barlow Condensed", system-ui, sans-serif;
-  --font-heading-weight: 600;
-  --font-body: "Barlow", system-ui, sans-serif;
+  /* Danger sits outside the palette on purpose: a destructive action must not
+     read as another shade of the brand. Warmed to keep it in the same world. */
+  --color-danger: #B4503A;
+  --color-danger-fg: #FFF3EF;
+
+  /* Geist throughout, with Cairo behind it so Arabic sets in a face designed
+     for it rather than falling back to whatever the system offers. */
+  --font-heading: "Geist", "Cairo", system-ui, sans-serif;
+  --font-heading-weight: 700;
+  --font-body: "Geist", "Cairo", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --space-1: 3.4px;
   --space-2: 6.8px;
@@ -105,18 +129,49 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-headi
    ══════════════════════════════════════════════════════════════════════ */
 
 *, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 400; }
+body { margin: 0; font-size: 16px; line-height: 1.55; font-weight: 400; }
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading); font-weight: var(--font-heading-weight);
   line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
 }
-h1 { font-size: 42px; }
-h2 { font-size: 32px; }
-h3 { font-size: 25px; }
-h4 { font-size: 20px; }
-h5 { font-size: 16px; }
-h6 { font-size: 13px; }
-h6 { letter-spacing: 0.08em; text-transform: uppercase; }
+/* The scale the type sheet sets out. Each range is a clamp rather than a fixed
+   size, because the sheet gives both ends of one step — 40 to 72 for display,
+   32 to 48 for a heading — which is a range across viewports, not a choice to
+   make once. */
+h1 { font-size: clamp(32px, 4.6vw, 48px); font-weight: 700; }
+h2 { font-size: clamp(28px, 3.4vw, 36px); font-weight: 600; }
+h3 { font-size: 20px; font-weight: 600; }
+h4 { font-size: 18px; font-weight: 600; }
+h5 { font-size: 16px; font-weight: 600; }
+h6 { font-size: 11px; font-weight: 700; }
+h6 { letter-spacing: 0.18em; text-transform: uppercase; }
+
+/* Display sits above h1 and is a deliberate choice rather than a heading
+   level, so it is a class: nothing should be a bigger h1 by accident. */
+.display {
+  font-family: var(--font-heading);
+  font-size: clamp(40px, 6vw, 72px);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+}
+
+/* The small tracked-out line above a title, as the sheet specifies it. */
+.eyebrow {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* Tokens, sizes and specs set in the mono face, as the sheet shows them. */
+.mono, code, kbd, samp, pre { font-family: var(--font-mono); }
+
+/* Arabic prefers Cairo, and reads right to left. */
+:lang(ar) { font-family: "Cairo", var(--font-body); }
+[dir="rtl"] { text-align: right; }
 p { margin: 0 0 var(--space-3); }
 a { color: var(--color-accent); text-underline-offset: 3px; }
 img { display: block; max-width: 100%; }

@@ -540,7 +540,7 @@ export default function NoteEditor({
                 <span style={{ fontStyle: "italic", fontFamily: "serif" }}>I</span>
               </Tool>
               <Tool label="Code" hint="Code" onClick={() => at((t, a, b) => applyWrap(t, a, b, "`", "code"))}>
-                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{"<>"}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{"<>"}</span>
               </Tool>
               <Divider />
               <Tool
@@ -599,7 +599,7 @@ export default function NoteEditor({
             style={{
               minHeight: 260,
               resize: "vertical",
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontFamily: "var(--font-mono)",
               fontSize: 13,
               lineHeight: 1.6,
             }}
@@ -608,7 +608,7 @@ export default function NoteEditor({
         </div>
 
         {error && (
-          <div role="alert" style={{ fontSize: 12, color: "#c0492f" }}>
+          <div role="alert" style={{ fontSize: 12, color: "var(--color-danger)" }}>
             {error}
           </div>
         )}

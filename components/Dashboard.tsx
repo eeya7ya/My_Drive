@@ -51,7 +51,7 @@ export default function Dashboard({
   // The drive keeps its light/dark choice in component state and writes it to
   // the body, which is where every token flips. The dashboard is a sibling
   // screen, not a second app, so it does exactly the same thing.
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   const [driveChoice, setDriveChoice] = useState("");
   const [name, setName] = useState("");
@@ -65,7 +65,10 @@ export default function Dashboard({
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // On both, because the canvas behind a short page is painted from html
+    // and html cannot read tokens defined on body.
     document.body.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
   /**
@@ -361,7 +364,7 @@ export default function Dashboard({
           </div>
 
           {error && (
-            <div style={{ marginTop: 12, fontSize: 12, color: "#c0492f" }} role="alert">
+            <div style={{ marginTop: 12, fontSize: 12, color: "var(--color-danger)" }} role="alert">
               {error}
             </div>
           )}
@@ -512,7 +515,7 @@ function DriveTile({
         {head}
         {identity}
         {lockError && (
-          <div style={{ fontSize: 12, color: "#c0492f" }} role="alert">
+          <div style={{ fontSize: 12, color: "var(--color-danger)" }} role="alert">
             {lockError}
           </div>
         )}
