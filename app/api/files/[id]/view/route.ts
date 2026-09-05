@@ -1,5 +1,7 @@
-import { resolveDownload } from "@/lib/store";
+import { driveOfFile, resolveDownload } from "@/lib/store";
 import { presignInline } from "@/lib/r2";
+import { getDrive } from "@/lib/drives";
+import { requireDriveAccess } from "@/lib/auth";
 import { fail } from "@/lib/api";
 import { NextResponse } from "next/server";
 
@@ -23,6 +25,16 @@ export async function GET(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
     const versionId = new URL(req.url).searchParams.get("version");
+
+    // The drive is looked up from the file, since the URL never names one, and
+    // the check happens before the signature is minted: a signed URL handed to
+    // the wrong person discloses the object exactly as fully as sending it.
+    const owner = await driveOfFile(id);
+    const brand = owner ? await getDrive(owner) : null;
+    if (!brand) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+    await requireDriveAccess(brand);
 
     const target = await resolveDownload(id, versionId);
     if (!target) {

@@ -1097,6 +1097,30 @@ export default function Drive({
           transition: "background .35s, color .35s",
         }}
       >
+        {/* Out to the dashboard. A plain anchor, not the router: this is the
+            one link that leaves the drive entirely, so a full navigation is
+            what it should be. */}
+        <a
+          href="/"
+          className="dc-tree-row"
+          style={
+            {
+              "--row-indent": "8px",
+              "--row-color": "var(--side-fg-dim)",
+              "--row-bg": "transparent",
+              "--row-rule": "2px solid transparent",
+              marginBottom: -14,
+              fontSize: 12,
+              letterSpacing: ".12em",
+              textTransform: "uppercase",
+              textDecoration: "none",
+            } as React.CSSProperties
+          }
+        >
+          <Icon name="up" size={14} />
+          All drives
+        </a>
+
         <div className="dc-brand" onClick={() => enter([])}>
           {/* The mark is a tall path, roughly 1:2, cropped to its own bounds
               (espark-mark-*.png) so the box can match its shape. In the square

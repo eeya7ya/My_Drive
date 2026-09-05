@@ -1,21 +1,21 @@
 import type { MetadataRoute } from "next";
-import { driveFor } from "@/lib/brand";
+import { SITE } from "@/lib/brand";
 
 /**
- * The main drive's manifest: installable to a phone's home screen, opening
- * without browser chrome so the drive behaves like an app rather than a page.
- * The eSpark drive has its own at /advec/manifest.webmanifest.
+ * The site's manifest: installing the portal gives an app that opens on the
+ * dashboard, from which any drive can be reached. Each drive has its own at
+ * /<slug>/manifest.webmanifest, so someone who only uses one drive can install
+ * that drive instead and land straight in it.
  *
  * The brand mark is a single 2000px square; listing several sizes against the
  * one file lets each platform pick and downscale, which avoids shipping
  * near-duplicate icons for a logo that is already square.
  */
 export default function manifest(): MetadataRoute.Manifest {
-  const b = driveFor("main");
   return {
-    name: b.title,
-    short_name: b.shortName,
-    description: b.description,
+    name: SITE.title,
+    short_name: SITE.name,
+    description: SITE.description,
     start_url: "/",
     display: "standalone",
     orientation: "any",

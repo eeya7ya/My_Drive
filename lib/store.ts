@@ -16,7 +16,8 @@
  */
 
 import { d1Query, d1Execute } from "./d1";
-import { DRIVE_KEYS, DriveKey } from "./brand";
+import { DriveKey } from "./brand";
+import { listDrives } from "./drives";
 import {
   DriveFile,
   DriveFileVersion,
@@ -236,7 +237,14 @@ export async function recalcCounters(): Promise<{
                               WHERE file_id = files.id AND uploaded = 1)`
   );
   const drives: Record<string, { usedBytes: number; files: number }> = {};
-  for (const drive of DRIVE_KEYS) {
+  // Every registered drive, plus any drive key still carried by rows whose
+  // registry entry has gone — a counter nobody owns is still worth rebuilding.
+  const registered = (await listDrives()).map((d) => d.key);
+  const orphans = await d1Query<{ drive: string }>(
+    "SELECT DISTINCT drive FROM files WHERE drive IS NOT NULL"
+  );
+  const keys = Array.from(new Set([...registered, ...orphans.map((o) => o.drive)]));
+  for (const drive of keys) {
     const key = settingKey(drive, "used_bytes");
     await d1Execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, '0')", [key]);
     await d1Execute(
@@ -728,4 +736,59 @@ export async function pruneStaleReservations(
       WHERE current_version_id IS NULL
         AND id NOT IN (SELECT DISTINCT file_id FROM file_versions)`
   );
+}
+
+/**
+ * Which drive a file or folder belongs to.
+ *
+ * The routes that serve bytes are addressed by id, not by drive, so they have
+ * to ask before they can decide whether the caller may read them. One indexed
+ * lookup on the primary key, and null when the row is gone.
+ */
+export async function driveOfFile(id: string): Promise<DriveKey | null> {
+  const rows = await d1Query<{ drive: DriveKey }>(
+    "SELECT drive FROM files WHERE id = ? LIMIT 1",
+    [id]
+  );
+  return rows[0]?.drive ?? null;
+}
+
+export async function driveOfFolder(id: string): Promise<DriveKey | null> {
+  const rows = await d1Query<{ drive: DriveKey }>(
+    "SELECT drive FROM folders WHERE id = ? LIMIT 1",
+    [id]
+  );
+  return rows[0]?.drive ?? null;
+}
+
+/** The drive a revision's file belongs to, for the per-version routes. */
+export async function driveOfVersion(versionId: string): Promise<DriveKey | null> {
+  const rows = await d1Query<{ drive: DriveKey }>(
+    `SELECT f.drive FROM file_versions v JOIN files f ON f.id = v.file_id
+      WHERE v.id = ? LIMIT 1`,
+    [versionId]
+  );
+  return rows[0]?.drive ?? null;
+}
+
+/**
+ * The names sitting at a drive's top level — its root folders and root files.
+ *
+ * Used to tell a link left over from when this drive was served at the site
+ * root ("/literature/papers/x.pdf") from a URL that never meant anything, so
+ * the first can be redirected to the drive's new address and the second can
+ * honestly 404. Two small queries, and only on a path that matched no drive.
+ */
+export async function rootEntryNames(drive: DriveKey): Promise<string[]> {
+  const [folders, files] = await Promise.all([
+    d1Query<{ name: string }>(
+      "SELECT name FROM folders WHERE drive = ? AND parent_id IS NULL",
+      [drive]
+    ).catch(() => [] as { name: string }[]),
+    d1Query<{ name: string }>(
+      "SELECT name FROM files WHERE drive = ? AND folder_id IS NULL",
+      [drive]
+    ).catch(() => [] as { name: string }[]),
+  ]);
+  return [...folders.map((f) => f.name), ...files.map((f) => f.name)];
 }

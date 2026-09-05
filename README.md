@@ -1,15 +1,16 @@
 # Yahya Khaled — Power Systems Drive
 
-A web drive whose folders and files are managed from an admin panel.
-The front end is the Claude Design canvas (`Yahya Khaled Drive Design-handoff.zip`)
-ported as-is; this repo wires it to real hosting and storage.
+Several web drives behind one dashboard, whose folders and files are managed
+from an admin panel. The front end is the Claude Design canvas
+(`Yahya Khaled Drive Design-handoff.zip`) ported as-is; this repo wires it to
+real hosting and storage.
 
 | Concern | Choice |
 | --- | --- |
 | Hosting | Next.js 16 (App Router) on Vercel |
 | File storage | Cloudflare R2, via its S3-compatible API |
 | Metadata | Cloudflare D1, via its HTTP query API |
-| Auth | Single admin password, signed session cookie |
+| Auth | Single admin password, signed session cookie; per-drive passcodes |
 
 ## How the pieces fit
 
@@ -109,39 +110,93 @@ automatically — no build configuration needed. Add every variable from
 `.env.example` under **Settings → Environment Variables**, then redeploy so they
 take effect. Add your production domain to the R2 CORS policy above.
 
-## A second drive: eSpark
+## Drives, addresses and access
 
-One deployment and one database hold two drives that never mix:
+One deployment and one database hold several drives that never mix. `/` is not
+a drive at all — it is the dashboard, where a visitor picks one or asks for
+access to one.
 
 | Drive | Address | Rows |
 | --- | --- | --- |
-| Yahya Khaled — Power Systems Drive | `/` | `drive = 'main'` |
+| Yahya Khaled — Power Systems Drive | `/yahya` | `drive = 'main'` |
 | eSpark | `/advec` | `drive = 'advec'` |
 
 Every folder and file row carries a `drive` column and every query in
-`lib/store.ts` is scoped by it, so the main drive cannot see an eSpark row and
-the other way round. Each drive has its own storage counter in `settings`
-(the main drive keeps the bare `used_bytes` / `quota_bytes` keys; eSpark's are
-`advec/used_bytes` / `advec/quota_bytes`) and its own prefix in the R2
-bucket. The client sends its drive with every request — `/api/drive?drive=…`,
-and a `drive` field when creating a folder or reserving an upload — and the
-server rejects an unknown key rather than falling through to the wrong tree.
-One admin password covers both; the padlock returns you to the drive you
-signed in from.
+`lib/store.ts` is scoped by it, so one drive cannot see another's rows. Each
+drive has its own storage counter in `settings` (the main drive keeps the bare
+`used_bytes` / `quota_bytes` keys; the others prefix theirs, `advec/used_bytes`)
+and its own prefix in the R2 bucket. The client sends its drive with every
+request — `/api/drive?drive=…`, and a `drive` field when creating a folder or
+reserving an upload — and the server rejects an unknown key rather than falling
+through to the wrong tree.
 
-The drives are declared in `lib/brand.ts`. Adding a third is a new entry
-there plus a route folder like `app/advec`.
+**Drives are rows, not code.** `migrations/005_drive_registry.sql` adds a
+`drives` table and the admin panel at `/admin` creates and edits them, so a new
+drive needs no deploy and no route file. Two columns carry the weight:
+
+- `key` is what `folders.drive` and `files.drive` store. It is fixed when the
+  drive is created and never changes.
+- `slug` is the address. Editing it moves the drive — `/advec` could become
+  `/espark-drive` — and the address it left is recorded in `drive_slugs`, so
+  links already shared keep resolving and redirect to the new one.
+
+The identity a drive wears travels with the row: the name and tagline in the
+sidebar, the tab title, the home-screen name, whether folders are numbered, and
+the "powered by" mark. That is why the heading changes as you move between
+`/yahya` and `/advec` — the page is the same code wearing a different row.
+
+### Public, private, and who may look
+
+A drive is either **public**, readable by anyone with the address, or
+**private**, which asks for a passcode first. The passcode is set in the admin
+panel and stored as an HMAC under `SESSION_SECRET`, so the database never holds
+the passcode itself. Entering it mints a cookie that opens **that drive only**,
+for thirty days; sharing one drive never discloses another. The admin session
+opens all of them.
+
+Private means private all the way down: `/api/drive`, the folder and upload
+routes, and every per-file route — including the ones that hand back a signed
+R2 URL — check access before answering, so a private drive's contents cannot be
+read by calling the API directly.
+
+A drive can also be **unlisted**, which only decides whether the dashboard names
+it. Unlisted and private are independent: a private drive is usually worth
+listing, so people can see it exists and ask.
+
+### Asking for access
+
+The dashboard carries a short form — name, email, which drive, an optional note
+— that writes a row to `drive_requests`. Requests are answered in the admin
+panel, and approving one is bookkeeping: the actual grant is giving the person
+the drive's passcode.
+
+### Addresses that no longer match
+
+An address that names no drive is a **404**, which is the honest answer. The one
+exception is deliberate: the main drive used to be served at the site root, so
+`/literature/papers/x.pdf` is checked against that drive's top-level names and
+permanently redirected to `/yahya/literature/papers/x.pdf` when it matches. A
+path that matches nothing — `/story` — gets the 404 rather than silently
+rendering a drive the visitor did not ask for.
 
 ### Migrating an existing database
 
-A database from before this needs `migrations/003_drives.console.sql` run in
-the D1 console **before** the new code is deployed. It adds the `drive`
+A database from before drives existed needs `migrations/003_drives.console.sql`
+run in the D1 console **before** the new code is deployed. It adds the `drive`
 column (every existing row becomes the main drive), two indexes, and the
 eSpark counters. Nothing is deleted or moved. Until it is run the app shows
 the folders with a banner naming the migration. A database that ran 003
 while the key was still `espark` also needs
 `migrations/004_rename_espark_to_advec.console.sql`, which moves those rows
 and counters to the `advec` key.
+
+Then run `migrations/005_drive_registry.console.sql`, which adds the `drives`,
+`drive_slugs` and `drive_requests` tables and seeds the two drives that already
+exist — the main drive at `/yahya` and eSpark at `/advec`. Until it is run the
+app answers from the same two drives held as a fallback in `lib/brand.ts`, so
+the site keeps serving if the deploy lands ahead of the migration; what does not
+work until then is adding or editing a drive, which says so rather than failing
+obscurely.
 
 On the eSpark drive:
 
@@ -346,15 +401,21 @@ Every folder and file has its own URL, mirroring the breadcrumb:
 uses `history.pushState`, so moving around the drive updates the address bar
 without a server round trip, and back/forward work as expected.
 
+Every link sits under its drive's address, so the same folder name in two
+drives is two different URLs and neither shadows the other.
+
 Paths are built from names, which is what makes a link worth sharing — the
 trade-off is that **renaming a folder changes its link**. Old links to a renamed
 folder resolve as far as they can and land on the nearest parent with a notice,
-rather than erroring.
+rather than erroring. An address that names no drive at all does not get that
+treatment: it is a 404, so a mistyped or stale link says so instead of quietly
+showing a drive the visitor did not ask for.
 
 ## Using it
 
-The drive is public and read-only: visitors browse folders and download files.
-Management is gated behind the admin session.
+`/` lists the drives. A public one opens straight from there; a private one
+asks for its passcode first. A drive is read-only to visitors — browse folders,
+download files — and management is gated behind the admin session.
 
 Click the padlock in the header (or go to `/admin/login`) and enter
 `ADMIN_PASSWORD`. Once signed in, the design's own management affordances
@@ -362,17 +423,27 @@ appear — the **Upload** and **New folder** buttons, and the right-click menus 
 folders, files, and empty space (open, new folder, upload, rename, delete).
 Sign out with the button that replaces the padlock.
 
+`/admin` is the owner's panel: it adds and edits drives — name, address,
+visibility, passcode, whether the dashboard lists them — and answers the access
+requests raised from the dashboard.
+
 ## Layout
 
 ```
 app/
-  page.tsx                     the drive
-  [...path]/page.tsx           deep links to a folder or file
+  page.tsx                     the dashboard — which drives exist
+  [drive]/[[...path]]/page.tsx a drive by its slug, and deep links into it
+  [drive]/manifest.webmanifest that drive's PWA manifest
+  not-found.tsx                an address that matches nothing
+  admin/page.tsx               drives and access requests (admin)
   admin/login/page.tsx         admin sign-in
   globals.css                  design system + the canvas's own styles
   design-system.css            Industry tokens, copied byte-for-byte
   api/
     drive/                     GET the whole drive in one call
+    drives/                    list, create, edit, delete a drive (admin)
+    drives/[key]/unlock/       enter a private drive's passcode
+    requests/                  ask for access; answer the asking (admin)
     auth/login|logout/         session in, session out
     folders/[id]/              create, rename, delete (admin)
     files/[id]/                reserve, confirm, rename, delete, download
@@ -382,12 +453,16 @@ app/
     admin/recalc/              rebuild the counters (admin)
 components/
   Drive.tsx                    the ported design
+  Dashboard.tsx                the front door
+  UnlockForm.tsx               a private drive's passcode gate
+  AdminPanel.tsx               drives and requests, for the owner
   FileViewer.tsx               the in-app viewer
   LoginForm.tsx                sign-in, built from the design system
   icons.tsx                    the canvas's Lucide paths
 lib/
   d1.ts  r2.ts  store.ts  auth.ts  types.ts  api.ts
-  brand.ts                     which drive this is (DRIVE_VARIANT)
+  brand.ts                     the shape of a drive's identity, and the fallback
+  drives.ts                    the drive registry — rows, slugs, requests
   paths.ts                     URL <-> folder/file resolution
   longpress.ts                 touch-and-hold as right-click
   preview.ts                   which viewer opens which format
