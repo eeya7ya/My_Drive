@@ -10,6 +10,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.699.0",
     "@aws-sdk/s3-request-presigner": "^3.699.0",
+    "@mlightcad/libredwg-web": "^0.7.10",
     "dompurify": "^3.4.14",
     "mammoth": "^1.12.2",
     "marked": "^18.0.11",
