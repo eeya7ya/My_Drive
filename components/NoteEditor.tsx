@@ -45,6 +45,10 @@ export function noteFileName(raw: string): string {
   const name = raw.trim().replace(/[\\/]+/g, "-").replace(/\.+$/, "");
   if (!name) return defaultNoteName();
   const dot = name.lastIndexOf(".");
+  // A leading dot names the file rather than introducing an extension, so
+  // ".env" is already complete — appending to it would rename the file on
+  // save, which for an edit means a second file instead of a revision.
+  if (dot === 0) return name;
   const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
   if (!/^[a-z0-9]{1,8}$/.test(ext)) return `${name}.${DEFAULT_EXT}`;
   return name;
@@ -185,6 +189,24 @@ export function applyQuote(text: string, start: number, end: number): Edit {
   return applyPrefix(text, start, end, () => "> ", /^\s*>\s?/);
 }
 
+/**
+ * An image goes in on its own line, so it is a block in the rendered note
+ * rather than a picture wedged into the middle of a sentence.
+ */
+export function applyImage(text: string, start: number, end: number, alt: string, url: string): Edit {
+  // A single newline is a soft break in Markdown, not a block boundary, so
+  // sitting at the start of a line is not enough — without a blank line above
+  // it the image joins the paragraph before it.
+  const atStart = start === 0;
+  const afterBlank = atStart || text.slice(start - 2, start) === "\n\n";
+  const atLineStart = atStart || text[start - 1] === "\n";
+  const before = afterBlank ? "" : atLineStart ? "\n" : "\n\n";
+  const after = text[end] && text[end] !== "\n" ? "\n\n" : "\n";
+  const inserted = `${before}![${alt}](${url})${after}`;
+  const at = start + inserted.length;
+  return { text: text.slice(0, start) + inserted + text.slice(end), start: at, end: at };
+}
+
 /** A link keeps the selected words as the label and leaves the caret on "url". */
 export function applyLink(text: string, start: number, end: number): Edit {
   const label = text.slice(start, end) || "text";
@@ -199,10 +221,12 @@ export function applyLink(text: string, start: number, end: number): Edit {
 export default function NoteEditor({
   folderName,
   existingNames = [],
+  editing = false,
   initialName = "",
   initialText = "",
   onCancel,
   onSave,
+  onInsertImage,
 }: {
   /** Where the note will land, named so the author can see it before saving. */
   folderName: string;
@@ -213,12 +237,19 @@ export default function NoteEditor({
    * refusal. Worth saying before the save, not after.
    */
   existingNames?: string[];
+  /** True when an existing note is open, rather than a new one being written. */
+  editing?: boolean;
   initialName?: string;
   initialText?: string;
   /** Closing hands back what was typed, so the drive can keep it as a draft. */
   onCancel: (draft: { name: string; text: string }) => void;
   /** Resolves when the note is stored; throws with a message worth showing. */
   onSave: (name: string, text: string) => Promise<void>;
+  /**
+   * Store an image and return what the note should point at. Absent when the
+   * drive cannot take one, in which case the button is not offered.
+   */
+  onInsertImage?: (file: File) => Promise<{ name: string; url: string }>;
 }) {
   const [name, setName] = useState(initialName);
   const [text, setText] = useState(initialText);
@@ -227,6 +258,8 @@ export default function NoteEditor({
   const area = useRef<HTMLTextAreaElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const [mode, setMode] = useState<"write" | "preview">("write");
+  const [placing, setPlacing] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState("");
   /**
    * Where the caret should end up after a formatting button rewrites the text.
@@ -235,16 +268,17 @@ export default function NoteEditor({
    */
   const pending = useRef<[number, number] | null>(null);
 
-  // Any words not yet stored are worth guarding, including ones restored from
-  // a draft the author dismissed a moment ago.
-  const dirty = Boolean(text.trim()) || name.trim() !== initialName.trim();
+  // For a new note any words at all are unsaved. For an edit, only changes are
+  // — the note's existing text is already safely in the drive.
+  const dirty = editing
+    ? text !== initialText || name.trim() !== initialName.trim()
+    : Boolean(text.trim()) || name.trim() !== initialName.trim();
   const empty = !text.trim();
   const finalName = noteFileName(name);
 
-  // initialName is a restored draft, never an existing note being edited — the
-  // drive has no edit-in-place flow — so a name matching a file in the folder
-  // is always a collision worth naming, however it got into the field.
-  const collides = existingNames.some((n) => n === finalName);
+  // Saving an edit back over its own name is the point, not a collision. Any
+  // other match still is, including renaming an edit onto a neighbour.
+  const collides = finalName !== initialName && existingNames.some((n) => n === finalName);
 
   // The name has a sensible default and the text does not, so the cursor
   // belongs in the part that is actually blank.
@@ -372,6 +406,47 @@ export default function NoteEditor({
   }
 
   /**
+   * Store an image and write a reference to it where the caret is.
+   *
+   * The picture becomes an ordinary file in the note's folder rather than
+   * bytes hidden inside the note, so it can be opened, downloaded and replaced
+   * like anything else in the drive — and the note stays a plain Markdown file
+   * that means the same thing in any editor.
+   */
+  async function placeImage(file: File) {
+    if (!onInsertImage || placing) return;
+    if (!file.type.startsWith("image/")) {
+      setError("That is not an image.");
+      return;
+    }
+    setPlacing(file.name);
+    setError(null);
+    try {
+      const { name, url } = await onInsertImage(file);
+      const el = area.current;
+      const start = el ? el.selectionStart : text.length;
+      const end = el ? el.selectionEnd : text.length;
+      apply(applyImage(text, start, end, name, url));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The image could not be added.");
+    } finally {
+      setPlacing(null);
+    }
+  }
+
+  /**
+   * Pasting is how a screenshot actually arrives — nobody saves one to disk
+   * first to pick it out of a file dialog.
+   */
+  function onPaste(ev: React.ClipboardEvent<HTMLTextAreaElement>) {
+    if (!onInsertImage) return;
+    const image = Array.from(ev.clipboardData.files).find((f) => f.type.startsWith("image/"));
+    if (!image) return;
+    ev.preventDefault();
+    placeImage(image);
+  }
+
+  /**
    * Ctrl/Cmd-Enter saves from inside the textarea, where Enter has to keep
    * meaning a new line.
    */
@@ -426,7 +501,7 @@ export default function NoteEditor({
         onKeyDown={onFormKeyDown}
         role="dialog"
         aria-modal="true"
-        aria-label="New note"
+        aria-label={editing ? `Edit ${initialName}` : "New note"}
       >
         <span className="corner tl" />
         <span className="corner tr" />
@@ -434,7 +509,7 @@ export default function NoteEditor({
         <span className="corner br" />
 
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <div className="dialog-title">New note</div>
+          <div className="dialog-title">{editing ? "Edit note" : "New note"}</div>
           <div
             style={{
               fontSize: 12,
@@ -540,7 +615,7 @@ export default function NoteEditor({
                 <span style={{ fontStyle: "italic", fontFamily: "serif" }}>I</span>
               </Tool>
               <Tool label="Code" hint="Code" onClick={() => at((t, a, b) => applyWrap(t, a, b, "`", "code"))}>
-                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{"<>"}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{"<>"}</span>
               </Tool>
               <Divider />
               <Tool
@@ -567,8 +642,29 @@ export default function NoteEditor({
               <Tool label="Link" hint="Link" onClick={() => at(applyLink)}>
                 <Icon name="link" size={15} />
               </Tool>
+              {onInsertImage && (
+                <Tool
+                  label="Image"
+                  hint="Add an image — or just paste one"
+                  onClick={() => picker.current?.click()}
+                >
+                  <Icon name="upload" size={15} />
+                </Tool>
+              )}
             </div>
           )}
+
+          <input
+            ref={picker}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(ev) => {
+              const file = ev.target.files?.[0];
+              ev.target.value = "";
+              if (file) placeImage(file);
+            }}
+          />
 
           {mode === "preview" ? (
             <div
@@ -591,6 +687,7 @@ export default function NoteEditor({
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onAreaKey}
+            onPaste={onPaste}
             // readOnly rather than disabled: a disabled textarea's contents
             // cannot be selected or copied, so a save that is merely slow would
             // hold the author's only copy of their words out of reach.
@@ -599,7 +696,7 @@ export default function NoteEditor({
             style={{
               minHeight: 260,
               resize: "vertical",
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontFamily: "var(--font-mono)",
               fontSize: 13,
               lineHeight: 1.6,
             }}
@@ -608,7 +705,7 @@ export default function NoteEditor({
         </div>
 
         {error && (
-          <div role="alert" style={{ fontSize: 12, color: "#c0492f" }}>
+          <div role="alert" style={{ fontSize: 12, color: "var(--color-danger)" }}>
             {error}
           </div>
         )}
@@ -623,7 +720,9 @@ export default function NoteEditor({
               color: "color-mix(in srgb, var(--color-text) 50%, transparent)",
             }}
           >
-            {bytes.toLocaleString()} bytes · ⌘/Ctrl + Enter to save
+            {placing
+            ? `Adding ${placing}…`
+            : `${bytes.toLocaleString()} bytes · ⌘/Ctrl + Enter to save`}
           </div>
           <div style={{ display: "flex", gap: "var(--space-2)" }}>
             <button
@@ -636,7 +735,7 @@ export default function NoteEditor({
             </button>
             <button type="submit" className="btn btn-primary" disabled={busy || empty}>
               <Icon name="file" size={14} />
-              {busy ? "Saving…" : "Save note"}
+              {busy ? "Saving…" : editing ? "Save revision" : "Save note"}
             </button>
           </div>
         </div>

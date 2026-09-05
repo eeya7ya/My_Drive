@@ -43,7 +43,7 @@ const TAGLINE: React.CSSProperties = {
 };
 
 /** The one red in the system, used for refusals and for destructive controls. */
-const DANGER = "#c0492f";
+const DANGER = "var(--color-danger)";
 /**
  * A confirm button paints DANGER over `.btn-primary`, which colours its label
  * with `--color-bg` — nearly black under the dark theme, and unreadable on the
@@ -51,7 +51,7 @@ const DANGER = "#c0492f";
  * site, and white is the one that holds in both themes because the background
  * behind it is the same red whatever the page is doing.
  */
-const DANGER_TEXT = "#fff";
+const DANGER_TEXT = "var(--color-danger-fg)";
 
 /**
  * A group of radios is a fieldset with a legend rather than a label, since a

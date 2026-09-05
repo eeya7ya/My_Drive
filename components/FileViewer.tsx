@@ -239,7 +239,7 @@ export default function FileViewer({
               fontSize: 13,
               lineHeight: 1.6,
               fontFamily:
-                "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                "var(--font-mono)",
               whiteSpace: "pre-wrap",
               wordBreak: "break-word",
             }}
@@ -270,7 +270,7 @@ export default function FileViewer({
         position: "fixed",
         inset: 0,
         zIndex: 90,
-        background: "color-mix(in srgb, #1d1f20 62%, transparent)",
+        background: "color-mix(in srgb, #1B1E20 68%, transparent)",
         display: "grid",
         placeItems: "center",
         padding: 28,

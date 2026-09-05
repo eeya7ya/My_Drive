@@ -1,25 +1,34 @@
 @import "./design-system.css";
 
 /* ── Canvas-level styles, copied verbatim from "Yahya Khaled - Drive.dc.html" ── */
-body { margin:0; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body); transition:background .35s, color .35s; }
+/* The canvas behind a short page is painted from html, not body, so the theme
+   attribute is set on both and the token blocks above match it wherever it
+   sits — otherwise html resolves the light background and a dark page ends
+   with a pale band under it. color-scheme rides along so scrollbars, selects
+   and the other native controls are drawn to match rather than as light
+   widgets on a dark page. */
+html { background:var(--color-bg); }
+html[data-theme="dark"] { color-scheme:dark; }
+body { margin:0; min-height:100svh; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body); color-scheme:light; transition:background .35s, color .35s; }
+body[data-theme="dark"] { color-scheme:dark; }
 @keyframes rise { from { opacity:0; transform:translateY(14px); } }
 @keyframes sweepIn { from { width:0; opacity:0; } }
 @keyframes grow { from { width:0; } }
 @keyframes drift { from { opacity:0; transform:translateX(-8px); } }
 @keyframes pop { from { opacity:0; transform:scale(.96) translateY(-4px); } }
 :root {
-  --side-bg:#eaeef3; --side-fg:#1d1f20; --side-fg-dim:rgba(29,31,32,.58);
-  --side-label:var(--color-accent-700); --side-hover:color-mix(in srgb, var(--color-accent) 12%, transparent);
+  --side-bg:#EAE7E5; --side-fg:#1B1E20; --side-fg-dim:rgba(27,30,32,.58);
+  --side-label:var(--color-accent-700); --side-hover:color-mix(in srgb, var(--brand-primary) 12%, transparent);
   --side-active-bg:var(--color-accent-100); --side-active-fg:var(--color-accent-800); --side-active-icon:var(--color-accent-700);
-  --side-icon:rgba(29,31,32,.5); --side-rule:var(--color-divider); --side-border:var(--color-divider);
-  --side-track:color-mix(in srgb, var(--color-accent) 20%, #ffffff); --side-track-border:var(--color-divider);
+  --side-icon:rgba(27,30,32,.5); --side-rule:var(--color-divider); --side-border:var(--color-divider);
+  --side-track:color-mix(in srgb, var(--brand-primary) 20%, #ffffff); --side-track-border:var(--color-divider);
 }
-body[data-theme="dark"] {
-  --side-bg:#0e1a26; --side-fg:#e6edf4; --side-fg-dim:rgba(238,244,250,.6);
-  --side-label:#93b4d6; --side-hover:rgba(238,244,250,.09);
-  --side-active-bg:rgba(238,244,250,.13); --side-active-fg:#ffffff; --side-active-icon:var(--color-accent-300);
-  --side-icon:rgba(238,244,250,.6); --side-rule:rgba(238,244,250,.18); --side-border:var(--color-divider);
-  --side-track:rgba(238,244,250,.14); --side-track-border:rgba(238,244,250,.22);
+[data-theme="dark"] {
+  --side-bg:#232729; --side-fg:#E9E4E0; --side-fg-dim:rgba(233,228,224,.6);
+  --side-label:var(--brand-accent-light); --side-hover:rgba(233,228,224,.09);
+  --side-active-bg:rgba(233,228,224,.13); --side-active-fg:#FFFFFF; --side-active-icon:var(--brand-primary-light);
+  --side-icon:rgba(233,228,224,.6); --side-rule:#3A4143; --side-border:#3A4143;
+  --side-track:rgba(233,228,224,.14); --side-track-border:rgba(233,228,224,.22);
 }
 /* The neutral ramp is a light-theme ramp: --color-neutral-100 is near-white and
    --color-neutral-800 near-black, which is right for a chip on a pale card and
@@ -38,13 +47,28 @@ a:hover { color: var(--color-accent-600); }
 .brand-dark { display: none; }
 body[data-theme="dark"] .brand-bright { display: none; }
 body[data-theme="dark"] .brand-dark { display: block; }
-body[data-theme="dark"] {
-  --color-bg:#141e28; --color-surface:#1c2a38; --color-text:#e6edf4;
-  --color-divider:rgba(230,237,244,.16);
-  --color-accent:#94bce3; --color-accent-600:#b5d9fd; --color-accent-700:#d6ebff;
-  --color-accent-100:#2c455d; --color-accent-200:#243a4e; --color-accent-300:#3a5670; --color-accent-800:#d6ebff;
+[data-theme="dark"] {
+  /* Every value here is the brand sheet's, written as specified. */
+  --color-bg:#1B1E20;            /* Background */
+  --color-surface:#232729;       /* Surface */
+  --color-surface-light:#2D3234; /* Surface Light */
+  --color-text:#E9E4E0;          /* Foreground */
+  --color-divider:#3A4143;       /* Border */
+
+  /* St. Pauls Blue is 3.56:1 on this ground — sound for a large shape, short
+     of AA for words — so what carries text is Arctic Grey at 6.40:1, and the
+     primary keeps its exact value in --brand-primary for the shapes it fills. */
+  --color-accent:#93A3A4;
+  --color-accent-2:#AEBCAB;
+  --color-accent-600:#AEBCAB; --color-accent-700:#C3D9E2;
+  --color-accent-100:#30464F; --color-accent-200:#1B2E36; --color-accent-300:#48626D; --color-accent-800:#D7EBF4;
+  --color-accent-2-100:#3A463C; --color-accent-2-800:#DEECE0;
+
+  --color-danger:#D4735C; --color-danger-fg:#1B1E20;
+
   --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 6px 18px rgba(0,0,0,.45); --shadow-lg:0 14px 40px rgba(0,0,0,.55);
 }
+
 
 /* ──────────────────────────────────────────────────────────────────────────
    Port of the canvas's `style-hover` attributes.

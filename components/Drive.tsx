@@ -71,7 +71,7 @@ const EMPTY: DrivePayload = {
 };
 
 export default function Drive({
-  defaultTheme = "light",
+  defaultTheme = "dark",
   defaultView = "grid",
   brand = DEFAULT_BRAND,
 }: {
@@ -145,7 +145,13 @@ export default function Drive({
    * it without asking, which is only reasonable because the words are kept
    * here and put back the next time it opens.
    */
-  const [noteDraft, setNoteDraft] = useState<{ name: string; text: string } | null>(null);
+  const [noteDraft, setNoteDraft] = useState<
+    { name: string; text: string; fileId: string | null } | null
+  >(null);
+  /** The existing note being edited, or null when the editor is writing a new one. */
+  const [noteEdit, setNoteEdit] = useState<{ fileId: string; name: string; text: string } | null>(
+    null
+  );
   // enter() builds hrefs from the tree; a ref keeps it from re-creating on
   // every data change and re-triggering effects that depend on it.
   const treeRef = useRef<TreeNode[]>([]);
@@ -189,7 +195,10 @@ export default function Drive({
   }, [refresh]);
 
   useEffect(() => {
+    // On both, because the canvas behind a short page is painted from html
+    // and html cannot read tokens defined on body.
     document.body.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
   useEffect(() => {
@@ -560,13 +569,92 @@ export default function Drive({
 
       setNoteIn(null);
       setNoteDraft(null);
+      setNoteEdit(null);
       await refresh();
+    },
+    [noteIn, storeBlob, refresh]
+  );
+
+  /** A file the note editor can open: one whose contents are text. */
+  const isEditableNote = useCallback((name: string) => {
+    const kind = kindFor(name);
+    return kind === "markdown" || kind === "text";
+  }, []);
+
+  /** Which folder holds a file, as a path of ids. Empty means the drive root. */
+  const folderPathOfFile = useCallback(
+    (fileId: string): string[] => {
+      const walk = (nodes: TreeNode[], trail: string[]): string[] | null => {
+        for (const n of nodes) {
+          const here = [...trail, n.id];
+          if (n.files.some((f) => f.id === fileId)) return here;
+          const deeper = walk(n.children, here);
+          if (deeper) return deeper;
+        }
+        return null;
+      };
+      if (data.rootFiles.some((f) => f.id === fileId)) return [];
+      return walk(data.tree, []) ?? [];
+    },
+    [data.tree, data.rootFiles]
+  );
+
+  /**
+   * Open an existing note for editing.
+   *
+   * Saving it writes the same name back into the same folder, which the store
+   * already treats as the next revision rather than a second file — so editing
+   * a note keeps its history instead of starting a new one beside it.
+   */
+  const editNote = useCallback(
+    async (file: DriveFile) => {
+      setNavOpen(false);
+      setError(null);
+      setBusy(`Opening ${file.name}`);
+      try {
+        const res = await fetch(`/api/files/${file.id}/raw`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `Could not read the note (${res.status})`);
+        }
+        const text = await res.text();
+        setNoteEdit({ fileId: file.id, name: file.name, text });
+        setNoteIn(folderPathOfFile(file.id));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not open that note");
+      } finally {
+        setBusy(null);
+      }
+    },
+    [folderPathOfFile]
+  );
+
+  /**
+   * Put an image in the drive and hand the note a link to it.
+   *
+   * The image becomes an ordinary file in the same folder as the note, and the
+   * note refers to it by the app's own address rather than a signed one — a
+   * presigned URL expires, and a note is meant to still work next year.
+   */
+  const insertNoteImage = useCallback(
+    async (file: File): Promise<{ name: string; url: string }> => {
+      const target = noteIn ?? [];
+      const folderId = target.length ? target[target.length - 1] : null;
+      const { fileId } = await storeBlob(
+        folderId,
+        file.name,
+        file,
+        file.type || "application/octet-stream"
+      );
+      await refresh();
+      return { name: file.name.replace(/\.[^.]+$/, ""), url: `/api/files/${fileId}/view` };
     },
     [noteIn, storeBlob, refresh]
   );
 
   const newNote = useCallback((p: string[]) => {
     setNavOpen(false);
+    setNoteEdit(null);
     setNoteIn(p);
   }, []);
 
@@ -840,13 +928,20 @@ export default function Drive({
     (ev: React.MouseEvent, file: DriveFile) => {
       const items: MenuItem[] = [
         { label: "Open", icon: "eye", action: () => openFile(file) },
+      ];
+      // Editing is offered to everyone who can add to the drive, which is the
+      // same audience that can upload — saving is a revision, never a deletion.
+      if (isEditableNote(file.name)) {
+        items.push({ label: "Edit", icon: "edit", action: () => editNote(file) });
+      }
+      items.push(
         { label: "Download", icon: "download", action: () => downloadFile(file) },
         {
           label: "Copy link",
           icon: "link",
           action: () => copyLink(pathRef.current, file.name),
-        },
-      ];
+        }
+      );
       if (file.versionCount > 1) {
         items.push({
           label: `Revisions (${file.versionCount})`,
@@ -868,7 +963,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [isAdmin, openFile, downloadFile, copyLink, toggleHistory, renameFileAction, deleteFileAction, openMenu]
+    [isAdmin, openFile, downloadFile, copyLink, toggleHistory, isEditableNote, editNote, renameFileAction, deleteFileAction, openMenu]
   );
 
   const canvasMenu = useCallback(
@@ -1748,9 +1843,9 @@ export default function Drive({
                   gap: 9,
                   marginTop: busy ? 8 : 0,
                   padding: "10px 13px",
-                  border: "1px solid color-mix(in srgb, #c0492f 45%, transparent)",
-                  background: "color-mix(in srgb, #c0492f 8%, transparent)",
-                  color: "#c0492f",
+                  border: "1px solid color-mix(in srgb, var(--color-danger) 45%, transparent)",
+                  background: "color-mix(in srgb, var(--color-danger) 8%, transparent)",
+                  color: "var(--color-danger)",
                   fontSize: 13,
                 }}
               >
@@ -2142,6 +2237,19 @@ export default function Drive({
                         />
                       </button>
                     )}
+                    {isEditableNote(d.file.name) && (
+                      <button
+                        className="dc-file-btn"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          editNote(d.file);
+                        }}
+                        title="Edit this note"
+                        aria-label={`Edit ${d.file.name}`}
+                      >
+                        <Icon name="edit" size={15} />
+                      </button>
+                    )}
                     <button
                       className="dc-file-btn dc-file-open"
                       onClick={(ev) => {
@@ -2485,7 +2593,7 @@ export default function Drive({
                   }}
                   style={
                     {
-                      "--item-color": m.danger ? "#c0492f" : "inherit",
+                      "--item-color": m.danger ? "var(--color-danger)" : "inherit",
                       "--item-hover-bg": m.danger
                         ? "rgba(192,73,47,.12)"
                         : "color-mix(in srgb, var(--color-accent) 12%, transparent)",
@@ -2519,13 +2627,27 @@ export default function Drive({
             ? (findNode(data.tree, noteIn[noteIn.length - 1])?.files ?? [])
             : data.rootFiles
           ).map((f) => f.name)}
-          initialName={noteDraft?.name ?? ""}
-          initialText={noteDraft?.text ?? ""}
+          editing={Boolean(noteEdit)}
+          // A draft belongs to the note it came from, so dismissing an edit and
+          // then starting a new note does not offer the edit's text back.
+          initialName={
+            noteEdit
+              ? (noteDraft?.fileId === noteEdit.fileId ? noteDraft.name : noteEdit.name)
+              : (noteDraft && noteDraft.fileId === null ? noteDraft.name : "")
+          }
+          initialText={
+            noteEdit
+              ? (noteDraft?.fileId === noteEdit.fileId ? noteDraft.text : noteEdit.text)
+              : (noteDraft && noteDraft.fileId === null ? noteDraft.text : "")
+          }
+          onInsertImage={insertNoteImage}
           onCancel={(draft) => {
             // Keep it only if there is something to keep, so an editor opened
             // and shut again does not resurrect itself half-filled forever.
-            setNoteDraft(draft.text.trim() || draft.name.trim() ? draft : null);
+            const keep = draft.text.trim() || draft.name.trim();
+            setNoteDraft(keep ? { ...draft, fileId: noteEdit?.fileId ?? null } : null);
             setNoteIn(null);
+            setNoteEdit(null);
           }}
           onSave={saveNote}
         />
