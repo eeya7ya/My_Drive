@@ -387,6 +387,26 @@ Two paths, chosen per format:
 object as `attachment`. That header is the whole difference between rendering a
 PDF and saving it.
 
+### Writing notes
+
+**New note** sits beside Upload wherever Upload does. It opens an editor and
+stores what you type as a file in the folder you were looking at, through the
+same reserve-put-confirm path an upload takes — so a note is an ordinary file
+from the moment it is saved: it previews, downloads, renames and keeps
+revisions like anything else, and saving over a name that already exists adds a
+revision rather than a second file. The editor says so before you save.
+
+Notes are Markdown, and the toolbar writes Markdown rather than hiding it —
+headings, bold, italic, code, bullets, numbers, quotes and links, each of them
+a toggle, with `Ctrl`/`⌘ B` and `I` for the two people reach for most. What is
+stored stays something a person would have typed and can read in any editor.
+**Preview** renders it with the same parser the file viewer uses.
+
+Pressing outside closes the editor without asking, which is only reasonable
+because nothing is thrown away: the words are kept and put back the next time
+it opens. `npm test` checks the formatting helpers, which are pure functions
+over a text selection for exactly that reason.
+
 ### Reading DWG drawings
 
 AutoCAD's DWG is a closed binary format with no browser support, so the drive

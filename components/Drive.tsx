@@ -140,6 +140,12 @@ export default function Drive({
   const uploadTarget = useRef<string[]>([]);
   /** The folder a note is being written into, or null when the editor is shut. */
   const [noteIn, setNoteIn] = useState<string[] | null>(null);
+  /**
+   * What was in the editor when it was last dismissed. Pressing outside closes
+   * it without asking, which is only reasonable because the words are kept
+   * here and put back the next time it opens.
+   */
+  const [noteDraft, setNoteDraft] = useState<{ name: string; text: string } | null>(null);
   // enter() builds hrefs from the tree; a ref keeps it from re-creating on
   // every data change and re-triggering effects that depend on it.
   const treeRef = useRef<TreeNode[]>([]);
@@ -553,6 +559,7 @@ export default function Drive({
       }
 
       setNoteIn(null);
+      setNoteDraft(null);
       await refresh();
     },
     [noteIn, storeBlob, refresh]
@@ -2512,7 +2519,14 @@ export default function Drive({
             ? (findNode(data.tree, noteIn[noteIn.length - 1])?.files ?? [])
             : data.rootFiles
           ).map((f) => f.name)}
-          onCancel={() => setNoteIn(null)}
+          initialName={noteDraft?.name ?? ""}
+          initialText={noteDraft?.text ?? ""}
+          onCancel={(draft) => {
+            // Keep it only if there is something to keep, so an editor opened
+            // and shut again does not resurrect itself half-filled forever.
+            setNoteDraft(draft.text.trim() || draft.name.trim() ? draft : null);
+            setNoteIn(null);
+          }}
           onSave={saveNote}
         />
       )}

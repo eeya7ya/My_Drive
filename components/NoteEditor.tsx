@@ -71,6 +71,131 @@ export function noteContentType(name: string): string {
   return TYPES[ext] ?? "text/plain; charset=utf-8";
 }
 
+/* ── formatting ────────────────────────────────────────────────────────────
+   A note is Markdown, so these write Markdown rather than hiding it. What is
+   stored stays something a person would have typed and can read in any editor,
+   while nobody has to learn the syntax to make a heading.
+
+   They are pure functions over (text, selection) on purpose: this is fiddly
+   string surgery where an off-by-one moves someone's caret into the middle of
+   a word, and pure functions can be checked without a browser.
+
+   Everything toggles. A button that only ever adds is one you cannot undo
+   without reaching for the keyboard.
+   ──────────────────────────────────────────────────────────────────────── */
+
+export interface Edit {
+  text: string;
+  start: number;
+  end: number;
+}
+
+/** Bold, italic, inline code: a marker on both sides of the selection. */
+export function applyWrap(
+  text: string,
+  start: number,
+  end: number,
+  marker: string,
+  placeholder: string
+): Edit {
+  const chosen = text.slice(start, end);
+  const width = marker.length;
+
+  // Already wrapped inside the selection.
+  if (chosen.length >= width * 2 && chosen.startsWith(marker) && chosen.endsWith(marker)) {
+    const inner = chosen.slice(width, -width);
+    return { text: text.slice(0, start) + inner + text.slice(end), start, end: start + inner.length };
+  }
+  // Already wrapped just outside it, which is what a double-click on a bold
+  // word selects.
+  if (start >= width && text.slice(start - width, start) === marker && text.slice(end, end + width) === marker) {
+    return {
+      text: text.slice(0, start - width) + chosen + text.slice(end + width),
+      start: start - width,
+      end: end - width,
+    };
+  }
+
+  const body = chosen || placeholder;
+  return {
+    text: text.slice(0, start) + marker + body + marker + text.slice(end),
+    start: start + width,
+    end: start + width + body.length,
+  };
+}
+
+/**
+ * Headings, bullets, numbers and quotes are line-level, so they apply to every
+ * line the selection touches — including the one the caret merely sits on,
+ * which is what lets the buttons work without selecting anything first.
+ *
+ * `strip` is what the action removes and `has` is what counts as already
+ * applied. They differ for headings: pressing Subheading on a heading should
+ * change its level, not clear it, so it strips any heading but only toggles
+ * off when the line is already at that same level.
+ */
+export function applyPrefix(
+  text: string,
+  start: number,
+  end: number,
+  make: (index: number) => string,
+  strip: RegExp,
+  has: RegExp = strip
+): Edit {
+  const from = text.lastIndexOf("\n", start - 1) + 1;
+  const nextBreak = text.indexOf("\n", end);
+  const to = nextBreak === -1 ? text.length : nextBreak;
+
+  const lines = text.slice(from, to).split("\n");
+  const allMarked = lines.every((line) => has.test(line));
+  const rewritten = lines
+    .map((line, i) => {
+      const bare = line.replace(strip, "");
+      return allMarked ? bare : make(i) + bare;
+    })
+    .join("\n");
+
+  return {
+    text: text.slice(0, from) + rewritten + text.slice(to),
+    start: from,
+    end: from + rewritten.length,
+  };
+}
+
+export function applyHeading(text: string, start: number, end: number, level: number): Edit {
+  return applyPrefix(
+    text,
+    start,
+    end,
+    () => "#".repeat(level) + " ",
+    /^#{1,6}\s+/,
+    new RegExp(`^#{${level}}\\s+`)
+  );
+}
+
+export function applyBullets(text: string, start: number, end: number): Edit {
+  return applyPrefix(text, start, end, () => "- ", /^\s*[-*+]\s+/);
+}
+
+export function applyNumbers(text: string, start: number, end: number): Edit {
+  return applyPrefix(text, start, end, (i) => `${i + 1}. `, /^\s*\d+\.\s+/);
+}
+
+export function applyQuote(text: string, start: number, end: number): Edit {
+  return applyPrefix(text, start, end, () => "> ", /^\s*>\s?/);
+}
+
+/** A link keeps the selected words as the label and leaves the caret on "url". */
+export function applyLink(text: string, start: number, end: number): Edit {
+  const label = text.slice(start, end) || "text";
+  const at = start + label.length + 3;
+  return {
+    text: text.slice(0, start) + `[${label}](url)` + text.slice(end),
+    start: at,
+    end: at + 3,
+  };
+}
+
 export default function NoteEditor({
   folderName,
   existingNames = [],
@@ -90,7 +215,8 @@ export default function NoteEditor({
   existingNames?: string[];
   initialName?: string;
   initialText?: string;
-  onCancel: () => void;
+  /** Closing hands back what was typed, so the drive can keep it as a draft. */
+  onCancel: (draft: { name: string; text: string }) => void;
   /** Resolves when the note is stored; throws with a message worth showing. */
   onSave: (name: string, text: string) => Promise<void>;
 }) {
@@ -100,21 +226,60 @@ export default function NoteEditor({
   const [error, setError] = useState<string | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const form = useRef<HTMLFormElement>(null);
+  const [mode, setMode] = useState<"write" | "preview">("write");
+  const [preview, setPreview] = useState("");
+  /**
+   * Where the caret should end up after a formatting button rewrites the text.
+   * React re-renders between the two, so the selection has to be reapplied
+   * afterwards or every button press would drop the cursor to the end.
+   */
+  const pending = useRef<[number, number] | null>(null);
 
-  const dirty = text !== initialText || name.trim() !== initialName.trim();
+  // Any words not yet stored are worth guarding, including ones restored from
+  // a draft the author dismissed a moment ago.
+  const dirty = Boolean(text.trim()) || name.trim() !== initialName.trim();
   const empty = !text.trim();
   const finalName = noteFileName(name);
 
-  // Editing an existing note is expected to replace it; only a collision the
-  // author has not already been told about is worth flagging.
-  const collides =
-    finalName !== initialName && existingNames.some((n) => n === finalName);
+  // initialName is a restored draft, never an existing note being edited — the
+  // drive has no edit-in-place flow — so a name matching a file in the folder
+  // is always a collision worth naming, however it got into the field.
+  const collides = existingNames.some((n) => n === finalName);
 
   // The name has a sensible default and the text does not, so the cursor
   // belongs in the part that is actually blank.
   useEffect(() => {
     area.current?.focus();
   }, []);
+
+  useEffect(() => {
+    const want = pending.current;
+    if (!want || !area.current) return;
+    pending.current = null;
+    area.current.focus();
+    area.current.setSelectionRange(want[0], want[1]);
+  }, [text]);
+
+  /**
+   * The preview renders the Markdown the buttons write, so the formatting is
+   * something you can see rather than syntax you have to picture. marked and
+   * DOMPurify are loaded on demand — the same pair the file viewer uses, and
+   * not worth carrying for a note nobody previews.
+   */
+  useEffect(() => {
+    if (mode !== "preview") return;
+    let stale = false;
+    (async () => {
+      const [{ marked }, mod] = await Promise.all([import("marked"), import("dompurify")]);
+      const html = await marked.parse(text || "*Nothing written yet.*", { async: true });
+      if (!stale) setPreview(mod.default.sanitize(html));
+    })().catch(() => {
+      if (!stale) setPreview("");
+    });
+    return () => {
+      stale = true;
+    };
+  }, [mode, text]);
 
   /**
    * The browser's own ways of leaving take the note with them — a reload, a
@@ -167,8 +332,7 @@ export default function NoteEditor({
 
   function attemptCancel() {
     if (busy) return;
-    if (dirty && !window.confirm("Discard this note? It has not been saved.")) return;
-    onCancel();
+    onCancel({ name, text });
   }
 
   async function submit(ev?: React.FormEvent) {
@@ -184,14 +348,44 @@ export default function NoteEditor({
     }
   }
 
+  /* ── formatting ──────────────────────────────────────────────────────────
+     A note is Markdown, so these buttons write Markdown rather than hiding it.
+     That keeps the file honest — what is stored is what a person would have
+     typed, readable in any editor — while sparing anyone who does not know the
+     syntax from having to learn it to make a heading.
+
+     Every action toggles: pressing Bold on bold text unbolds it, and pressing
+     Bullets on a list flattens it, because a button that only ever adds is a
+     button you cannot undo without reaching for the keyboard.
+     ─────────────────────────────────────────────────────────────────────── */
+
+  /** Replace the current selection, and say where the caret should land. */
+  function apply(result: { text: string; start: number; end: number }) {
+    pending.current = [result.start, result.end];
+    setText(result.text);
+  }
+
+  function at(fn: (text: string, start: number, end: number) => { text: string; start: number; end: number }) {
+    const el = area.current;
+    if (!el) return;
+    apply(fn(text, el.selectionStart, el.selectionEnd));
+  }
+
   /**
    * Ctrl/Cmd-Enter saves from inside the textarea, where Enter has to keep
    * meaning a new line.
    */
   function onAreaKey(ev: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
+    if (!(ev.metaKey || ev.ctrlKey)) return;
+    if (ev.key === "Enter") {
       ev.preventDefault();
       submit();
+    } else if (ev.key.toLowerCase() === "b") {
+      ev.preventDefault();
+      at((t, a, b) => applyWrap(t, a, b, "**", "bold text"));
+    } else if (ev.key.toLowerCase() === "i") {
+      ev.preventDefault();
+      at((t, a, b) => applyWrap(t, a, b, "*", "italic text"));
     }
   }
 
@@ -210,7 +404,10 @@ export default function NoteEditor({
         overflowY: "auto",
       }}
       onMouseDown={(ev) => {
-        if (ev.target === ev.currentTarget) attemptCancel();
+        // Pressing outside closes it, without asking. Nothing is lost by that:
+        // the text goes back to the drive as a draft and is waiting in the
+        // editor next time it is opened.
+        if (ev.target === ev.currentTarget && !busy) onCancel({ name, text });
       }}
     >
       <form
@@ -229,7 +426,7 @@ export default function NoteEditor({
         onKeyDown={onFormKeyDown}
         role="dialog"
         aria-modal="true"
-        aria-label={initialName ? `Edit ${initialName}` : "New note"}
+        aria-label="New note"
       >
         <span className="corner tl" />
         <span className="corner tr" />
@@ -237,7 +434,7 @@ export default function NoteEditor({
         <span className="corner br" />
 
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <div className="dialog-title">{initialName ? "Edit note" : "New note"}</div>
+          <div className="dialog-title">New note</div>
           <div
             style={{
               fontSize: 12,
@@ -283,7 +480,110 @@ export default function NoteEditor({
         </div>
 
         <div className="field" style={{ display: "flex", flexDirection: "column" }}>
-          <label htmlFor="note-text">Text</label>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              marginBottom: 5,
+              flexWrap: "wrap",
+            }}
+          >
+            <label htmlFor="note-text" style={{ marginBottom: 0 }}>
+              Text
+            </label>
+            <div className="seg" role="group" aria-label="Write or preview">
+              {(["write", "preview"] as const).map((m) => (
+                <label key={m} className="seg-opt">
+                  <input
+                    type="radio"
+                    name="note-mode"
+                    checked={mode === m}
+                    onChange={() => setMode(m)}
+                  />
+                  {m === "write" ? "Write" : "Preview"}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {mode === "write" && (
+            <div
+              role="toolbar"
+              aria-label="Formatting"
+              aria-controls="note-text"
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 3,
+                padding: 4,
+                marginBottom: -1,
+                border: "1px solid var(--color-divider)",
+                background: "var(--color-bg)",
+              }}
+            >
+              <Tool label="Heading" hint="Heading" onClick={() => at((t, a, b) => applyHeading(t, a, b, 1))}>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>H1</span>
+              </Tool>
+              <Tool label="Subheading" hint="Subheading" onClick={() => at((t, a, b) => applyHeading(t, a, b, 2))}>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>H2</span>
+              </Tool>
+              <Tool label="Small heading" hint="Small heading" onClick={() => at((t, a, b) => applyHeading(t, a, b, 3))}>
+                <span style={{ fontSize: 11, fontWeight: 700 }}>H3</span>
+              </Tool>
+              <Divider />
+              <Tool label="Bold" hint="Bold (Ctrl/⌘ B)" onClick={() => at((t, a, b) => applyWrap(t, a, b, "**", "bold text"))}>
+                <span style={{ fontWeight: 700 }}>B</span>
+              </Tool>
+              <Tool label="Italic" hint="Italic (Ctrl/⌘ I)" onClick={() => at((t, a, b) => applyWrap(t, a, b, "*", "italic text"))}>
+                <span style={{ fontStyle: "italic", fontFamily: "serif" }}>I</span>
+              </Tool>
+              <Tool label="Code" hint="Code" onClick={() => at((t, a, b) => applyWrap(t, a, b, "`", "code"))}>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{"<>"}</span>
+              </Tool>
+              <Divider />
+              <Tool
+                label="Bulleted list"
+                hint="Bulleted list"
+                onClick={() => at(applyBullets)}
+              >
+                <Icon name="list" size={15} />
+              </Tool>
+              <Tool
+                label="Numbered list"
+                hint="Numbered list"
+                onClick={() => at(applyNumbers)}
+              >
+                <span style={{ fontSize: 12, fontWeight: 600 }}>1.</span>
+              </Tool>
+              <Tool
+                label="Quote"
+                hint="Quote"
+                onClick={() => at(applyQuote)}
+              >
+                <span style={{ fontSize: 15, fontWeight: 700 }}>&rdquo;</span>
+              </Tool>
+              <Tool label="Link" hint="Link" onClick={() => at(applyLink)}>
+                <Icon name="link" size={15} />
+              </Tool>
+            </div>
+          )}
+
+          {mode === "preview" ? (
+            <div
+              className="dc-doc"
+              style={{
+                minHeight: 260,
+                maxHeight: "45vh",
+                overflow: "auto",
+                padding: "14px 16px",
+                border: "1px solid var(--color-divider)",
+                background: "var(--color-bg)",
+              }}
+              dangerouslySetInnerHTML={{ __html: preview }}
+            />
+          ) : (
           <textarea
             id="note-text"
             ref={area}
@@ -304,6 +604,7 @@ export default function NoteEditor({
               lineHeight: 1.6,
             }}
           />
+          )}
         </div>
 
         {error && (
@@ -341,5 +642,62 @@ export default function NoteEditor({
         </div>
       </form>
     </div>
+  );
+}
+
+/**
+ * One formatting button.
+ *
+ * type="button" is load-bearing: inside a form a bare button submits, so
+ * without it every one of these would save the note instead of formatting it.
+ * onMouseDown rather than onClick, preventing the default, so the textarea
+ * never loses its selection to the button taking focus — which is the whole
+ * input these actions work from.
+ */
+function Tool({
+  label,
+  hint,
+  onClick,
+  children,
+}: {
+  label: string;
+  hint: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className="btn btn-secondary"
+      aria-label={label}
+      title={hint}
+      onMouseDown={(ev) => {
+        ev.preventDefault();
+        onClick();
+      }}
+      style={{
+        minWidth: 32,
+        height: 28,
+        padding: "0 7px",
+        borderColor: "transparent",
+        lineHeight: 1,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Divider() {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 1,
+        alignSelf: "stretch",
+        margin: "2px 3px",
+        background: "var(--color-divider)",
+      }}
+    />
   );
 }
