@@ -1,6 +1,6 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import Drive from "@/components/Drive";
 import UnlockForm from "@/components/UnlockForm";
 import { SITE } from "@/lib/brand";
@@ -56,9 +56,10 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { drive } = await params;
   const hit = await resolve(drive);
 
-  // A retired slug is about to be redirected, and a segment that matches
-  // nothing is about to 404; neither is worth naming.
-  if (!hit || !hit.canonical) return { title: SITE.title };
+  // A slug about to be redirected — retired, or merely spelled differently —
+  // and a segment about to 404 are both on their way somewhere else; neither
+  // is worth naming.
+  if (!hit || !hit.canonical || drive !== hit.brand.slug) return { title: SITE.title };
 
   const brand = hit.brand;
 
@@ -87,7 +88,14 @@ export default async function DrivePage({ params }: { params: Params }) {
   const hit = await resolve(drive);
 
   if (hit) {
-    if (!hit.canonical) permanentRedirect(hit.brand.basePath + rest);
+    // Anything but the drive's exact slug is redirected to it, retired slugs
+    // and mere differences of case alike. Serving /ADVEC as if it were /advec
+    // would give the drive two addresses, and the deep links under it would
+    // break anyway: the client strips the base path with a case-sensitive
+    // compare, so nothing would match and a valid link would look stale.
+    if (!hit.canonical || drive !== hit.brand.slug) {
+      permanentRedirect(hit.brand.basePath + rest);
+    }
 
     // The gate is the whole page. Rendering the drive behind a dialog would
     // have already put the folder names in the HTML.
@@ -101,12 +109,20 @@ export default async function DrivePage({ params }: { params: Params }) {
   // No drive answers here. It may still be a link from when one of them was
   // served at the site root — /literature/papers/x.pdf — in which case the
   // first segment names one of that drive's own top-level entries.
+  // Gated like the drive itself: the answer here is drawn from that drive's
+  // folder names, so without the check a stranger could tell a real name from
+  // an invented one by the status code alone — which is exactly what the
+  // passcode is meant to withhold.
   const legacy = await legacyRootDrive();
-  if (legacy) {
+  if (legacy && (await canOpenDrive(legacy))) {
     const wanted = slugify(drive);
     const names = await rootEntryNames(legacy.key);
     if (names.some((name) => slugify(name) === wanted)) {
-      permanentRedirect(`${legacy.basePath}/${encodeURIComponent(drive)}${rest}`);
+      // Temporary, unlike the retired-slug redirect above: that one is backed
+      // by drive_slugs, which stops the address being reused, while this one
+      // rests on a folder name that can be renamed or later claimed by a new
+      // drive's slug. A browser that cached a 308 would never ask again.
+      redirect(`${legacy.basePath}/${encodeURIComponent(drive)}${rest}`);
     }
   }
 

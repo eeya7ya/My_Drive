@@ -14,13 +14,29 @@ export const dynamic = "force-dynamic";
  * is deliberately not named here — otherwise a guessed `?next=/something` would
  * turn the sign-in page into a way of asking whether a private drive exists.
  */
+/**
+ * Where the form is allowed to send the browser afterwards: somewhere on this
+ * site, and nowhere else.
+ *
+ * Checking only for a leading "/" is not enough. A second slash makes it a
+ * protocol-relative URL, and a backslash is folded to a slash by the URL
+ * parser browsers use — so a next of /\evil.example reads as this site here
+ * and as another origin in the browser, which would hand the admin over the
+ * instant the password was accepted.
+ */
+function safeNext(next: unknown): string {
+  if (typeof next !== "string" || !next.startsWith("/")) return "/";
+  if (next[1] === "/" || next[1] === "\\") return "/";
+  return next;
+}
+
 export default async function AdminLoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  const target = typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  const target = safeNext(next);
 
   const first = target.split("/").filter(Boolean)[0];
   const hit = first ? await resolveDriveSlug(decodeURIComponent(first)) : null;

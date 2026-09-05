@@ -429,16 +429,30 @@ export async function updateDrive(
 
   if (passcodeHash !== undefined) push("passcode_hash", passcodeHash);
 
-  if (patch.visibility !== undefined) {
-    const visibility: DriveVisibility = patch.visibility === "private" ? "private" : "public";
-    // Closing a drive with no passcode would shut out everyone including the
-    // people it is being closed for.
-    if (visibility === "private") {
-      const willHave = passcodeHash !== undefined ? passcodeHash : await passcodeHashFor(key);
-      if (!willHave) badRequest("Set a passcode before making this drive private.");
+  // A drive left private with no passcode is shut to everyone, the people it
+  // was closed for included. Judge the state the write would leave behind
+  // rather than the field that happens to be in this request: clearing the
+  // passcode of a drive that stays private is the same mistake as closing a
+  // drive that has none.
+  const nextVisibility: DriveVisibility =
+    patch.visibility === undefined
+      ? current.visibility
+      : patch.visibility === "private"
+        ? "private"
+        : "public";
+
+  if (nextVisibility === "private") {
+    const willHave = passcodeHash !== undefined ? passcodeHash : await passcodeHashFor(key);
+    if (!willHave) {
+      badRequest(
+        patch.visibility === undefined
+          ? "Removing the passcode would shut this private drive to everyone. Make it public first, or set a new passcode."
+          : "Set a passcode before making this drive private."
+      );
     }
-    push("visibility", visibility);
   }
+
+  if (patch.visibility !== undefined) push("visibility", nextVisibility);
 
   if (!sets.length) return current;
 

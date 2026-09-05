@@ -140,8 +140,8 @@ export function isAuthConfigured(): boolean {
 
 /**
  * One cookie per drive, named after the drive's permanent key. Separate
- * cookies rather than one list keeps the drives independent: revoking a
- * passcode invalidates that drive's token and touches nothing else.
+ * cookies rather than one list keeps the drives independent: revoking one
+ * drive's passcode touches no other drive's passes.
  */
 function driveCookieName(key: DriveKey): string {
   return `drive_pass_${key.replace(/[^a-z0-9_-]/gi, "_")}`;
@@ -156,10 +156,19 @@ export async function hashPasscode(passcode: string): Promise<string> {
   return hmac(`passcode:${passcode}`);
 }
 
-/** Mint the pass that opens one drive. */
+/**
+ * Mint the pass that opens one drive.
+ *
+ * The passcode's own hash is inside what gets signed, so a pass is only valid
+ * against the passcode it was issued for. Changing or clearing a drive's
+ * passcode therefore invalidates every pass already handed out — which is what
+ * an admin means by revoking one, and would not happen if the signature
+ * covered only the key and the expiry.
+ */
 export async function createDriveSession(key: DriveKey): Promise<void> {
   const expires = Date.now() + DRIVE_MAX_AGE_SECONDS * 1000;
-  const payload = `${key}.${expires}`;
+  const secretOfDrive = (await passcodeHashFor(key)) ?? "";
+  const payload = `${key}.${secretOfDrive}.${expires}`;
   const token = `${expires}.${await hmac(payload)}`;
 
   (await cookies()).set(driveCookieName(key), token, {
@@ -195,8 +204,10 @@ async function hasDrivePass(key: DriveKey): Promise<boolean> {
     const sig = token.slice(idx + 1);
 
     // The drive key is inside the signed payload, so a pass for one drive
-    // cannot be replayed against another by renaming the cookie.
-    if (!safeEqual(sig, await hmac(`${key}.${stamp}`))) return false;
+    // cannot be replayed against another by renaming the cookie; the passcode
+    // hash is in there too, so a rotated passcode retires the old passes.
+    const secretOfDrive = (await passcodeHashFor(key)) ?? "";
+    if (!safeEqual(sig, await hmac(`${key}.${secretOfDrive}.${stamp}`))) return false;
 
     const expires = Number(stamp);
     return Number.isFinite(expires) && Date.now() < expires;
