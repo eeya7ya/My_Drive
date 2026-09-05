@@ -63,12 +63,23 @@ console then reports *"The request is malformed: Requests without any query are
 not supported"* — it received one long comment and no SQL. The `.console.sql`
 files carry no comments, so they survive being flattened.
 
+Every migration has one too, for the same reason.
+
 Regenerate them with:
 
 ```bash
-sed -e 's/--.*$//' schema.sql | grep -v '^[[:space:]]*$' > schema.console.sql
-sed -e 's/--.*$//' seed.sql   | grep -v '^[[:space:]]*$' > seed.console.sql
+for f in schema.sql seed.sql seed.espark.sql migrations/*.sql; do
+  case "$f" in *.console.sql) continue;; esac
+  sed -e 's/--.*$//' "$f" | grep -v '^[[:space:]]*$' > "${f%.sql}.console.sql"
+done
 ```
+
+The `sed` matters more than it looks: it strips a `--` anywhere on a line, not
+only at the start. A comment indented inside a `CREATE TABLE` is the easy one to
+miss, and once the paste is flattened it swallows the rest of the statement —
+the console then says *"incomplete input: SQLITE_ERROR"* rather than complaining
+about a comment. After regenerating, `grep -n -- "--" *.console.sql
+migrations/*.console.sql` should print nothing at all.
 
 **R2 CORS is required**, or browser uploads fail. In the dashboard under
 R2 → your bucket → Settings → CORS policy:
