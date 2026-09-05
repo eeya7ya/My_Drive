@@ -32,7 +32,8 @@ writeFileSync(tmp, js);
 const m = await import(pathToFileURL(tmp).href);
 try { rmSync(tmp); } catch { /* a leftover temp file is not a test failure */ }
 const { applyWrap, applyHeading, applyBullets, applyNumbers, applyQuote, applyLink, applyImage,
-        applyAttachment, noteFileName, noteContentType, extensionOf, withExtension } = m;
+        applyAttachment, noteFileName, noteContentType, extensionOf, withExtension,
+        freeFileName } = m;
 
 let pass = 0, fail = 0;
 const eq = (label, got, want) => {
@@ -75,6 +76,14 @@ eq("image gets a blank line above, not just a newline", applyImage("a\nb", 2, 2,
 eq("image after a blank line adds no more", applyImage("a\n\n", 3, 3, "s", "/u").text,
    "a\n\n![s](/u)\n");
 eq("caret lands after the image", (() => { const r = applyImage("", 0, 0, "s", "/u"); return r.start === r.text.length; })(), true);
+
+// Two screenshots off a clipboard are both called image.png; a repeated name in
+// one folder is a revision, which would bury the first under the second.
+eq("a free name is left alone", freeFileName("image.png", ["other.png"]), "image.png");
+eq("a taken name steps aside", freeFileName("image.png", ["image.png"]), "image-2.png");
+eq("it keeps stepping", freeFileName("image.png", ["image.png", "image-2.png"]), "image-3.png");
+eq("a name with no extension still works", freeFileName("scan", ["scan"]), "scan-2");
+eq("only the last dot is the extension", freeFileName("v1.2.png", ["v1.2.png"]), "v1.2-2.png");
 
 eq("a non-image attaches as an inline link", applyAttachment("see ", 4, 4, "spec.pdf", "/u").text,
    "see [spec.pdf](/u)");

@@ -40,6 +40,25 @@ export function extensionOf(name: string): string {
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
+/**
+ * A name not already used in the folder.
+ *
+ * Everything off a clipboard is called "image.png", and the store treats a
+ * repeated name in one folder as the next revision of what is there — right
+ * for a note saving over itself, wrong for a second screenshot, which would
+ * bury the first and repaint any older note pointing at that name.
+ */
+export function freeFileName(name: string, taken: Iterable<string>): string {
+  const used = new Set(taken);
+  if (!used.has(name)) return name;
+  const dot = name.lastIndexOf(".");
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  let n = 2;
+  while (used.has(`${base}-${n}${ext}`)) n++;
+  return `${base}-${n}${ext}`;
+}
+
 /** Swap a name's extension, keeping everything before it. */
 export function withExtension(name: string, ext: string): string {
   const dot = name.lastIndexOf(".");
@@ -260,6 +279,7 @@ export default function NoteEditor({
   folderName,
   existingNames = [],
   editing = false,
+  currentName = null,
   initialName = "",
   initialText = "",
   onCancel,
@@ -277,6 +297,13 @@ export default function NoteEditor({
   existingNames?: string[];
   /** True when an existing note is open, rather than a new one being written. */
   editing?: boolean;
+  /**
+   * The name the open note actually has, which is not always what the field
+   * started with — a restored draft can start it on a different name, and
+   * judging collisions by that would silence the warning exactly when the save
+   * is about to land on someone else's note.
+   */
+  currentName?: string | null;
   initialName?: string;
   initialText?: string;
   /** Closing hands back what was typed, so the drive can keep it as a draft. */
@@ -325,7 +352,7 @@ export default function NoteEditor({
 
   // Saving an edit back over its own name is the point, not a collision. Any
   // other match still is, including renaming an edit onto a neighbour.
-  const collides = finalName !== initialName && existingNames.some((n) => n === finalName);
+  const collides = finalName !== currentName && existingNames.some((n) => n === finalName);
 
   // The name has a sensible default and the text does not, so the cursor
   // belongs in the part that is actually blank.
@@ -429,7 +456,9 @@ export default function NoteEditor({
 
   async function submit(ev?: React.FormEvent) {
     ev?.preventDefault();
-    if (busy || empty) return;
+    // Saving mid-upload would store the note without the reference and leave
+    // the uploaded file in the folder with nothing pointing at it.
+    if (busy || empty || placing) return;
     setBusy(true);
     setError(null);
     try {
@@ -486,15 +515,24 @@ export default function NoteEditor({
     setError(null);
     try {
       const { name, url } = await onInsertImage(file);
-      const el = area.current;
-      const start = el ? el.selectionStart : text.length;
-      const end = el ? el.selectionEnd : text.length;
       const isImage = file.type.startsWith("image/") || kindFor(file.name) === "image";
-      apply(
-        isImage
-          ? applyImage(text, start, end, name, url)
-          : applyAttachment(text, start, end, file.name, url)
-      );
+
+      // Read the caret now, and write against whatever the note says now — not
+      // against the copy this function closed over before the upload. An
+      // upload takes long enough to type a sentence into, and inserting into
+      // the stale copy would delete it.
+      const el = area.current;
+      const caret = el ? el.selectionStart : Number.MAX_SAFE_INTEGER;
+      const caretEnd = el ? el.selectionEnd : Number.MAX_SAFE_INTEGER;
+      setText((prev) => {
+        const start = Math.min(caret, prev.length);
+        const end = Math.min(caretEnd, prev.length);
+        const result = isImage
+          ? applyImage(prev, start, end, name, url)
+          : applyAttachment(prev, start, end, file.name, url);
+        pending.current = [result.start, result.end];
+        return result.text;
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "The file could not be added.");
     } finally {
@@ -848,7 +886,11 @@ export default function NoteEditor({
             >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={busy || empty}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={busy || empty || Boolean(placing)}
+            >
               <Icon name="file" size={14} />
               {busy ? "Saving…" : editing ? "Save revision" : "Save note"}
             </button>
