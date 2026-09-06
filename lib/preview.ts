@@ -75,6 +75,18 @@ export function kindFor(name: string, contentType?: string): PreviewKind {
   return "none";
 }
 
+/**
+ * A file the app can read as words: a note, or anything else stored as text.
+ *
+ * The note editor opens exactly these, and the PDF report gathers exactly
+ * these, so the two agree on what "a note" means without either having to
+ * repeat the list.
+ */
+export function isNoteFile(name: string): boolean {
+  const kind = kindFor(name);
+  return kind === "markdown" || kind === "text";
+}
+
 /** Media streams from R2; everything parsed in JS is proxied same-origin. */
 export function isMediaKind(kind: PreviewKind): boolean {
   return kind === "image" || kind === "video" || kind === "audio" || kind === "pdf";

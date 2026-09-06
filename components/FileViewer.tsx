@@ -25,6 +25,12 @@ interface Props {
   versionLabel?: string | null;
   onClose: () => void;
   onDownload: () => void;
+  /**
+   * Save this file as a PDF. Passed only for what the app can lay out as a
+   * document — a note — so the button is absent rather than disabled for the
+   * files it would mean nothing for.
+   */
+  onPdf?: () => void;
 }
 
 export default function FileViewer({
@@ -33,6 +39,7 @@ export default function FileViewer({
   versionLabel,
   onClose,
   onDownload,
+  onPdf,
 }: Props) {
   const kind: PreviewKind = kindFor(file.name);
   const [html, setHtml] = useState<string | null>(null);
@@ -325,6 +332,16 @@ export default function FileViewer({
           <span className="tag tag-accent dc-viewer-rev" style={{ fontSize: 10 }}>
             {versionLabel ?? `REV ${file.version}`}
           </span>
+          {onPdf && (
+            <button
+              className="btn btn-secondary"
+              onClick={onPdf}
+              title="Save this note as a PDF"
+            >
+              <Icon name="book" size={14} />
+              PDF
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={onDownload}>
             <Icon name="download" size={14} />
             Download
