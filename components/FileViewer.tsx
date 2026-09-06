@@ -325,6 +325,25 @@ export default function FileViewer({
           <span className="tag tag-accent dc-viewer-rev" style={{ fontSize: 10 }}>
             {versionLabel ?? `REV ${file.version}`}
           </span>
+          {/* A note is the one thing here the app can lay out as a document,
+              and the viewer is where someone reading it decides they want a
+              copy — the context menu is not where they will look. */}
+          {(kind === "markdown" || kind === "text") && (
+            <button
+              className="btn btn-secondary"
+              onClick={() =>
+                window.open(
+                  `/print/${file.id}${versionId ? `?version=${encodeURIComponent(versionId)}` : ""}`,
+                  "_blank",
+                  "noopener"
+                )
+              }
+              title="Open it laid out for paper, then choose Save as PDF"
+            >
+              <Icon name="file" size={14} />
+              Save as PDF
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={onDownload}>
             <Icon name="download" size={14} />
             Download

@@ -2287,6 +2287,19 @@ export default function Drive({
                         <Icon name="edit" size={15} />
                       </button>
                     )}
+                    {isEditableNote(d.file.name) && (
+                      <button
+                        className="dc-file-btn"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          window.open(`/print/${d.file.id}`, "_blank", "noopener");
+                        }}
+                        title="Save as PDF"
+                        aria-label={`Save ${d.file.name} as PDF`}
+                      >
+                        <Icon name="file" size={15} />
+                      </button>
+                    )}
                     <button
                       className="dc-file-btn dc-file-open"
                       onClick={(ev) => {
