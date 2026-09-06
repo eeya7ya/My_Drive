@@ -33,7 +33,7 @@ const m = await import(pathToFileURL(tmp).href);
 try { rmSync(tmp); } catch { /* a leftover temp file is not a test failure */ }
 const { applyWrap, applyHeading, applyBullets, applyNumbers, applyQuote, applyLink, applyImage,
         applyAttachment, noteFileName, noteContentType, extensionOf, withExtension,
-        freeFileName } = m;
+        freeFileName, applyEmbeddedImage } = m;
 
 let pass = 0, fail = 0;
 const eq = (label, got, want) => {
@@ -84,6 +84,16 @@ eq("a taken name steps aside", freeFileName("image.png", ["image.png"]), "image-
 eq("it keeps stepping", freeFileName("image.png", ["image.png", "image-2.png"]), "image-3.png");
 eq("a name with no extension still works", freeFileName("scan", ["scan"]), "scan-2");
 eq("only the last dot is the extension", freeFileName("v1.2.png", ["v1.2.png"]), "v1.2-2.png");
+
+// An embedded picture keeps its bytes at the foot of the note, so the text
+// stays readable in the editor.
+let em = applyEmbeddedImage("intro", 5, 5, "shot", "data:image/png;base64,AAA");
+eq("embed references, not inlines", em.text,
+   "intro\n\n![shot][img-1]\n\n[img-1]: data:image/png;base64,AAA\n");
+eq("embed caret sits after the picture", em.text.slice(0, em.start).endsWith("![shot][img-1]\n"), true);
+em = applyEmbeddedImage("a\n\n![x][img-1]\n\n[img-1]: data:1\n", 1, 1, "y", "data:2");
+eq("a second embed numbers past the first", em.text.includes("[img-2]: data:2"), true);
+eq("a second embed keeps the first", em.text.includes("[img-1]: data:1"), true);
 
 eq("a non-image attaches as an inline link", applyAttachment("see ", 4, 4, "spec.pdf", "/u").text,
    "see [spec.pdf](/u)");

@@ -302,3 +302,92 @@ html, body { height: 100%; }
   .dc-hint-mouse { display: none; }
   .dc-hint-touch { display: inline; }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Paper.
+
+   The print route is the only page in the app designed to leave the screen, so
+   these rules are about a sheet rather than a viewport: black on white whatever
+   theme the reader was in, a measure that suits a page instead of a monitor,
+   and breaks that fall between things rather than through them.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.print-page { min-height: 100vh; background: var(--color-bg); }
+
+.print-bar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 13px;
+}
+
+.print-sheet {
+  max-width: 190mm;
+  margin: 24px auto;
+  padding: 18mm 16mm;
+  background: #ffffff;
+  color: #16181a;
+  box-shadow: var(--shadow-md);
+}
+
+.print-head { border-bottom: 1px solid #d8d5d2; padding-bottom: 10px; margin-bottom: 22px; }
+.print-title { font-family: var(--font-heading); font-weight: 700; font-size: 26px; line-height: 1.15; }
+.print-meta {
+  font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: #6c6a68; margin-top: 6px;
+}
+
+/* On the sheet the note is always dark-on-light, whichever theme the drive was
+   showing when the reader asked for it. */
+.print-sheet .dc-doc { color: #16181a; font-size: 11.5pt; line-height: 1.6; }
+.print-sheet .dc-doc a { color: #3B5C6B; }
+.print-sheet .dc-doc img { max-width: 100%; height: auto; }
+.print-sheet .dc-doc pre,
+.print-sheet .dc-doc code { font-family: var(--font-mono); font-size: 10pt; }
+.print-sheet .dc-doc pre {
+  white-space: pre-wrap; word-break: break-word;
+  background: #f4f2f0; border: 1px solid #e2dfdc; padding: 10px 12px;
+}
+.print-sheet .dc-doc table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+.print-sheet .dc-doc th, .print-sheet .dc-doc td { border: 1px solid #d8d5d2; padding: 5px 8px; text-align: left; }
+.print-sheet .dc-doc blockquote {
+  margin: 0 0 1em; padding-left: 12px; border-left: 3px solid #cfccc9; color: #45433f;
+}
+
+@page { size: A4; margin: 16mm; }
+
+@media print {
+  /* Everything that is furniture rather than the note. */
+  .print-bar { display: none !important; }
+
+  html, body, .print-page { background: #ffffff !important; }
+  /* body carries min-height:100svh for the screen, where it keeps the themed
+     ground under a short page. On paper that is a viewport-tall block that
+     pushes the end of the note onto a second sheet. */
+  body, .print-page { min-height: 0; }
+  .print-sheet {
+    max-width: none; margin: 0; padding: 0;
+    box-shadow: none; background: #ffffff;
+  }
+
+  /* A heading stranded at the foot of a page, or a picture split across two,
+     is the usual way a printed document goes wrong. */
+  .print-sheet .dc-doc h1,
+  .print-sheet .dc-doc h2,
+  .print-sheet .dc-doc h3 { break-after: avoid-page; break-inside: avoid; }
+  .print-sheet .dc-doc img,
+  .print-sheet .dc-doc pre,
+  .print-sheet .dc-doc blockquote,
+  .print-sheet .dc-doc tr { break-inside: avoid; }
+  .print-sheet .dc-doc img { max-height: 22cm; }
+
+  /* A link is unusable on paper unless it says where it goes — but only for
+     real addresses, since a data URI would print a page of base64. */
+  .print-sheet .dc-doc a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 9pt; color: #6c6a68; word-break: break-all;
+  }
+}

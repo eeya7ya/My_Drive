@@ -960,7 +960,16 @@ export default function Drive({
       // Editing is offered to everyone who can add to the drive, which is the
       // same audience that can upload — saving is a revision, never a deletion.
       if (isEditableNote(file.name)) {
-        items.push({ label: "Edit", icon: "edit", action: () => editNote(file) });
+        items.push(
+          { label: "Edit", icon: "edit", action: () => editNote(file) },
+          {
+            label: "Save as PDF",
+            icon: "download",
+            // Its own tab: printing takes the whole page, and the drive should
+            // still be here afterwards.
+            action: () => window.open(`/print/${file.id}`, "_blank", "noopener"),
+          }
+        );
       }
       items.push(
         { label: "Download", icon: "download", action: () => downloadFile(file) },
