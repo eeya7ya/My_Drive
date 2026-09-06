@@ -454,13 +454,40 @@ note keeps its history rather than starting a second file beside it. That is
 also why the name is left exactly as it was found: a note called `.env` is not
 quietly saved as `.env.md`.
 
-An image goes in from the toolbar or, more usefully, by pasting one — which is
-how a screenshot actually arrives. The picture is stored as an ordinary file in
-the note's folder rather than as bytes hidden inside the note, so it can be
-opened, downloaded and replaced like anything else, and the note stays a plain
-Markdown file that means the same thing in any editor. It is referenced through
-`/api/files/<id>/view` rather than a signed URL: signed URLs expire, and a note
-is meant to still work next year.
+A picture goes in from the toolbar or, more usefully, by pasting one — which is
+how a screenshot actually arrives. **It is embedded in the note itself**, as a
+data URI, so the note is one self-contained file: it carries its own pictures
+when it is downloaded, mailed or printed, and the folder around it is not
+littered with the screenshots that belong to it. The URI is written as a
+reference definition at the foot of the note rather than inline, because a
+quarter-megabyte of base64 in the middle of a sentence makes the note unreadable
+in the editor; what sits in the text is `![alt][img-1]`.
+
+Anything wider than 1600px is scaled down first — a phone hands over four
+thousand pixels for something read at seven hundred, and base64 adds a third
+again on top. A picture that would still exceed 4 MB is refused with a
+suggestion to upload it to the folder and link to it instead. Files that are not
+images cannot usefully be embedded, so those are still stored in the folder and
+linked.
+
+### Saving a note as a PDF
+
+**Save as PDF** on a note opens `/print/<id>`: the note laid out for paper, which
+then prints itself. The reader chooses "Save as PDF" as the destination, which
+every desktop and mobile browser offers.
+
+There is no PDF library here on purpose. Every browser already contains a
+typesetter that paginates, embeds fonts and writes real PDFs with selectable
+text; a JavaScript one would either rasterise the page into a blurry picture of
+itself or ship megabytes to redo what is already installed. The print stylesheet
+does the work — A4 with proper margins, dark on light whichever theme the drive
+was in, headings that do not strand themselves at the foot of a page, pictures
+and code blocks that do not split across two, and real addresses printed after
+their links. It waits for the images to decode before printing, because a PDF
+with a gap where a picture should be says nothing about what went wrong.
+
+It is its own route rather than a dialog because printing takes the whole page,
+and `print` is a reserved drive slug so it cannot be shadowed.
 
 ### Reading DWG drawings
 

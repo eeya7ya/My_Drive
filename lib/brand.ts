@@ -85,6 +85,7 @@ export const RESERVED_SLUGS = new Set([
   "api",
   "admin",
   "assets",
+  "print",
   "_next",
   "static",
   "favicon.ico",

@@ -20,6 +20,17 @@ import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { kindFor } from "@/lib/preview";
 
+/**
+ * How wide an embedded picture is allowed to be, and how large it may end up.
+ *
+ * A phone camera hands over four thousand pixels of width for something that
+ * will be read at seven hundred, and base64 adds a third again on top — so a
+ * photo pasted straight in would put several megabytes into a note that has to
+ * be loaded, edited and saved as one string. Anything wider is scaled down.
+ */
+const MAX_IMAGE_WIDTH = 1600;
+const MAX_EMBED_BYTES = 4 * 1024 * 1024;
+
 /** What a note is saved as when nothing says otherwise. The editor offers a choice. */
 const DEFAULT_EXT = "md";
 
@@ -251,6 +262,46 @@ export function applyImage(text: string, start: number, end: number, alt: string
   const inserted = `${before}![${alt}](${url})${after}`;
   const at = start + inserted.length;
   return { text: text.slice(0, start) + inserted + text.slice(end), start: at, end: at };
+}
+
+/**
+ * Embed a picture in the note itself.
+ *
+ * The bytes go in as a data URI, so the note is one self-contained file: it
+ * carries its own pictures when it is downloaded, mailed or printed, and the
+ * folder it lives in is not littered with the screenshots that belong to it.
+ *
+ * The URI is written as a reference definition at the foot of the note rather
+ * than inline, because a quarter-megabyte of base64 in the middle of a sentence
+ * makes the note unreadable in the one place it most needs to be readable —
+ * the editor. What sits in the text is `![alt][img-1]`.
+ */
+export function applyEmbeddedImage(
+  text: string,
+  start: number,
+  end: number,
+  alt: string,
+  dataUrl: string
+): Edit {
+  // Reference ids are numbered past whatever the note already uses, so an
+  // embed never captures a picture that is already there.
+  let next = 1;
+  for (const m of text.matchAll(/^\[img-(\d+)\]:/gm)) {
+    next = Math.max(next, Number(m[1]) + 1);
+  }
+  const ref = `img-${next}`;
+
+  const placed = applyImage(text, start, end, alt, "");
+  // applyImage writes `![alt]()`; the reference form replaces the empty target.
+  const inline = placed.text.replace(`![${alt}]()`, `![${alt}][${ref}]`);
+  const shift = inline.length - placed.text.length;
+
+  const separator = inline.endsWith("\n\n") ? "" : inline.endsWith("\n") ? "\n" : "\n\n";
+  return {
+    text: `${inline}${separator}[${ref}]: ${dataUrl}\n`,
+    start: placed.start + shift,
+    end: placed.end + shift,
+  };
 }
 
 /**
@@ -509,13 +560,65 @@ export default function NoteEditor({
    * anything else in the drive, and the note stays a plain Markdown file that
    * means the same thing in any editor.
    */
+  /**
+   * Shrink an oversized picture before it goes into the note, and hand back a
+   * data URI. PNG is kept as PNG so a screenshot's text stays sharp; anything
+   * else is re-encoded as JPEG, where a photograph belongs anyway.
+   */
+  async function toDataUrl(file: File): Promise<string> {
+    const original = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("The image could not be read."));
+      reader.readAsDataURL(file);
+    });
+
+    const image = await new Promise<HTMLImageElement | null>((resolve) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      // A format the browser cannot decode is embedded as it came; the note
+      // still carries it, and whatever can open it still can.
+      el.onerror = () => resolve(null);
+      el.src = original;
+    });
+    if (!image || image.width <= MAX_IMAGE_WIDTH) return original;
+
+    const scale = MAX_IMAGE_WIDTH / image.width;
+    const canvas = document.createElement("canvas");
+    canvas.width = MAX_IMAGE_WIDTH;
+    canvas.height = Math.round(image.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return original;
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const type = file.type === "image/png" ? "image/png" : "image/jpeg";
+    const shrunk = canvas.toDataURL(type, 0.85);
+    return shrunk.length < original.length ? shrunk : original;
+  }
+
   async function placeFile(file: File) {
-    if (!onInsertImage || placing) return;
+    if (placing) return;
+    const isImage = file.type.startsWith("image/") || kindFor(file.name) === "image";
+    if (!isImage && !onInsertImage) return;
+
     setPlacing(file.name);
     setError(null);
     try {
-      const { name, url } = await onInsertImage(file);
-      const isImage = file.type.startsWith("image/") || kindFor(file.name) === "image";
+      // A picture goes into the note itself and never touches the drive, which
+      // is why the folder around a note stays free of its screenshots. Anything
+      // else cannot usefully be embedded, so it is stored and linked.
+      const alt = file.name.replace(/\.[^.]+$/, "");
+      let dataUrl = "";
+      let link = { name: alt, url: "" };
+      if (isImage) {
+        dataUrl = await toDataUrl(file);
+        if (dataUrl.length > MAX_EMBED_BYTES) {
+          throw new Error(
+            "That image is too large to keep inside the note. Upload it to the folder instead and link to it."
+          );
+        }
+      } else {
+        link = await onInsertImage!(file);
+      }
 
       // Read the caret now, and write against whatever the note says now — not
       // against the copy this function closed over before the upload. An
@@ -528,8 +631,8 @@ export default function NoteEditor({
         const start = Math.min(caret, prev.length);
         const end = Math.min(caretEnd, prev.length);
         const result = isImage
-          ? applyImage(prev, start, end, name, url)
-          : applyAttachment(prev, start, end, file.name, url);
+          ? applyEmbeddedImage(prev, start, end, alt, dataUrl)
+          : applyAttachment(prev, start, end, file.name, link.url);
         pending.current = [result.start, result.end];
         return result.text;
       });
@@ -546,7 +649,6 @@ export default function NoteEditor({
    * an image; text on the clipboard is left to the textarea.
    */
   function onPaste(ev: React.ClipboardEvent<HTMLTextAreaElement>) {
-    if (!onInsertImage) return;
     const file = ev.clipboardData.files[0];
     if (!file) return;
     ev.preventDefault();
@@ -555,7 +657,6 @@ export default function NoteEditor({
 
   /** Dropping a file onto the text is the other way people expect to do this. */
   function onDrop(ev: React.DragEvent<HTMLTextAreaElement>) {
-    if (!onInsertImage) return;
     const file = ev.dataTransfer.files[0];
     if (!file) return;
     ev.preventDefault();
@@ -792,10 +893,10 @@ export default function NoteEditor({
               </Tool>
                 </>
               )}
-              {onInsertImage && (
+              {(
                 <Tool
-                  label="Attach a file"
-                  hint="Attach a file — images embed, anything else links. Paste or drop one too."
+                  label="Add a picture or a file"
+                  hint="Pictures go inside the note; anything else is stored in the folder and linked. Paste or drop one too."
                   onClick={() => picker.current?.click()}
                 >
                   <Icon name="upload" size={15} />
@@ -839,7 +940,7 @@ export default function NoteEditor({
             onPaste={onPaste}
             onDrop={onDrop}
             onDragOver={(ev) => {
-              if (onInsertImage && ev.dataTransfer.types.includes("Files")) ev.preventDefault();
+              if (ev.dataTransfer.types.includes("Files")) ev.preventDefault();
             }}
             // readOnly rather than disabled: a disabled textarea's contents
             // cannot be selected or copied, so a save that is merely slow would
