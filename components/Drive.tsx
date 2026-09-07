@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import FileViewer from "./FileViewer";
-import { kindFor } from "@/lib/preview";
+import { isNoteFile, kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
 import { hrefFor, resolveSegments, segmentsOf, slugify, stripBasePath } from "@/lib/paths";
 import { Brand, DEFAULT_BRAND } from "@/lib/brand";
@@ -36,6 +36,51 @@ function findNode(nodes: TreeNode[], id: string): TreeNode | null {
     if (hit) return hit;
   }
   return null;
+}
+
+/** How many notes sit in these folders, all the way down. */
+function countNotes(nodes: TreeNode[]): number {
+  return nodes.reduce(
+    (n, node) =>
+      n + node.files.filter((f) => isNoteFile(f.name)).length + countNotes(node.children),
+    0
+  );
+}
+
+/** The name the server chose for a download, out of its Content-Disposition. */
+function nameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      // A malformed header is not worth failing a finished download over.
+    }
+  }
+  const plain = /filename="([^"]+)"/i.exec(header);
+  return plain ? plain[1] : null;
+}
+
+/**
+ * Hand the browser a file it already has in memory.
+ *
+ * The report arrives through fetch rather than as a link so that a refusal
+ * lands in the drive's error strip instead of replacing the page with the
+ * API's JSON, which means the bytes are here and have to be given a name.
+ */
+function saveBlob(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoked on the next turn of the loop: revoking it immediately races the
+  // download on Safari, which has not read the blob yet when click() returns.
+  setTimeout(() => URL.revokeObjectURL(url), 20000);
 }
 
 /** The design's recurring micro-label: 11px, uppercase, letterspaced, accent. */
@@ -580,10 +625,7 @@ export default function Drive({
   );
 
   /** A file the note editor can open: one whose contents are text. */
-  const isEditableNote = useCallback((name: string) => {
-    const kind = kindFor(name);
-    return kind === "markdown" || kind === "text";
-  }, []);
+  const isEditableNote = useCallback((name: string) => isNoteFile(name), []);
 
   /** Which folder holds a file, as a path of ids. Empty means the drive root. */
   const folderPathOfFile = useCallback(
@@ -713,6 +755,74 @@ export default function Drive({
   const downloadFile = useCallback((file: DriveFile) => {
     window.location.href = `/api/files/${file.id}/download`;
   }, []);
+
+  /**
+   * Build a PDF of the notes in scope and save it.
+   *
+   * A report, not a printout: the server writes a real PDF and this saves it,
+   * because "Save as PDF" is a print destination some browsers bury and some
+   * mobile ones never offer at all — a report nobody can reach is not one.
+   *
+   * It goes through fetch rather than a plain link so a refusal — no notes
+   * here, a drive that has since locked — shows in the drive's own error strip
+   * instead of replacing the page with the API's JSON.
+   */
+  const downloadReport = useCallback(
+    async (
+      scope: { folder?: string | null; file?: string | null; version?: string | null },
+      label: string
+    ) => {
+      const params = new URLSearchParams({ drive: driveKey });
+      if (scope.folder) params.set("folder", scope.folder);
+      if (scope.file) params.set("file", scope.file);
+      if (scope.version) params.set("version", scope.version);
+
+      setNavOpen(false);
+      setError(null);
+      setBusy(`Building ${label}`);
+      try {
+        const res = await fetch(`/api/report?${params}`, { cache: "no-store" });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `Could not build the report (${res.status})`);
+        }
+        const blob = await res.blob();
+        saveBlob(
+          blob,
+          nameFromDisposition(res.headers.get("Content-Disposition")) ?? "Notes-Report.pdf"
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not build the report");
+      } finally {
+        setBusy(null);
+      }
+    },
+    [driveKey]
+  );
+
+  /** The report the button in this folder would build. */
+  const reportScope = useCallback(
+    (p: string[]) => ({ folder: p.length ? p[p.length - 1] : null }),
+    []
+  );
+
+  /**
+   * How many notes the report would gather from here down. Counted on the tree
+   * already in memory, so it costs nothing — and it is what decides whether the
+   * button is offered at all: a report of nothing is not worth a press.
+   */
+  const notesHere = useMemo(() => {
+    const node = nodeAt(path);
+    if (node) {
+      return node.files.filter((f) => isNoteFile(f.name)).length + countNotes(node.children);
+    }
+    if (path.length) return 0;
+    return (
+      data.rootFiles.filter((f) => isNoteFile(f.name)).length + countNotes(data.tree)
+    );
+  }, [nodeAt, path, data.tree, data.rootFiles]);
+
+  const reportLabel = `a report of ${notesHere} note${notesHere === 1 ? "" : "s"}`;
 
   /** Put a shareable absolute URL on the clipboard. */
   const copyLink = useCallback(
@@ -963,8 +1073,13 @@ export default function Drive({
         items.push(
           { label: "Edit", icon: "edit", action: () => editNote(file) },
           {
-            label: "Save as PDF",
+            label: "Download as PDF",
             icon: "download",
+            action: () => downloadReport({ file: file.id }, `a PDF of ${file.name}`),
+          },
+          {
+            label: "Print…",
+            icon: "file",
             // Its own tab: printing takes the whole page, and the drive should
             // still be here afterwards.
             action: () => window.open(`/print/${file.id}`, "_blank", "noopener"),
@@ -1000,7 +1115,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [isAdmin, openFile, downloadFile, copyLink, toggleHistory, isEditableNote, editNote, renameFileAction, deleteFileAction, openMenu]
+    [isAdmin, openFile, downloadFile, downloadReport, copyLink, toggleHistory, isEditableNote, editNote, renameFileAction, deleteFileAction, openMenu]
   );
 
   const canvasMenu = useCallback(
@@ -1009,12 +1124,19 @@ export default function Drive({
         { label: "Upload file", icon: "upload", action: () => triggerUpload(path) },
         { label: "New note", icon: "file", action: () => newNote(path) },
       ];
+      if (notesHere) {
+        items.push({
+          label: "Notes report (PDF)",
+          icon: "book",
+          action: () => downloadReport(reportScope(path), reportLabel),
+        });
+      }
       if (isAdmin) {
         items.push({ label: "New folder", icon: "plus", action: () => addFolder(path) });
       }
       openMenu(ev, items);
     },
-    [isAdmin, openMenu, addFolder, triggerUpload, newNote, path]
+    [isAdmin, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
   );
 
   const rootMenu = useCallback(
@@ -1023,12 +1145,19 @@ export default function Drive({
         { label: "Upload file", icon: "upload", action: () => triggerUpload([]) },
         { label: "New note", icon: "file", action: () => newNote([]) },
       ];
+      if (notesHere) {
+        items.push({
+          label: "Notes report (PDF)",
+          icon: "book",
+          action: () => downloadReport(reportScope(path), reportLabel),
+        });
+      }
       if (isAdmin) {
         items.push({ label: "New folder", icon: "plus", action: () => addFolder([]) });
       }
       openMenu(ev, items);
     },
-    [isAdmin, openMenu, addFolder, triggerUpload, newNote]
+    [isAdmin, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
   );
 
   // Touch equivalents of right-click. Declared here so each has its menu
@@ -1205,7 +1334,10 @@ export default function Drive({
   // Anyone may add to the drive; only the admin may restructure it.
   const showUpload = !searching;
   const showNewFolder = !searching && isAdmin;
-  const showActions = showUpload || showNewFolder;
+  // Offered wherever there is something to report on, which at the drive root
+  // means the whole drive and inside a folder means that folder and below.
+  const showReport = !searching && notesHere > 0;
+  const showActions = showUpload || showNewFolder || showReport;
   const showSectionLabel = view === "grid" && !searching && hasFolders && hasFiles;
   const showGrid = hasFolders && view === "grid";
   const showList = hasFolders && view === "list";
@@ -1966,6 +2098,18 @@ export default function Drive({
                     Note
                   </button>
                 )}
+                {showReport && (
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => downloadReport(reportScope(path), reportLabel)}
+                    title={`Download all ${notesHere} note${
+                      notesHere === 1 ? "" : "s"
+                    } ${path.length ? "in this folder" : "in this drive"} as one sectioned PDF`}
+                  >
+                    <Icon name="book" size={14} />
+                    Report
+                  </button>
+                )}
                 {showNewFolder && (
                   <button className="btn btn-primary" onClick={() => addFolder(path)}>
                     <Icon name="plus" size={14} />
@@ -2701,6 +2845,15 @@ export default function Drive({
             viewing.versionId
               ? downloadVersion(viewing.file.id, viewing.versionId)
               : downloadFile(viewing.file)
+          }
+          onPdf={
+            isEditableNote(viewing.file.name)
+              ? () =>
+                  downloadReport(
+                    { file: viewing.file.id, version: viewing.versionId },
+                    `a PDF of ${viewing.file.name}`
+                  )
+              : undefined
           }
         />
       )}

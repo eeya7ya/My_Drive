@@ -56,6 +56,7 @@ export default async function PrintPage({
     <PrintNote
       fileId={id}
       fileName={target.name}
+      driveKey={brand.key}
       driveName={brand.name}
       versionId={version ?? null}
     />

@@ -443,7 +443,8 @@ stored stays something a person would have typed and can read in any editor.
 Pressing outside closes the editor without asking, which is only reasonable
 because nothing is thrown away: the words are kept and put back the next time
 it opens. `npm test` checks the formatting helpers, which are pure functions
-over a text selection for exactly that reason.
+over a text selection for exactly that reason — and the report's outline and
+line breaking, which are pure for the same one.
 
 #### Editing one, and putting pictures in it
 
@@ -470,14 +471,72 @@ suggestion to upload it to the folder and link to it instead. Files that are not
 images cannot usefully be embedded, so those are still stored in the folder and
 linked.
 
-### Saving a note as a PDF
+### The notes report
 
-**Save as PDF** on a note opens `/print/<id>`: the note laid out for paper, which
-then prints itself. The reader chooses "Save as PDF" as the destination, which
-every desktop and mobile browser offers.
+**Report** — beside Upload and Note — gathers every note in view into one A4 PDF
+and downloads it. At the drive root that is the whole drive; inside a folder it
+is that folder and everything under it. The button appears only where there is
+at least one note to gather.
 
-There is no PDF library here on purpose. Every browser already contains a
-typesetter that paginates, embeds fonts and writes real PDFs with selectable
+It is sectioned by the drive's own outline. Folder `3.2` in the sidebar is
+section `3.2` in the report, because the numbers are taken from the tree rather
+than invented: a folder's notes are numbered after its subfolders (folder 3 with
+subfolders 3.1 and 3.2 numbers its own notes 3.3, 3.4), so no number is ever
+claimed twice and the sections read in order. Folders holding no note anywhere
+are left out, which leaves gaps in the numbering — deliberately, so that a
+section number still means the folder it names.
+
+What comes out: a cover with the drive's identity and what the report covers, a
+clickable table of contents with page numbers, one page per top-level section,
+and each note under its own numbered heading with the file it came from and when
+it was last saved. A note that opens with its own heading is titled by it rather
+than by its file name. Markdown is typeset properly — headings, lists, tables
+with repeating headers, quotes, code blocks, pictures and links, the external
+ones clickable. Running heads name the section, and every page is folioed
+"4 of 23".
+
+`/api/report` writes it:
+
+```
+/api/report?drive=<key>                one report of the whole drive
+/api/report?drive=<key>&folder=<id>    one folder and everything under it
+/api/report?drive=<key>&file=<id>      one note, laid out the same way
+```
+
+The same access check as every other route runs before a byte is read, and each
+picture a note asks for is checked again — a note pointing at another drive's
+file, or at another host, is named in the report rather than fetched. That is
+what stops a report carrying across what its reader could not open directly.
+
+**Why the server writes it.** The older route below hands the page to the
+browser's own typesetter, which is the better one — but "Save as PDF" is a
+destination the *browser* owns, and desktop Chrome and Firefox bury it in a
+dropdown while several mobile browsers never offer it at all. A report nobody
+can reach is not a report, so this one arrives as a file.
+
+The cost of that is `lib/report.ts`: a small typesetter over
+[pdf-lib](https://pdf-lib.js.org) — line breaking, pagination, tables, code,
+figures. Two consequences worth knowing, both from using the fourteen fonts
+every PDF reader already has rather than shipping a megabyte of font per report:
+text is drawn in WinAnsi, so Latin and the punctuation notes actually use come
+through and anything else is transliterated (`≤` prints `<=`, `Ω` prints `Ohm`,
+Arabic and CJK come through as `?`); and pictures embed as PNG or JPEG, with
+anything else named rather than drawn. For a note in a script WinAnsi cannot
+hold, print it from the route below instead — the browser has the fonts.
+
+Everything above the rendering marker in `lib/report.ts` is pure — no pdf-lib,
+no fonts, no database — which is what lets `scripts/test-report.mjs` check the
+outline numbering and the line breaking without a browser or a bucket.
+
+### Printing a note
+
+**Print…** on a note opens `/print/<id>`: the note laid out for paper, which then
+prints itself. The reader chooses "Save as PDF" as the destination, and the page
+also carries a **Download PDF** button onto `/api/report` for the browsers that
+do not offer one.
+
+There is no PDF library on that page on purpose. Every browser already contains
+a typesetter that paginates, embeds fonts and writes real PDFs with selectable
 text; a JavaScript one would either rasterise the page into a blurry picture of
 itself or ship megabytes to redo what is already installed. The print stylesheet
 does the work — A4 with proper margins, dark on light whichever theme the drive

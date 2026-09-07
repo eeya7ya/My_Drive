@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node scripts/test-note-format.mjs"
+    "test": "node scripts/test-note-format.mjs && node scripts/test-report.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.699.0",
@@ -16,6 +16,7 @@
     "mammoth": "^1.12.2",
     "marked": "^18.0.11",
     "next": "^16.3.3",
+    "pdf-lib": "^1.17.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "xlsx": "^0.18.5"

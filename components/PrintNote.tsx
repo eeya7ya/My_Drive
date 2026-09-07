@@ -8,12 +8,17 @@
  * selectable text — reaching for a JavaScript one would mean either rasterising
  * the page into a blurry picture of itself, or shipping several megabytes to
  * redo what is already installed. So this renders the note properly for print
- * and calls print(); the reader chooses "Save as PDF" as the destination, which
- * every desktop and mobile browser offers.
+ * and calls print(); the reader chooses "Save as PDF" as the destination.
  *
  * It waits for the pictures before printing. A print() fired while an image is
  * still decoding produces a PDF with a gap where the picture should be, and
  * nothing about the result says anything went wrong.
+ *
+ * The catch is that "Save as PDF" is a destination the browser owns: desktop
+ * Chrome and Firefox bury it in a dropdown, and several mobile browsers do not
+ * offer it at all. So the page also offers /api/report, which writes the PDF
+ * server-side and hands it over as a download — the sure route to a file, with
+ * this page kept as the higher-fidelity one for anyone whose browser prints.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -23,11 +28,14 @@ import { formatDateTime } from "@/lib/types";
 export default function PrintNote({
   fileId,
   fileName,
+  driveKey,
   driveName,
   versionId,
 }: {
   fileId: string;
   fileName: string;
+  /** Which drive to ask for the PDF; the report route is scoped by drive. */
+  driveKey: string;
   driveName: string;
   versionId: string | null;
 }) {
@@ -85,6 +93,18 @@ export default function PrintNote({
     window.print();
   }, [settled]);
 
+  /**
+   * The other way to a PDF: ask the server for the file itself.
+   *
+   * A plain navigation rather than fetch — the response is an attachment, so
+   * the browser saves it and leaves this page where it is.
+   */
+  const download = useCallback(() => {
+    const params = new URLSearchParams({ drive: driveKey, file: fileId });
+    if (versionId) params.set("version", versionId);
+    window.location.href = `/api/report?${params}`;
+  }, [driveKey, fileId, versionId]);
+
   // Print once, unprompted, since arriving here is the request. Doing it again
   // is the button's job.
   useEffect(() => {
@@ -98,15 +118,21 @@ export default function PrintNote({
       <div className="print-bar">
         <div>
           <strong>{fileName}</strong>
-          <span style={{ opacity: 0.7 }}> · choose “Save as PDF” as the destination</span>
+          <span style={{ opacity: 0.7 }}>
+            {" "}
+            · print it, or download the PDF if your browser offers no “Save as PDF”
+          </span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-secondary" onClick={() => window.close()}>
             Close
           </button>
-          <button className="btn btn-primary" onClick={toPdf}>
+          <button className="btn btn-secondary" onClick={toPdf}>
+            Print
+          </button>
+          <button className="btn btn-primary" onClick={download}>
             <Icon name="download" size={14} />
-            Save as PDF
+            Download PDF
           </button>
         </div>
       </div>
