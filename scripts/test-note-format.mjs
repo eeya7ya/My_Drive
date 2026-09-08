@@ -33,7 +33,7 @@ const m = await import(pathToFileURL(tmp).href);
 try { rmSync(tmp); } catch { /* a leftover temp file is not a test failure */ }
 const { applyWrap, applyHeading, applyBullets, applyNumbers, applyQuote, applyLink, applyImage,
         applyAttachment, noteFileName, noteContentType, extensionOf, withExtension,
-        freeFileName, applyEmbeddedImage } = m;
+        freeFileName, applyEmbeddedImage, applyRule, clampBox, openBox, filledBox } = m;
 
 let pass = 0, fail = 0;
 const eq = (label, got, want) => {
@@ -97,6 +97,49 @@ eq("a second embed keeps the first", em.text.includes("[img-1]: data:1"), true);
 
 eq("a non-image attaches as an inline link", applyAttachment("see ", 4, 4, "spec.pdf", "/u").text,
    "see [spec.pdf](/u)");
+
+// A line between sections, which people were otherwise typing as a row of
+// dashes — and a row of dashes with no blank line above it is a heading.
+eq("a rule opens its own block", applyRule("Section one.", 12, 12).text, "Section one.\n\n---\n\n");
+eq("a rule leaves the caret under it", (() => {
+  const r = applyRule("Section one.", 12, 12); return r.start === r.text.length; })(), true);
+eq("a rule on an empty note adds no leading blank", applyRule("", 0, 0).text, "---\n\n");
+// The button before this one leaves its own work selected, so a rule that
+// replaced a selection would delete whatever had just been formatted.
+eq("a rule keeps the selection it was pressed over", applyRule("# a heading", 0, 11).text,
+   "# a heading\n\n---\n\n");
+eq("a rule between paragraphs keeps both", applyRule("a\n\nb", 3, 3).text, "a\n\n---\n\nb");
+eq("a rule after a blank line adds no more", applyRule("a\n\n", 3, 3).text, "a\n\n---\n\n");
+eq("pressing it again takes the rule away", applyRule("a\n\n---\n\n", 4, 4).text, "a");
+eq("removing a rule leaves the paragraphs either side", applyRule("a\n\n---\n\nb", 4, 4).text, "a\n\nb");
+eq("a hand-typed row of dashes counts as a rule", applyRule("a\n\n--------------------\n\nb", 5, 5).text,
+   "a\n\nb");
+eq("stars and underscores count too", applyRule("a\n\n***\n\nb", 4, 4).text, "a\n\nb");
+// The caret is left under the rule, ready for the next section, so taking one
+// away means putting the caret back on it — the line, not the space below it.
+eq("a rule round-trips from its own line", (() => {
+  const on = applyRule("a\n\nb", 3, 3); return applyRule(on.text, 4, 4).text; })(), "a\n\nb");
+
+// The floating panel has to stay on screen, on any size of window.
+const view = { width: 1200, height: 800 };
+eq("a panel opens against the bottom right", openBox(view),
+   { width: 560, height: 620, x: 1200 - 560 - 12, y: 800 - 620 - 12 });
+eq("a panel dragged off the left comes back", clampBox({ x: -400, y: 40, width: 560, height: 620 }, view).x, 12);
+eq("a panel dragged off the bottom comes back",
+   clampBox({ x: 40, y: 4000, width: 560, height: 620 }, view).y, 800 - 620 - 12);
+// Widening a panel that is already against the right edge moves it left rather
+// than pushing it off the screen, which is what makes the corner grip usable.
+eq("growing against the edge pulls the panel inwards",
+   clampBox({ x: 628, y: 168, width: 900, height: 620 }, view).x, 1200 - 900 - 12);
+eq("a panel cannot be shrunk to nothing", clampBox({ x: 0, y: 0, width: 10, height: 10 }, view),
+   { width: 300, height: 300, x: 12, y: 12 });
+eq("a window smaller than the minimum still gets an editor",
+   clampBox({ x: 0, y: 0, width: 560, height: 620 }, { width: 200, height: 200 }),
+   { width: 300, height: 300, x: 12, y: 12 });
+eq("filling the window leaves a margin", filledBox(view),
+   { width: 1040, height: 776, x: 80, y: 12 });
+eq("a filled panel is centred rather than stretched across a wide screen",
+   filledBox({ width: 1600, height: 900 }), { width: 1040, height: 876, x: 280, y: 12 });
 
 // The format is a choice, so an unextended name takes whichever one is chosen.
 eq("plain name gets .md", noteFileName("Meeting"), "Meeting.md");

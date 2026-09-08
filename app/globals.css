@@ -294,6 +294,32 @@ html, body { height: 100%; }
   .dc-file-ext, .dc-file-open { display: none !important; }
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   The note panel.
+
+   The editor is a window that floats over the drive rather than a modal that
+   stops it, so it is positioned in JavaScript — dragged, resized, rolled up.
+   A phone has room for none of that: there is nothing to put beside a note on
+   a 390px screen and no comfortable way to drag anything, so below this width
+   the panel stops being a window and docks along the bottom of the screen.
+
+   These rules deliberately outrank the inline geometry, which is what
+   !important is for here. Keep the width in step with DOCKED in NoteEditor.tsx,
+   which is how the panel knows to stop offering a drag handle.
+   ────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .dc-note {
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    bottom: 0 !important;
+    width: auto !important;
+    height: min(80vh, 640px) !important;
+  }
+  /* Rolled up, it is a bar across the foot of the screen. */
+  .dc-note.dc-note-shut { height: auto !important; }
+}
+
 /* "Right-click" means nothing on a touchscreen. Both hints are rendered and
    CSS picks the one that matches the input device, which avoids a client-only
    check that would mismatch during hydration. */

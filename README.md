@@ -435,16 +435,41 @@ revisions like anything else, and saving over a name that already exists adds a
 revision rather than a second file. The editor says so before you save.
 
 Notes are Markdown, and the toolbar writes Markdown rather than hiding it —
-headings, bold, italic, code, bullets, numbers, quotes and links, each of them
-a toggle, with `Ctrl`/`⌘ B` and `I` for the two people reach for most. What is
-stored stays something a person would have typed and can read in any editor.
-**Preview** renders it with the same parser the file viewer uses.
+headings, bold, italic, code, bullets, numbers, quotes, links and a line
+between sections, each of them a toggle, with `Ctrl`/`⌘ B` and `I` for the two
+people reach for most. What is stored stays something a person would have typed
+and can read in any editor. **Preview** renders it with the same parser the
+file viewer uses.
 
-Pressing outside closes the editor without asking, which is only reasonable
-because nothing is thrown away: the words are kept and put back the next time
-it opens. `npm test` checks the formatting helpers, which are pure functions
-over a text selection for exactly that reason — and the report's outline and
-line breaking, which are pure for the same one.
+The line between sections is the one people were typing by hand as a row of
+dashes. It is written as `---`, which is a real rule in the preview and a drawn
+line in the PDF report rather than a row of dashes that looks like one, and it
+takes the blank line above it with it — because a row of dashes directly under
+a paragraph is Markdown's *other* meaning for those characters, and turns that
+paragraph into a heading. Pressing it on a rule takes it away, including a
+hand-typed row of any length.
+
+#### It is a window, not a modal
+
+The editor floats over the drive rather than stopping it. Folders open, files
+preview, search works and the tree scrolls with the note still on screen, so a
+note can be written *about* the drawing or the datasheet it describes — which
+is the usual case, and used to mean closing the note to go and look. It stays
+until it is closed: the **✕** in its title bar, or **Close**, both of which keep
+what was typed and put it back the next time the editor opens.
+
+Drag the title bar to move it, pull the bottom right corner to resize it, roll
+it up to its title bar to get it out of the way without losing the words, or
+fill the window with it for something long. Where it was left is where the next
+note opens. Below 640px there is no room for any of that, so it docks along the
+foot of the screen instead. Because the drive is live underneath, **New note**
+and **Edit** are reachable while a note is open; the words in the panel are
+handed back to the drive on every keystroke, so opening another note keeps them
+rather than taking them with it.
+
+`npm test` checks the formatting helpers and the sums that keep the panel on
+screen, which are pure functions for exactly that reason — and the report's
+outline and line breaking, which are pure for the same one.
 
 #### Editing one, and putting pictures in it
 

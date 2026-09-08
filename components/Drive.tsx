@@ -16,7 +16,7 @@ import { isNoteFile, kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
 import { hrefFor, resolveSegments, segmentsOf, slugify, stripBasePath } from "@/lib/paths";
 import { Brand, DEFAULT_BRAND } from "@/lib/brand";
-import NoteEditor, { freeFileName, noteContentType } from "./NoteEditor";
+import NoteEditor, { freeFileName, noteContentType, type NoteFrame } from "./NoteEditor";
 import {
   DrivePayload,
   DriveFile,
@@ -197,6 +197,22 @@ export default function Drive({
   const [noteEdit, setNoteEdit] = useState<{ fileId: string; name: string; text: string } | null>(
     null
   );
+  /**
+   * What is in the editor right now, as it is typed.
+   *
+   * The editor floats over the drive rather than blocking it, so "New note" and
+   * "Edit this note" are both live while a note is being written — and either
+   * one replaces what the panel is showing. A ref rather than state because it
+   * is written on every keystroke and read only when the panel is about to be
+   * handed a different note.
+   */
+  const liveNote = useRef<{ name: string; text: string } | null>(null);
+  /**
+   * Where the panel was left: moved out of the way of the tree, rolled up, or
+   * filled out to the window. Kept across notes, because it is a statement
+   * about the screen rather than about any one note.
+   */
+  const noteFrame = useRef<NoteFrame | null>(null);
   // enter() builds hrefs from the tree; a ref keeps it from re-creating on
   // every data change and re-triggering effects that depend on it.
   const treeRef = useRef<TreeNode[]>([]);
@@ -616,6 +632,7 @@ export default function Drive({
         setBusy(null);
       }
 
+      liveNote.current = null;
       setNoteIn(null);
       setNoteDraft(null);
       setNoteEdit(null);
@@ -646,6 +663,19 @@ export default function Drive({
   );
 
   /**
+   * Put whatever is in the open editor somewhere safe before the panel is given
+   * a different note to show. Without this, starting a second note over the
+   * first would take the first one's words with it.
+   */
+  const keepOpenDraft = useCallback(() => {
+    const draft = liveNote.current;
+    liveNote.current = null;
+    if (!draft) return;
+    const worth = draft.text.trim() || draft.name.trim();
+    setNoteDraft(worth ? { ...draft, fileId: noteEdit?.fileId ?? null } : null);
+  }, [noteEdit]);
+
+  /**
    * Open an existing note for editing.
    *
    * Saving it writes the same name back into the same folder, which the store
@@ -654,6 +684,7 @@ export default function Drive({
    */
   const editNote = useCallback(
     async (file: DriveFile) => {
+      keepOpenDraft();
       setNavOpen(false);
       setError(null);
       setBusy(`Opening ${file.name}`);
@@ -675,7 +706,7 @@ export default function Drive({
         setBusy(null);
       }
     },
-    [folderPathOfFile]
+    [folderPathOfFile, keepOpenDraft]
   );
 
   /**
@@ -722,11 +753,15 @@ export default function Drive({
     [noteIn, storeBlob, refresh, data.rootFiles]
   );
 
-  const newNote = useCallback((p: string[]) => {
-    setNavOpen(false);
-    setNoteEdit(null);
-    setNoteIn(p);
-  }, []);
+  const newNote = useCallback(
+    (p: string[]) => {
+      keepOpenDraft();
+      setNavOpen(false);
+      setNoteEdit(null);
+      setNoteIn(p);
+    },
+    [keepOpenDraft]
+  );
 
   const renameFileAction = useCallback(
     (file: DriveFile) => {
@@ -2739,7 +2774,9 @@ export default function Drive({
             ev.preventDefault();
             closeMenu();
           }}
-          style={{ position: "fixed", inset: 0, zIndex: 80 }}
+          // Above the note panel, which floats over the drive: a menu opened
+          // from underneath it would otherwise be half hidden by it.
+          style={{ position: "fixed", inset: 0, zIndex: 100 }}
         >
           <div
             style={{
@@ -2794,8 +2831,13 @@ export default function Drive({
 
       {noteIn && (
         <NoteEditor
-          // Named for the folder the note is going into, which is not always the
-          // one on screen — the tree's right-click menu can aim it elsewhere.
+          // A different note is a different editor: the panel starts from the
+          // name and text it is given, so switching notes has to remount it
+          // rather than leave the previous one's words on screen.
+          key={noteEdit ? noteEdit.fileId : `new:${noteIn.join("/")}`}
+          // Named for the folder the note is going into, which — now that the
+          // drive is navigable underneath the panel — is not the folder on
+          // screen so much as the one it was started from.
           folderName={
             noteIn.length
               ? (() => {
@@ -2823,10 +2865,18 @@ export default function Drive({
               : (noteDraft && noteDraft.fileId === null ? noteDraft.text : "")
           }
           onInsertImage={insertNoteImage}
+          frame={noteFrame.current}
+          onFrameChange={(f) => {
+            noteFrame.current = f;
+          }}
+          onDraftChange={(d) => {
+            liveNote.current = d;
+          }}
           onCancel={(draft) => {
             // Keep it only if there is something to keep, so an editor opened
             // and shut again does not resurrect itself half-filled forever.
             const keep = draft.text.trim() || draft.name.trim();
+            liveNote.current = null;
             setNoteDraft(keep ? { ...draft, fileId: noteEdit?.fileId ?? null } : null);
             setNoteIn(null);
             setNoteEdit(null);

@@ -99,6 +99,12 @@ const PARTS: Record<string, string[]> = {
   // same stroke as the rest of the set.
   up: ["m5 12 7-7 7 7", "M12 19V5"],
   down: ["M12 5v14", "m19 12-7 7-7-7"],
+  // The note editor: a rule drawn between two blocks of writing, and the
+  // floating panel's own grow and shrink.
+  // Lucide separator-horizontal, maximize-2, minimize-2.
+  split: ["M3 12h18", "m8 8 4-4 4 4", "m16 16-4 4-4-4"],
+  expand: ["M15 3h6v6", "M9 21H3v-6", "m21 3-7 7", "m3 21 7-7"],
+  shrink: ["M4 14h6v6", "M20 10h-6V4", "m14 10 7-7", "m3 21 7-7"],
 };
 
 export type IconName = keyof typeof PARTS | string;
