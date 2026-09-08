@@ -247,6 +247,64 @@ export function applyQuote(text: string, start: number, end: number): Edit {
 }
 
 /**
+ * Anything that already reads as a horizontal rule, whatever it was typed as.
+ *
+ * Deliberately wider than what the button writes: people separate sections
+ * with a long run of dashes typed by hand, and pressing the button on one of
+ * those should take it away rather than stack a second rule underneath it.
+ */
+const RULE_LINE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+
+/**
+ * A line across the note, between one section and the next.
+ *
+ * This is the thing people were typing by hand as a row of twenty dashes. It
+ * is written as `---`, which is the same rule in Markdown and renders as a
+ * real line in the preview and in the PDF report, rather than as a row of
+ * dashes that happens to look like one.
+ *
+ * The blank line above it is not decoration. A row of dashes directly under a
+ * paragraph is Markdown's other meaning for those characters — it turns the
+ * line above into a heading — so a rule with nothing between it and the
+ * previous sentence silently reformats that sentence.
+ *
+ * Pressing it on a rule removes it, taking the blank line it came with, so the
+ * paragraphs either side end up exactly as they were.
+ */
+export function applyRule(text: string, start: number, end: number): Edit {
+  // Alone among these, a rule goes in after what is selected rather than over
+  // it. Everything else here replaces the selection with a formatted version
+  // of itself; a line has no text of its own, so replacing a selection with
+  // one would simply delete the words — including the words the last button
+  // press left selected, which is how it would usually happen.
+  const at = Math.max(start, end);
+  const from = text.lastIndexOf("\n", at - 1) + 1;
+  const nextBreak = text.indexOf("\n", at);
+  const to = nextBreak === -1 ? text.length : nextBreak;
+
+  if (RULE_LINE.test(text.slice(from, to))) {
+    let head = from;
+    let tail = to;
+    if (text.slice(tail, tail + 2) === "\n\n") tail += 2;
+    else if (text[tail] === "\n") tail += 1;
+    // With nothing after it, the blank line above is the one it came with.
+    if (tail >= text.length && text.slice(head - 2, head) === "\n\n") head -= 2;
+    return { text: text.slice(0, head) + text.slice(tail), start: head, end: head };
+  }
+
+  const atStart = at === 0;
+  const afterBlank = atStart || text.slice(at - 2, at) === "\n\n";
+  const atLineStart = atStart || text[at - 1] === "\n";
+  const before = afterBlank ? "" : atLineStart ? "\n" : "\n\n";
+  // A rule people are about to write under wants an empty line to write on,
+  // which is one newline when the note already carries on with another.
+  const after = text[at] === "\n" ? "\n" : "\n\n";
+  const inserted = `${before}---${after}`;
+  const caret = at + inserted.length;
+  return { text: text.slice(0, at) + inserted + text.slice(at), start: caret, end: caret };
+}
+
+/**
  * An image goes in on its own line, so it is a block in the rendered note
  * rather than a picture wedged into the middle of a sentence.
  */
@@ -326,6 +384,105 @@ export function applyLink(text: string, start: number, end: number): Edit {
   };
 }
 
+/* ── the floating panel ────────────────────────────────────────────────────
+   The editor used to be a modal: a sheet of dark over the whole app, closed by
+   a click anywhere outside it. That is the wrong shape for what a note here
+   actually is — something written *about* what is on screen, with the drawing
+   or the datasheet it describes a folder away — because every trip to go and
+   look something up closed the note.
+
+   So it is a window instead. It floats over the drive, the drive keeps working
+   underneath it, and it stays open until it is closed. What follows are the
+   sums that keep it on screen: pure, so the awkward cases — a browser window
+   smaller than the panel, a panel dragged half off the edge, a phone — can be
+   reasoned about and tested without one.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/** How near the edge of the window the panel is allowed to sit. */
+const EDGE = 12;
+/** Small enough to tuck into a corner, large enough to still be an editor. */
+const MIN_WIDTH = 300;
+const MIN_HEIGHT = 300;
+/** What it opens as, before anyone moves it. */
+const OPEN_WIDTH = 560;
+const OPEN_HEIGHT = 620;
+
+/** Where the panel is and how big, in pixels from the top left of the window. */
+export interface NoteBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A box, plus the two states that are not about size. */
+export interface NoteFrame extends NoteBox {
+  /** Rolled up to its title bar: out of the way, still open, still holding the words. */
+  collapsed: boolean;
+  /** Filled out to the window, for writing something long. */
+  full: boolean;
+}
+
+export interface Viewport {
+  width: number;
+  height: number;
+}
+
+/**
+ * Keep a panel on screen.
+ *
+ * Size is settled before position, which is what lets the panel grow when it
+ * is already against the bottom right corner: widening it pulls its left edge
+ * inwards rather than pushing its right edge out of the window. Everything is
+ * floored at the minimum, so a browser window shorter than the panel leaves an
+ * editor that overflows the screen rather than one squashed to nothing.
+ */
+export function clampBox(box: NoteBox, view: Viewport): NoteBox {
+  const width = Math.min(Math.max(box.width, MIN_WIDTH), Math.max(view.width - EDGE * 2, MIN_WIDTH));
+  const height = Math.min(Math.max(box.height, MIN_HEIGHT), Math.max(view.height - EDGE * 2, MIN_HEIGHT));
+  return {
+    width,
+    height,
+    x: Math.min(Math.max(box.x, EDGE), Math.max(view.width - width - EDGE, EDGE)),
+    y: Math.min(Math.max(box.y, EDGE), Math.max(view.height - height - EDGE, EDGE)),
+  };
+}
+
+/** Where a panel opens: the bottom right corner, as a compose window does. */
+export function openBox(view: Viewport): NoteBox {
+  return clampBox(
+    {
+      x: view.width - OPEN_WIDTH - EDGE,
+      y: view.height - OPEN_HEIGHT - EDGE,
+      width: OPEN_WIDTH,
+      height: OPEN_HEIGHT,
+    },
+    view
+  );
+}
+
+/** The whole window bar a margin, which is what "fill the window" means. */
+export function filledBox(view: Viewport): NoteBox {
+  const width = Math.min(view.width - EDGE * 2, 1040);
+  return clampBox(
+    { x: (view.width - width) / 2, y: EDGE, width, height: view.height - EDGE * 2 },
+    view
+  );
+}
+
+/** The window as the panel needs to know it. Sized for a server render that never happens. */
+function viewportNow(): Viewport {
+  if (typeof window === "undefined") return { width: 1280, height: 800 };
+  return { width: window.innerWidth, height: window.innerHeight };
+}
+
+/**
+ * Below this the panel is docked along the bottom of the screen by CSS: a
+ * phone has no room to put a window beside anything, and nothing to drag it
+ * with. Kept in step with the same query in globals.css.
+ */
+const DOCKED = "(max-width: 640px)";
+
 export default function NoteEditor({
   folderName,
   existingNames = [],
@@ -336,6 +493,9 @@ export default function NoteEditor({
   onCancel,
   onSave,
   onInsertImage,
+  frame,
+  onFrameChange,
+  onDraftChange,
 }: {
   /** Where the note will land, named so the author can see it before saving. */
   folderName: string;
@@ -366,14 +526,39 @@ export default function NoteEditor({
    * drive cannot take one, in which case the button is not offered.
    */
   onInsertImage?: (file: File) => Promise<{ name: string; url: string }>;
+  /**
+   * Where the panel was left last time. Somebody who has moved the editor out
+   * of the way of the tree has said where they want it; opening the next note
+   * back in the corner would make them say it again.
+   */
+  frame?: NoteFrame | null;
+  onFrameChange?: (frame: NoteFrame) => void;
+  /**
+   * The words as they are typed, so the drive is holding a copy of them.
+   *
+   * The panel no longer blocks the app, so the buttons that open another note
+   * are live while one is being written. They can only hand this editor a
+   * different note to show — which throws away everything in it — if what was
+   * in it has already been handed out. This is how.
+   */
+  onDraftChange?: (draft: { name: string; text: string }) => void;
 }) {
   const [name, setName] = useState(initialName);
   const [text, setText] = useState(initialText);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
-  const form = useRef<HTMLFormElement>(null);
   const [mode, setMode] = useState<"write" | "preview">("write");
+  /** The panel itself: where it sits, whether it is rolled up or filled out. */
+  const [box, setBox] = useState<NoteBox>(() =>
+    frame ? clampBox(frame, viewportNow()) : openBox(viewportNow())
+  );
+  const [collapsed, setCollapsed] = useState(Boolean(frame?.collapsed));
+  const [full, setFull] = useState(Boolean(frame?.full));
+  /** True while the CSS above has the panel docked along the bottom of a phone. */
+  const [docked, setDocked] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(DOCKED).matches
+  );
   /**
    * The extension a name with none typed will take. An existing note keeps its
    * own; a new one starts at Markdown, which is a default rather than a rule —
@@ -389,6 +574,8 @@ export default function NoteEditor({
    * afterwards or every button press would drop the cursor to the end.
    */
   const pending = useRef<[number, number] | null>(null);
+  /** Where the panel was before it filled the window, so it can go back. */
+  const restore = useRef<NoteBox | null>(null);
 
   // For a new note any words at all are unsaved. For an edit, only changes are
   // — the note's existing text is already safely in the drive.
@@ -452,41 +639,113 @@ export default function NoteEditor({
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  /**
-   * Escape closes, but not out from under unsaved words — losing a note to a
-   * stray keypress is the one failure this editor must not have.
+  /*
+   * Two things the modal did are deliberately gone.
+   *
+   * Escape used to close the editor, from anywhere on the page and before
+   * anything else could see the key. A window that stays open until it is
+   * closed cannot also vanish on a keystroke aimed at the menu behind it — and
+   * with the file viewer now openable underneath, that Escape was being taken
+   * from the thing the reader meant it for. The X in the title bar closes.
+   *
+   * Tab used to be held inside the form, because aria-modal claimed the rest
+   * of the page was out of reach. It no longer is: the drive behind this is
+   * live, and reaching it with the keyboard is the point.
    */
+
+  /** Hand out what is typed and where the panel sits, without re-rendering on it. */
+  const latest = useRef({ onFrameChange, onDraftChange });
   useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key !== "Escape" || busy) return;
-      ev.stopPropagation();
-      attemptCancel();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    latest.current = { onFrameChange, onDraftChange };
   });
 
+  useEffect(() => {
+    latest.current.onDraftChange?.({ name, text });
+  }, [name, text]);
+
+  useEffect(() => {
+    latest.current.onFrameChange?.({ ...box, collapsed, full });
+  }, [box, collapsed, full]);
+
   /**
-   * Keep Tab inside the dialog. aria-modal says the rest of the page is out of
-   * reach, but nothing enforces that for the keyboard, and the first thing Tab
-   * finds behind this is the sidebar's "All drives" link — one Enter away from
-   * navigating off and taking the note with it.
+   * A window that is narrower than it was must not leave the panel off the
+   * side of it — including the phone case, where the panel stops being a
+   * window at all and docks along the bottom.
    */
-  function onFormKeyDown(ev: React.KeyboardEvent) {
-    if (ev.key !== "Tab" || !form.current) return;
-    const focusable = form.current.querySelectorAll<HTMLElement>(
-      'input, textarea, button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
-    );
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (!ev.shiftKey && document.activeElement === last) {
-      ev.preventDefault();
-      first.focus();
-    } else if (ev.shiftKey && document.activeElement === first) {
-      ev.preventDefault();
-      last.focus();
+  useEffect(() => {
+    // A panel that was filling the window fills the new one; every other panel
+    // is left where it is and merely pulled back inside.
+    const onResize = () =>
+      setBox((b) => (full ? filledBox(viewportNow()) : clampBox(b, viewportNow())));
+    const media = window.matchMedia(DOCKED);
+    const onMedia = () => setDocked(media.matches);
+    window.addEventListener("resize", onResize);
+    media.addEventListener("change", onMedia);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      media.removeEventListener("change", onMedia);
+    };
+  }, [full]);
+
+  /**
+   * Move the panel, or resize it, for as long as the pointer is held.
+   *
+   * The pointer is captured so a hand that outruns the panel — which is what
+   * happens on the first fast drag — keeps moving it instead of dropping it
+   * over whatever it crossed. Both gestures work from the box the drag started
+   * on plus the total distance travelled, rather than accumulating deltas, so
+   * a clamp against the edge of the window is not a step the panel then has to
+   * catch up from.
+   */
+  function startDrag(ev: React.PointerEvent, mode: "move" | "size") {
+    // A window filling the screen has nowhere to go, and a docked one is the
+    // shape of the phone it is docked to.
+    if (docked || full || ev.button !== 0) return;
+    // A press on one of the title bar's buttons is a press of that button.
+    if ((ev.target as HTMLElement).closest("button")) return;
+    ev.preventDefault();
+
+    const handle = ev.currentTarget as HTMLElement;
+    const from = box;
+    const originX = ev.clientX;
+    const originY = ev.clientY;
+    handle.setPointerCapture(ev.pointerId);
+
+    const onMove = (e: PointerEvent) => {
+      const dx = e.clientX - originX;
+      const dy = e.clientY - originY;
+      setBox(
+        clampBox(
+          mode === "move"
+            ? { ...from, x: from.x + dx, y: from.y + dy }
+            : { ...from, width: from.width + dx, height: from.height + dy },
+          viewportNow()
+        )
+      );
+    };
+    const onDone = () => {
+      handle.releasePointerCapture(ev.pointerId);
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onDone);
+      handle.removeEventListener("pointercancel", onDone);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onDone);
+    handle.addEventListener("pointercancel", onDone);
+  }
+
+  /** Fill the window, or go back to where the panel was before it did. */
+  function toggleFull() {
+    const view = viewportNow();
+    if (full) {
+      setBox(clampBox(restore.current ?? openBox(view), view));
+    } else {
+      restore.current = box;
+      setBox(filledBox(view));
     }
+    setFull(!full);
+    // Rolled up and filling the window at once is not a state worth having.
+    setCollapsed(false);
   }
 
   /**
@@ -684,59 +943,127 @@ export default function NoteEditor({
   const bytes = new TextEncoder().encode(text).length;
 
   return (
-    <div
-      className="dialog-backdrop"
+    <form
+      className={`dc-note blueprint${collapsed ? " dc-note-shut" : ""}`}
       style={{
-        // Above the file viewer, and above the mobile drawer, which otherwise
-        // paints over a dialog that declares no stacking of its own.
+        position: "fixed",
+        left: box.x,
+        top: box.y,
+        width: box.width,
+        // Rolled up, the panel is exactly as tall as its title bar.
+        height: collapsed ? "auto" : box.height,
+        display: "flex",
+        flexDirection: "column",
+        // Above the file viewer and the mobile drawer, so a note can be written
+        // about the drawing it is open on rather than instead of it.
         zIndex: 95,
-        // A landscape phone is shorter than this dialog. Centring it there puts
-        // Save and Cancel below the fold with nothing able to scroll to them.
-        alignItems: "start",
-        overflowY: "auto",
+        background: "var(--color-surface)",
+        boxShadow: "var(--shadow-lg)",
       }}
-      onMouseDown={(ev) => {
-        // Pressing outside closes it, without asking. Nothing is lost by that:
-        // the text goes back to the drive as a draft and is waiting in the
-        // editor next time it is opened.
-        if (ev.target === ev.currentTarget && !busy) onCancel({ name, text });
-      }}
+      onSubmit={submit}
+      role="dialog"
+      aria-label={editing ? `Edit ${initialName}` : "New note"}
     >
-      <form
-        ref={form}
-        className="dialog blueprint"
-        style={{
-          width: "min(680px, 100%)",
-          gap: "var(--space-3)",
-          // The design system's later rule resets .dialog's background to
-          // none, so every dialog states its own — as the sign-in card and the
-          // file viewer already do.
-          background: "var(--color-surface)",
-          margin: "auto 0",
-        }}
-        onSubmit={submit}
-        onKeyDown={onFormKeyDown}
-        role="dialog"
-        aria-modal="true"
-        aria-label={editing ? `Edit ${initialName}` : "New note"}
-      >
-        <span className="corner tl" />
-        <span className="corner tr" />
-        <span className="corner bl" />
-        <span className="corner br" />
+      <span className="corner tl" />
+      <span className="corner tr" />
+      <span className="corner bl" />
+      <span className="corner br" />
 
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <div className="dialog-title">{editing ? "Edit note" : "New note"}</div>
-          <div
+      {/* The title bar is the handle: everything that is not a button in it
+          moves the panel, and a double click rolls it up. */}
+      <div
+        onPointerDown={(ev) => startDrag(ev, "move")}
+        onDoubleClick={(ev) => {
+          if ((ev.target as HTMLElement).closest("button")) return;
+          setCollapsed((was) => !was);
+        }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "7px 7px 7px var(--space-4)",
+          borderBottom: collapsed ? "none" : "1px solid var(--color-divider)",
+          background: "color-mix(in srgb, var(--color-text) 5%, transparent)",
+          cursor: docked || full ? "default" : "move",
+          // Only while it is a handle: docked, a touch here should scroll the
+          // page as it would anywhere else.
+          touchAction: docked || full ? "auto" : "none",
+          userSelect: "none",
+          flex: "0 0 auto",
+        }}
+      >
+        <div className="dialog-title" style={{ fontSize: 15 }}>
+          {editing ? "Edit note" : "New note"}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            color: "color-mix(in srgb, var(--color-text) 55%, transparent)",
+          }}
+        >
+          {/* Where it will land, which once the drive is navigable underneath
+              is no longer the folder on screen. */}
+          in {folderName}
+        </div>
+        {dirty && (
+          <span
+            title="Not saved yet"
             style={{
-              fontSize: 12,
-              color: "color-mix(in srgb, var(--color-text) 55%, transparent)",
+              flex: "0 0 auto",
+              fontSize: 10,
+              letterSpacing: ".06em",
+              textTransform: "uppercase",
+              color: "var(--color-accent-700)",
             }}
           >
-            in {folderName}
-          </div>
+            Unsaved
+          </span>
+        )}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 2, flex: "0 0 auto" }}>
+          <Tool
+            label={collapsed ? "Unroll the note" : "Roll the note up"}
+            hint={collapsed ? "Unroll" : "Roll up"}
+            onClick={() => setCollapsed((was) => !was)}
+          >
+            <Icon
+              name="chevron"
+              size={15}
+              style={{ transform: `rotate(${collapsed ? 90 : -90}deg)` }}
+            />
+          </Tool>
+          {!docked && (
+            <Tool
+              label={full ? "Back to a window" : "Fill the window"}
+              hint={full ? "Back to a window" : "Fill the window"}
+              onClick={toggleFull}
+            >
+              <Icon name={full ? "shrink" : "expand"} size={15} />
+            </Tool>
+          )}
+          <Tool label="Close the note" hint="Close" onClick={attemptCancel}>
+            <Icon name="close" size={15} />
+          </Tool>
         </div>
+      </div>
 
+      {/* Everything below the bar is hidden rather than unmounted when the
+          panel is rolled up: an unmounted textarea loses the browser's own
+          undo history, which is not this editor's to throw away. */}
+      <div
+        style={{
+          display: collapsed ? "none" : "flex",
+          flexDirection: "column",
+          gap: "var(--space-3)",
+          padding: "var(--space-4)",
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflow: "auto",
+        }}
+      >
         <div className="field">
           <div style={{ display: "flex", alignItems: "end", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 260px", minWidth: 0 }}>
@@ -796,7 +1123,10 @@ export default function NoteEditor({
           )}
         </div>
 
-        <div className="field" style={{ display: "flex", flexDirection: "column" }}>
+        <div
+          className="field"
+          style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0 }}
+        >
           <div
             style={{
               display: "flex",
@@ -891,6 +1221,13 @@ export default function NoteEditor({
               <Tool label="Link" hint="Link" onClick={() => at(applyLink)}>
                 <Icon name="link" size={15} />
               </Tool>
+              <Tool
+                label="Line between sections"
+                hint="Line between sections"
+                onClick={() => at(applyRule)}
+              >
+                <Icon name="split" size={15} />
+              </Tool>
                 </>
               )}
               {(
@@ -920,8 +1257,8 @@ export default function NoteEditor({
             <div
               className="dc-doc"
               style={{
-                minHeight: 260,
-                maxHeight: "45vh",
+                flex: "1 1 auto",
+                minHeight: 120,
                 overflow: "auto",
                 padding: "14px 16px",
                 border: "1px solid var(--color-divider)",
@@ -948,8 +1285,11 @@ export default function NoteEditor({
             readOnly={busy}
             spellCheck
             style={{
-              minHeight: 260,
-              resize: "vertical",
+              // The panel is what gets resized now, so the textarea takes
+              // whatever is left of it rather than carrying its own handle.
+              flex: "1 1 auto",
+              minHeight: 120,
+              resize: "none",
               fontFamily: "var(--font-mono)",
               fontSize: 13,
               lineHeight: 1.6,
@@ -985,7 +1325,7 @@ export default function NoteEditor({
               onClick={attemptCancel}
               disabled={busy}
             >
-              Cancel
+              Close
             </button>
             <button
               type="submit"
@@ -997,8 +1337,28 @@ export default function NoteEditor({
             </button>
           </div>
         </div>
-      </form>
-    </div>
+      </div>
+
+      {/* The corner to pull. Dragging it out while the panel is already against
+          the edge of the window widens it leftwards — see clampBox. */}
+      {!collapsed && !full && !docked && (
+        <span
+          aria-hidden
+          onPointerDown={(ev) => startDrag(ev, "size")}
+          style={{
+            position: "absolute",
+            right: 2,
+            bottom: 2,
+            width: 16,
+            height: 16,
+            cursor: "nwse-resize",
+            touchAction: "none",
+            background:
+              "linear-gradient(135deg, transparent 0 46%, var(--color-divider) 46% 54%, transparent 54% 70%, var(--color-divider) 70% 78%, transparent 78%)",
+          }}
+        />
+      )}
+    </form>
   );
 }
 
@@ -1010,6 +1370,10 @@ export default function NoteEditor({
  * onMouseDown rather than onClick, preventing the default, so the textarea
  * never loses its selection to the button taking focus — which is the whole
  * input these actions work from.
+ *
+ * A keyboard press of a button is a click with no mouse behind it, which
+ * detail === 0 is how the browser says so. Without that line these buttons
+ * exist only for people using a pointer.
  */
 function Tool({
   label,
@@ -1031,6 +1395,9 @@ function Tool({
       onMouseDown={(ev) => {
         ev.preventDefault();
         onClick();
+      }}
+      onClick={(ev) => {
+        if (ev.detail === 0) onClick();
       }}
       style={{
         minWidth: 32,
