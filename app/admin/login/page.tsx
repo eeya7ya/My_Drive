@@ -40,7 +40,19 @@ export default async function AdminLoginPage({
 
   const first = target.split("/").filter(Boolean)[0];
   const hit = first ? await resolveDriveSlug(decodeURIComponent(first)) : null;
-  const brand = hit && (await canOpenDrive(hit.brand)) ? hit.brand : DEFAULT_BRAND;
+  const known = hit && (await canOpenDrive(hit.brand)) ? hit.brand : null;
+  const brand = known ?? DEFAULT_BRAND;
 
-  return <LoginForm brand={brand} next={target} />;
+  /**
+   * The way out, which is not `next`. `next` is where signing in leads, and
+   * that is routinely somewhere a visitor who has just declined to sign in
+   * cannot go: /admin sends them back to this form, and a private drive shows
+   * its passcode wall. Only a drive this visitor can already open is offered
+   * as a way back — the same test the brand above passes, so a guessed
+   * ?next=/something still learns nothing about a drive it cannot see — and
+   * everyone else is returned to the dashboard.
+   */
+  const back = known ? target : "/";
+
+  return <LoginForm brand={brand} next={target} back={back} />;
 }

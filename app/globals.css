@@ -42,8 +42,13 @@ body[data-theme="dark"] .tag-neutral {
   color: color-mix(in srgb, var(--color-text) 88%, transparent);
 }
 
-a { color: var(--color-accent); text-underline-offset:3px; }
-a:hover { color: var(--color-accent-600); }
+/* Buttons are excluded because a link wearing the button grammar has to keep
+   the button's colours. `a:hover` outranks a lone class, so it beat
+   `.btn-primary`'s label colour and painted it --color-accent-600 — the very
+   value `.btn-primary:hover` fills the button with. Label and fill came out
+   identical and the button went blank under the pointer, in both themes. */
+a:not(.btn) { color: var(--color-accent); text-underline-offset:3px; }
+a:not(.btn):hover { color: var(--color-accent-600); }
 .brand-dark { display: none; }
 body[data-theme="dark"] .brand-bright { display: none; }
 body[data-theme="dark"] .brand-dark { display: block; }
