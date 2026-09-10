@@ -258,11 +258,19 @@ export default function FileViewer({
       case "docx":
       case "sheet":
         return (
-          <div
-            className="dc-doc"
-            style={{ height: "100%", overflow: "auto", padding: "26px 30px" }}
-            dangerouslySetInnerHTML={{ __html: html ?? "" }}
-          />
+          // The box that scrolls is this one, not .dc-doc. .dc-doc caps itself
+          // at a 78ch measure and centres, so while it was also the scrolling
+          // element only the column under the text answered the wheel — a
+          // third of the viewer, either side of it, was dead. Nothing else
+          // could take the scroll either, the page behind being frozen while
+          // the viewer is open, so a note simply stopped moving.
+          <div style={{ height: "100%", overflow: "auto" }}>
+            <div
+              className="dc-doc"
+              style={{ padding: "26px 30px" }}
+              dangerouslySetInnerHTML={{ __html: html ?? "" }}
+            />
+          </div>
         );
       default:
         return null;

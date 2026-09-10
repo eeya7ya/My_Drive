@@ -1254,18 +1254,24 @@ export default function NoteEditor({
           />
 
           {mode === "preview" && isMarkdown ? (
+            // The pane scrolls, and .dc-doc sits inside it holding the
+            // measure. The two were one element, which left the wheel dead
+            // over the margins beside the centred column — see FileViewer.
             <div
-              className="dc-doc"
               style={{
                 flex: "1 1 auto",
                 minHeight: 120,
                 overflow: "auto",
-                padding: "14px 16px",
                 border: "1px solid var(--color-divider)",
                 background: "var(--color-bg)",
               }}
-              dangerouslySetInnerHTML={{ __html: preview }}
-            />
+            >
+              <div
+                className="dc-doc"
+                style={{ padding: "14px 16px" }}
+                dangerouslySetInnerHTML={{ __html: preview }}
+              />
+            </div>
           ) : (
           <textarea
             id="note-text"
