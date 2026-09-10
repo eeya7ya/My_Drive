@@ -14,10 +14,20 @@ import { Brand, DEFAULT_BRAND } from "@/lib/brand";
 export default function LoginForm({
   brand = DEFAULT_BRAND,
   next = "/",
+  back = "/",
 }: {
   brand?: Brand;
   /** Where to go after signing in — the drive the padlock was clicked on. */
   next?: string;
+  /**
+   * Where giving up leads. Deliberately not `next`: signing in and changing
+   * your mind are different journeys. `next` is often a page that only an
+   * admin may see — /admin turns a signed-out visitor straight back to this
+   * form, and a locked drive answers with its passcode wall — so leaving by
+   * it went anywhere but out. The caller passes a drive only when this
+   * visitor can already open it; otherwise the way out is the dashboard.
+   */
+  back?: string;
 }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -176,7 +186,7 @@ export default function LoginForm({
         </form>
 
         <a
-          href={next}
+          href={back}
           style={{
             display: "inline-block",
             marginTop: 18,
@@ -184,7 +194,7 @@ export default function LoginForm({
             opacity: 0.7,
           }}
         >
-          ← Back to the drive
+          {back === "/" ? "← Back to the dashboard" : "← Back to the drive"}
         </a>
       </div>
     </div>

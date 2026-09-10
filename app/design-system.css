@@ -173,7 +173,7 @@ h6 { letter-spacing: 0.18em; text-transform: uppercase; }
 :lang(ar) { font-family: "Cairo", var(--font-body); }
 [dir="rtl"] { text-align: right; }
 p { margin: 0 0 var(--space-3); }
-a { color: var(--color-accent); text-underline-offset: 3px; }
+a:not(.btn) { color: var(--color-accent); text-underline-offset: 3px; }
 img { display: block; max-width: 100%; }
 figure { margin: 0; }
 figcaption {
