@@ -1355,7 +1355,7 @@ function CreateDrive({
             autoComplete="off"
             value={ownerPasscode}
             onChange={(e) => setOwnerPasscode(e.target.value)}
-            placeholder="Leave empty to decide later"
+            placeholder="What its owner will sign in with"
             disabled={locked}
           />
         </div>
@@ -1380,10 +1380,24 @@ function CreateDrive({
         </div>
       </div>
 
-      <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.7, maxWidth: "62ch" }}>
-        Without an owner passcode the drive exists but nobody can put anything in it — including
-        you, until you take its seat. Both can be set later.
-      </p>
+      {/*
+        A drive with no owner passcode is a drive nobody can put a folder in,
+        which is not a state worth reaching by leaving a field blank. It is
+        still allowed — an admin may genuinely not know yet who a drive is for
+        — but it is called out as the exception rather than described as an
+        ordinary choice.
+      */}
+      {ownerPasscode.trim() ? (
+        <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.7, maxWidth: "62ch" }}>
+          Send this to {ownerName.trim() || "its owner"}. They open the drive, click the padlock
+          in its header, and from then on add their own folders — you never have to.
+        </p>
+      ) : (
+        <p style={{ margin: "12px 0 0", fontSize: 12, color: DANGER, maxWidth: "62ch" }}>
+          Without an owner passcode the drive exists but nobody can add a folder to it —
+          including you, until you take its seat. Set one unless you mean to decide later.
+        </p>
+      )}
 
       <div style={{ display: "flex", gap: 9, marginTop: 22, flexWrap: "wrap" }}>
         <button className="btn btn-primary" type="submit" disabled={locked || !name.trim()}>

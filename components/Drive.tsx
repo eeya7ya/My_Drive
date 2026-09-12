@@ -2036,6 +2036,64 @@ export default function Drive({
           ))}
         </div>
 
+        {/*
+          Why the management controls are not here.
+
+          A viewer who cannot manage the drive used to be shown nothing at all:
+          the "New folder" button and the menu entry simply were not rendered,
+          which reads as a broken page rather than as a permission. It says so
+          now, and says what to do about it — which differs by whether the
+          drive has an owner to sign in as yet.
+
+          Only while the drive is otherwise quiet: a real error or a migration
+          notice is more urgent than an explanation of a missing button, and
+          stacking three bars above the listing helps nobody.
+        */}
+        {!canManage && !notice && !error && (
+          <div style={{ padding: "12px 27px 0" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+                padding: "10px 13px",
+                border: "1px solid var(--color-divider)",
+                background: "color-mix(in srgb, var(--color-text) 4%, transparent)",
+                fontSize: 13,
+              }}
+            >
+              <Icon
+                name="lock"
+                size={15}
+                style={{ flex: "none", opacity: 0.6 }}
+              />
+              <span style={{ flex: 1, minWidth: 220, opacity: 0.85 }}>
+                {brand.hasOwner
+                  ? `Adding and renaming folders belongs to this drive's owner. Sign in with its owner passcode to manage ${brand.name}.`
+                  : `${brand.name} has no owner yet, so its folders cannot be added or renamed. An admin assigns one at /admin — after that, whoever holds the owner passcode manages the drive themselves.`}
+              </span>
+              {brand.hasOwner ? (
+                <button className="btn btn-secondary" onClick={() => setManaging(true)}>
+                  <Icon name="lock" size={14} />
+                  Owner sign in
+                </button>
+              ) : (
+                data.isAdmin && (
+                  <a
+                    className="btn btn-secondary"
+                    href="/admin"
+                    style={{ textDecoration: "none" }}
+                  >
+                    <Icon name="shield" size={14} />
+                    Assign an owner
+                  </a>
+                )
+              )}
+            </div>
+          </div>
+        )}
+
         {notice && (
           <div style={{ padding: "12px 27px 0" }}>
             <div
