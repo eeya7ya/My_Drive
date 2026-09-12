@@ -409,180 +409,72 @@ function DriveTile({
   delay: string;
   onRequest: () => void;
 }) {
-  const isPrivate = drive.visibility === "private";
-  // A private drive with no passcode set has no way in at all, so offering to
-  // enter one would send the visitor to a door that cannot open.
-  const shut = isPrivate && !drive.unlocked && !drive.hasPasscode;
-
-  const [locking, setLocking] = useState(false);
-  const [lockError, setLockError] = useState<string | null>(null);
-
-  /**
-   * The pass is a thirty-day cookie, and this card is the only place a viewer
-   * ever sees they are still holding one, so it is also where they can give it
-   * back. A reload afterwards is deliberate: whether a drive is open is decided
-   * on the server, and asking again is the only way to be sure the page and the
-   * cookie agree. Only a failure lets the button go live again — a call that
-   * worked is replaced by the reload, and re-enabling it first would flicker.
-   */
-  async function lockAgain() {
-    setLocking(true);
-    setLockError(null);
-    try {
-      const res = await fetch(`/api/drives/${encodeURIComponent(drive.key)}/unlock`, {
-        method: "DELETE",
-      });
-      const body: { error?: string } = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || "Could not lock this drive again");
-      window.location.reload();
-    } catch (e) {
-      setLockError(e instanceof Error ? e.message : "Could not lock this drive again");
-      setLocking(false);
-    }
-  }
-
-  const badges = (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-      {isPrivate &&
-        (drive.unlocked ? (
-          <span className="tag tag-accent" style={{ fontSize: 10 }}>
-            Open
-          </span>
-        ) : (
-          <span
-            className="tag tag-outline"
-            style={{ fontSize: 10, display: "inline-flex", alignItems: "center", gap: 5 }}
-          >
-            <Icon name="lock" size={10} />
-            Private
-          </span>
-        ))}
-      {/* Only the admin is shown a drive the dashboard hides, so the marker
-          tells them which of these rows the public is not seeing. */}
-      {isAdmin && !drive.listed && (
-        <span className="tag tag-outline" style={{ fontSize: 10 }}>
-          Unlisted
-        </span>
-      )}
-    </div>
-  );
-
-  const identity = (
-    <div>
-      <div
-        style={{
-          fontFamily: "var(--font-heading)",
-          fontWeight: 600,
-          fontSize: 21,
-          lineHeight: 1.1,
-          letterSpacing: ".02em",
-        }}
-      >
-        {drive.name}
-      </div>
-      {drive.tagline && <div style={{ ...TAGLINE, marginTop: 3 }}>{drive.tagline}</div>}
-      {drive.description && (
-        <p style={{ margin: "10px 0 0", fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-          {drive.description}
-        </p>
-      )}
-    </div>
-  );
-
-  const head = (
-    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-      <div
-        style={{
-          width: 46,
-          height: 46,
-          flex: "none",
-          display: "grid",
-          placeItems: "center",
-          background: "var(--color-accent-100)",
-          color: "var(--color-accent-700)",
-          border: "1px solid var(--color-accent-300)",
-        }}
-      >
-        <Icon name={isPrivate && !drive.unlocked ? "lock" : "drive"} size={22} />
-      </div>
-      {badges}
-    </div>
-  );
-
-  if (isPrivate && drive.unlocked) {
-    return (
-      <div className="dc-card" style={{ animationDelay: delay, cursor: "default" }}>
-        {head}
-        {identity}
-        {lockError && (
-          <div style={{ fontSize: 12, color: "var(--color-danger)" }} role="alert">
-            {lockError}
-          </div>
-        )}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto" }}>
-          <a className="btn btn-primary" href={drive.basePath}>
-            Open drive
-            <Icon name="chevron" size={13} />
-          </a>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={lockAgain}
-            disabled={locking}
-            title="Hand this drive's pass back"
-          >
-            <Icon name="logout" size={13} />
-            {locking ? "Locking…" : "Lock again"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (drive.unlocked) {
-    return (
-      <a
-        className="dc-card"
-        href={drive.basePath}
-        style={{ animationDelay: delay, textDecoration: "none", color: "inherit" }}
-      >
-        {head}
-        {identity}
-        <div
-          style={{
-            ...LABEL,
-            marginTop: "auto",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          Open drive
-          <Icon name="chevron" size={12} />
-        </div>
-      </a>
-    );
-  }
-
   return (
     <div className="dc-card" style={{ animationDelay: delay, cursor: "default" }}>
-      {head}
-      {identity}
-      {shut && (
-        <div style={{ fontSize: 12, opacity: 0.65 }}>
-          This drive has no passcode yet, so asking is the only way in.
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            width: 46,
+            height: 46,
+            flex: "none",
+            display: "grid",
+            placeItems: "center",
+            background: "var(--color-accent-100)",
+            color: "var(--color-accent-700)",
+            border: "1px solid var(--color-accent-300)",
+          }}
+        >
+          <Icon name="lock" size={22} />
         </div>
-      )}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto" }}>
-        {!shut && (
-          // The drive's own address serves the unlock screen, so the locked
-          // card and the drive link go to exactly the same place — one route,
-          // one code path, whichever way the visitor arrives.
-          <a className="btn btn-primary" href={drive.basePath}>
-            <Icon name="lock" size={13} />
-            Enter passcode
-          </a>
+        {/* Only the admin is shown a drive the dashboard hides, so the marker
+            tells them which of these rows the public is not seeing. */}
+        {isAdmin && !drive.listed && (
+          <span className="tag tag-outline" style={{ fontSize: 10 }}>
+            Unlisted
+          </span>
         )}
+      </div>
+
+      <div>
+        <div
+          style={{
+            fontFamily: "var(--font-heading)",
+            fontWeight: 600,
+            fontSize: 21,
+            lineHeight: 1.1,
+            letterSpacing: ".02em",
+          }}
+        >
+          {drive.name}
+        </div>
+        {drive.tagline && <div style={{ ...TAGLINE, marginTop: 3 }}>{drive.tagline}</div>}
+        {drive.description && (
+          <p style={{ margin: "10px 0 0", fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+            {drive.description}
+          </p>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto" }}>
+        {/* The drive's own address serves its sign-in, so the card and the
+            drive link go to exactly the same place — one route, one code path,
+            whichever way somebody arrives.
+
+            The card never says whether this visitor is already signed in.
+            Every drive is behind a password, so there is nothing to tell apart,
+            and a dashboard that announced "you are in this one" would say more
+            to somebody looking over a shoulder than the page needs to. */}
+        <a className="btn btn-primary" href={drive.basePath}>
+          <Icon name="lock" size={13} />
+          Sign in
+        </a>
         <button type="button" className="btn btn-secondary" onClick={onRequest}>
           Request access
         </button>

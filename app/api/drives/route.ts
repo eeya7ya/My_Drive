@@ -4,14 +4,13 @@
  *
  * The read is public because the dashboard is the first page a visitor lands
  * on and has to render before anyone has signed in. What a visitor sees is
- * narrowed rather than gated — only the listed drives, and each entry carries
- * `unlocked` instead of anything at all about the passcode, so the client can
- * tell "open this" from "ask for the passcode" without ever holding the secret
- * that settles the question.
+ * narrowed rather than gated — only the listed drives, and only their public
+ * identity. Every card leads to that drive's sign-in, so there is nothing here
+ * that needs to know anybody's password.
  */
 
 import { createDrive, listDrives, listedDrives } from "@/lib/drives";
-import { canOpenDrive, hashPasscode, isAdmin, requireAdmin } from "@/lib/auth";
+import { isAdmin, requireAdmin } from "@/lib/auth";
 import { setQuota } from "@/lib/store";
 import { ok, fail, readJson, badRequest } from "@/lib/api";
 import type { DriveInput } from "@/lib/drives";
@@ -25,12 +24,11 @@ export async function GET() {
     const admin = await isAdmin();
     const visible = admin ? await listDrives() : await listedDrives();
 
-    // `unlocked` is asked of the access rules rather than inferred from the
-    // Brand, so a card on the dashboard and the drive page behind it can never
-    // disagree about whether it opens.
-    const drives: DriveCard[] = await Promise.all(
-      visible.map(async (brand) => ({ ...brand, unlocked: await canOpenDrive(brand) }))
-    );
+    // Every drive is behind a password, so the dashboard does not ask whether
+    // this visitor is through one: it shows the drives and each card leads to
+    // its sign-in. Saying which drives somebody is already signed in to would
+    // also tell an onlooker at the same screen more than the page needs to.
+    const drives: DriveCard[] = visible.map((brand) => ({ ...brand }));
 
     return ok({ drives, isAdmin: admin });
   } catch (err) {
@@ -69,13 +67,6 @@ function driveFieldsFrom(body: Record<string, unknown>): DriveInput {
   if (body.poweredBy !== undefined) {
     out.poweredBy = body.poweredBy === null ? null : asText(body.poweredBy, "poweredBy");
   }
-  if (body.visibility !== undefined) {
-    const visibility = asText(body.visibility, "visibility");
-    if (visibility !== "public" && visibility !== "private") {
-      badRequest('visibility must be "public" or "private".');
-    }
-    out.visibility = visibility;
-  }
   if (body.listed !== undefined) out.listed = asFlag(body.listed, "listed");
   if (body.position !== undefined) {
     if (typeof body.position !== "number" || !Number.isFinite(body.position)) {
@@ -95,9 +86,8 @@ function driveFieldsFrom(body: Record<string, unknown>): DriveInput {
  * they do, nobody can add a folder to it, which is honest — the drive exists
  * and has not been given to anyone.
  *
- * The passcode accepted here is the one a *visitor* is given to look at a
- * private drive, not anybody's login. It is hashed on the way through and
- * neither stored nor echoed back.
+ * A new drive is closed until somebody can sign in to it, which is the honest
+ * state for a drive that has not been given to anyone yet.
  */
 export async function POST(req: Request) {
   try {
@@ -108,15 +98,9 @@ export async function POST(req: Request) {
       badRequest("Expected a JSON object.");
     }
 
-    // An absent or empty passcode is no passcode at all; createDrive refuses
-    // the combination of that and a private drive.
-    const passcode = body.passcode;
-    const hash =
-      passcode === undefined || passcode === null || passcode === ""
-        ? null
-        : await hashPasscode(asText(passcode, "passcode"));
-
-    const drive = await createDrive(driveFieldsFrom(body), hash);
+    // No passcode: a drive is opened by its users' passwords, and those are
+    // created against it afterwards with POST /api/users.
+    const drive = await createDrive(driveFieldsFrom(body), null);
 
     // The quota is a settings row rather than a drives column, so it is written
     // after the drive exists. Left out, the drive takes the default the

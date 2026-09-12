@@ -36,7 +36,7 @@ import Choice, {
   LABEL,
   TAGLINE,
 } from "./Choice";
-import { Brand, DriveVisibility, SITE, slugifyDrive } from "@/lib/brand";
+import { Brand, SITE, slugifyDrive } from "@/lib/brand";
 import { humanSizeTrim } from "@/lib/types";
 import type { DriveRequest } from "@/lib/drives";
 import type { DriveUser } from "@/lib/users";
@@ -1114,7 +1114,7 @@ function DriveRow({
             border: "1px solid var(--color-accent-300)",
           }}
         >
-          <Icon name={brand.visibility === "private" ? "lock" : "drive"} size={16} />
+          <Icon name="drive" size={16} />
         </div>
 
         <div style={{ minWidth: 180, flex: 1 }}>
@@ -1179,12 +1179,6 @@ function DriveRow({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-          <span
-            className={brand.visibility === "private" ? "tag tag-outline" : "tag tag-neutral"}
-            style={{ fontSize: 10 }}
-          >
-            {brand.visibility === "private" ? "PRIVATE" : "PUBLIC"}
-          </span>
           {!brand.listed && (
             <span className="tag tag-neutral" style={{ fontSize: 10 }}>
               UNLISTED
@@ -1429,18 +1423,11 @@ function CreateDrive({
 }: {
   locked: boolean;
   busy: boolean;
-  onCreate: (body: {
-    name: string;
-    slug: string;
-    visibility: DriveVisibility;
-    passcode?: string;
-  }) => Promise<boolean>;
+  onCreate: (body: { name: string; slug: string }) => Promise<boolean>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [visibility, setVisibility] = useState<DriveVisibility>("public");
-  const [passcode, setPasscode] = useState("");
   // The address follows the name until the admin writes one themselves, after
   // which typing the name no longer rewrites what they chose.
   const [slugTouched, setSlugTouched] = useState(false);
@@ -1453,15 +1440,7 @@ function CreateDrive({
 
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
-    const secret = passcode.trim();
-    await onCreate({
-      name: name.trim(),
-      slug: preview,
-      visibility,
-      // An empty passcode is left out entirely: the API reads its absence as
-      // "no passcode", and refuses that on a private drive.
-      ...(visibility === "private" && secret ? { passcode: secret } : {}),
-    });
+    await onCreate({ name: name.trim(), slug: preview });
   }
 
   return (
@@ -1529,43 +1508,9 @@ function CreateDrive({
         </div>
       </div>
 
-      <fieldset style={GROUP}>
-        <legend style={GROUP_LABEL}>Visibility</legend>
-        <Choice
-          name="new-drive-visibility"
-          value={visibility}
-          disabled={locked}
-          onChange={setVisibility}
-          options={[
-            { value: "public", label: "Public" },
-            { value: "private", label: "Private" },
-          ]}
-        />
-      </fieldset>
-
-      {visibility === "private" && (
-        <div className="field" style={{ marginTop: 16, maxWidth: 320 }}>
-          <label htmlFor="new-drive-passcode">Viewing passcode</label>
-          <input
-            id="new-drive-passcode"
-            className="input"
-            type="text"
-            autoComplete="off"
-            value={passcode}
-            onChange={(e) => setPasscode(e.target.value)}
-            placeholder="Required for a private drive"
-            disabled={locked}
-          />
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-            What a visitor is given to <em>look</em> at the drive. Not a login — its own user
-            gets a password of their own, above.
-          </div>
-        </div>
-      )}
-
       <p style={{ margin: "18px 0 0", fontSize: 12, opacity: 0.7, maxWidth: "62ch" }}>
-        A new drive has nobody running it. Create a user against it next, or nothing can be put
-        in it.
+        Every drive sits behind a sign-in. This one has nobody who can get into it yet — create
+        a user against it next, and send them their password.
       </p>
 
       <div style={{ display: "flex", gap: 9, marginTop: 22, flexWrap: "wrap" }}>

@@ -9,7 +9,7 @@ real hosting and storage.
 | Hosting | Next.js 16 (App Router) on Vercel |
 | File storage | Cloudflare R2, via its S3-compatible API |
 | Metadata | Cloudflare D1, via its HTTP query API |
-| Auth | Users with passwords, one drive each; a single admin password above them; per-drive viewing passcodes |
+| Auth | One password per user, one drive each; a single admin password above them |
 
 ## How the pieces fit
 
@@ -205,8 +205,8 @@ may store. A user signs in on their own drive and does everything in it.**
 
 | | Signs in with | What they do |
 | --- | --- | --- |
-| **A user** | their own password, on their own drive | Everything in that drive: adds, renames, reorders and deletes folders and files, restores and deletes revisions, and edits the drive's own identity — name, tagline, tab title, address, numbering, powered-by mark, and the passcode a visitor is given to look at it |
-| **The admin** | `ADMIN_PASSWORD` | Creates the users and hands out their passwords; adds and removes drives; sets each drive's storage quota and whether the dashboard lists it; answers the access requests |
+| **A user** | their own password, on their own drive | Everything in that drive: adds, renames, reorders and deletes folders and files, restores and deletes revisions, and edits the drive's own identity — name, tagline, tab title, address, numbering, powered-by mark |
+| **The admin** | `ADMIN_PASSWORD`, at `/admin/login` | Creates the users and hands out their passwords; adds and removes drives; sets each drive's storage quota and whether the dashboard lists it; answers the access requests. Cannot open a drive, add a folder, or rename one |
 
 `/admin` is therefore a short page: **Users**, **Drives** (quota and listing
 only), and **Requests**. There is nothing on it that adds a folder or renames a
@@ -238,23 +238,33 @@ drive every day; the admin session lasts twelve hours, being occasional and
 reaching everything. The session signs the user's own password hash, so changing
 somebody's password — or deleting them — signs them out immediately.
 
-### Public, private, and who may look
+### One door, one password
 
-A drive is either **public**, readable by anyone with the address, or
-**private**, which asks for a passcode first. The passcode is set in the admin
-panel and stored as an HMAC under `SESSION_SECRET`, so the database never holds
-the passcode itself. Entering it mints a cookie that opens **that drive only**,
-for thirty days; sharing one drive never discloses another. The admin session
-opens all of them.
+**Every drive sits behind a sign-in page.** Open its link and you get a card
+asking for a password — not the drive. Enter the password you were given and you
+are inside, and everything in there is yours: add folders, upload, rename,
+reorder, delete, manage revisions, and edit the drive's own name, tagline,
+address and numbering.
 
-Private means private all the way down: `/api/drive`, the folder and upload
-routes, and every per-file route — including the ones that hand back a signed
-R2 URL — check access before answering, so a private drive's contents cannot be
+There is no second, weaker credential. There is no drive that opens to anybody
+with the link. Getting in and being able to change everything are the same act,
+because that is what somebody means when they say a drive is theirs.
+
+The admin does not get in either. They create the users and hand out the
+passwords; looking inside a drive means being one of its users, which shows up
+in the panel rather than happening quietly. `/admin` is reached from its own
+sign-in at `/admin/login`, which is a different door with a different password.
+
+Gated all the way down: the drive page, `/api/drive`, the folder and upload
+routes, and every per-file route — including the ones that hand back a signed R2
+URL — check for a user session before answering, so a drive's contents cannot be
 read by calling the API directly.
 
-A drive can also be **unlisted**, which only decides whether the dashboard names
-it. Unlisted and private are independent: a private drive is usually worth
-listing, so people can see it exists and ask.
+A drive can be **unlisted**, which only decides whether the dashboard names it.
+That is the admin's, since the dashboard belongs to the site rather than to any
+one drive. Every card on the dashboard leads to that drive's sign-in, and none
+of them says whether you are already signed in — which keeps the page from
+telling somebody looking over your shoulder more than it needs to.
 
 ### Asking for access
 
@@ -699,17 +709,16 @@ showing a drive the visitor did not ask for.
 
 ## Using it
 
-`/` lists the drives. A public one opens straight from there; a private one
-asks for its viewing passcode first. A drive is read-only to visitors — browse
-folders, download files, add a file — and everything else belongs to its users.
+`/` lists the drives and nothing else. Every card leads to that drive's sign-in;
+there is no drive you can enter without a password.
 
-**Running your drive.** Open it, click the padlock in the header, and enter the
-password the admin gave you. The design's own management affordances then
-appear — the **New folder** button, and the right-click menus on folders, files
-and empty space (open, new folder, upload, rename, delete, restore a revision) —
-and the padlock becomes the drive's **settings**: its name, tagline, tab title,
-address, numbering, powered-by mark, and the passcode visitors are given. You
-stay signed in for thirty days, and **Sign out** in the same panel ends it.
+**Running your drive.** Open its link. A sign-in card asks for your password;
+enter it and you are in. Everything is then there — the **New folder** button,
+and the right-click menus on folders, files and empty space (open, new folder,
+upload, rename, delete, restore a revision) — plus a **settings** button in the
+header for the drive's own name, tagline, tab title, address, numbering and
+powered-by mark. You stay signed in for thirty days, and **Sign out** in that
+same panel ends it.
 
 **Overseeing.** Go to `/admin/login`, enter `ADMIN_PASSWORD`. `/admin` creates
 users — a name, a password, and the drive that is theirs — and sets each
@@ -733,8 +742,7 @@ app/
     drive/                     GET the whole drive in one call
     drives/                    list; create and delete a drive (admin)
     drives/[key]/              edit a drive — split by level, user and admin
-    drives/[key]/signin/       a user signing in to their own drive
-    drives/[key]/unlock/       enter a private drive's viewing passcode
+    drives/[key]/signin/       a user signing in to their own drive, or out
     users/                     create and list users (admin)
     users/[id]/                rename, repassword, move, remove (admin)
     requests/                  ask for access; answer the asking (admin)
@@ -751,7 +759,7 @@ components/
   DrawingCanvas.tsx            pan and zoom for a converted drawing
   NoteEditor.tsx               writing a text note into the drive
   Dashboard.tsx                the front door
-  UnlockForm.tsx               a private drive's viewing passcode gate
+  DriveSignIn.tsx              the page every drive shows until you sign in
   DriveSettings.tsx            a user's sign-in, and the drive's own settings
   AdminPanel.tsx               users, quotas and requests (admin)
   Choice.tsx                   the segmented radio both panels use

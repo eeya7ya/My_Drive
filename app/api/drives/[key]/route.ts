@@ -9,8 +9,8 @@
  * them may send:
  *
  *   - the drive's own USERS may change the drive itself — what it is called,
- *     where it answers, whether its folders are numbered, and the passcode a
- *     visitor is given to look at it. That is the drive they run.
+ *     where it answers, whether its folders are numbered. That is the drive
+ *     they run.
  *   - the ADMIN may change whether the dashboard lists it, where it sits in
  *     the order, and how much it may store.
  *
@@ -20,14 +20,13 @@
  * send should hear about it, not watch the save succeed and the value stay as
  * it was.
  *
- * The passcode follows the three-way convention the panel depends on: a field
- * left out leaves it as it was, null clears it, and a string sets it. Without
- * that, a form that sends everything on every save would wipe the passcode of
- * any drive whose form did not repeat it.
+ * There is no passcode here. A drive has exactly one kind of credential — its
+ * users' passwords — and those are created in the admin panel, not edited from
+ * inside the drive.
  */
 
 import { deleteDrive, getDrive, updateDrive } from "@/lib/drives";
-import { hashPasscode, requireAdmin, requireDriveUser } from "@/lib/auth";
+import { requireAdmin, requireDriveUser } from "@/lib/auth";
 import { setQuota } from "@/lib/store";
 import { ok, fail, readJson, badRequest } from "@/lib/api";
 import type { DriveInput } from "@/lib/drives";
@@ -67,13 +66,6 @@ function driveFieldsFrom(body: Record<string, unknown>): DriveInput {
   if (body.poweredBy !== undefined) {
     out.poweredBy = body.poweredBy === null ? null : asText(body.poweredBy, "poweredBy");
   }
-  if (body.visibility !== undefined) {
-    const visibility = asText(body.visibility, "visibility");
-    if (visibility !== "public" && visibility !== "private") {
-      badRequest('visibility must be "public" or "private".');
-    }
-    out.visibility = visibility;
-  }
   if (body.listed !== undefined) out.listed = asFlag(body.listed, "listed");
   if (body.position !== undefined) {
     if (typeof body.position !== "number" || !Number.isFinite(body.position)) {
@@ -103,8 +95,6 @@ const USER_FIELDS = [
   "slug",
   "numbered",
   "poweredBy",
-  "visibility",
-  "passcode",
 ] as const;
 
 const ADMIN_FIELDS = ["listed", "position", "quotaBytes"] as const;
@@ -167,17 +157,6 @@ export async function PATCH(req: Request, { params }: Ctx) {
       assertFieldsAllowed(body, USER_FIELDS, "user");
     }
 
-    // undefined leaves the viewing passcode alone; null and the empty string
-    // both mean "there is no passcode now", since a form that has been emptied
-    // is asking for exactly that.
-    let hash: string | null | undefined;
-    if (body.passcode !== undefined) {
-      hash =
-        body.passcode === null || body.passcode === ""
-          ? null
-          : await hashPasscode(asText(body.passcode, "passcode"));
-    }
-
     // The quota is not a drives column — it is a settings row, maintained
     // beside the storage counter it is the denominator of — so it is written
     // separately, and first: if the number is refused, nothing else has
@@ -191,7 +170,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
     // `key` is the address, not a field — a body that repeats it is ignored
     // rather than obeyed, since renaming it would orphan every row.
-    const drive = await updateDrive(key, driveFieldsFrom(body), hash);
+    const drive = await updateDrive(key, driveFieldsFrom(body));
     return ok({ drive });
   } catch (err) {
     return fail(err);

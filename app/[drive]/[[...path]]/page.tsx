@@ -2,7 +2,7 @@ import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import Drive from "@/components/Drive";
-import UnlockForm from "@/components/UnlockForm";
+import DriveSignIn from "@/components/DriveSignIn";
 import { SITE } from "@/lib/brand";
 import { canOpenDrive } from "@/lib/auth";
 import { legacyRootDrive, resolveDriveSlug } from "@/lib/drives";
@@ -63,12 +63,13 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
   const brand = hit.brand;
 
-  // A locked drive discloses nothing — not its name in the tab, not its
-  // description to a crawler, and not the manifest that would carry both.
+  // A drive nobody is signed in to discloses nothing — not its name in the
+  // tab, not its description to a crawler, and not the manifest that would
+  // carry both.
   if (!(await canOpenDrive(brand))) {
     return {
-      title: `Private drive — ${SITE.name}`,
-      description: "This drive asks for a passcode.",
+      title: `Sign in — ${SITE.name}`,
+      description: "This drive asks for a password.",
       robots: { index: false, follow: false },
     };
   }
@@ -98,9 +99,10 @@ export default async function DrivePage({ params }: { params: Params }) {
     }
 
     // The gate is the whole page. Rendering the drive behind a dialog would
-    // have already put the folder names in the HTML.
+    // have already put the folder names in the HTML — and every drive is
+    // gated, because a drive is somebody's and sits behind their password.
     if (!(await canOpenDrive(hit.brand))) {
-      return <UnlockForm brand={hit.brand} next={hit.brand.basePath + rest} />;
+      return <DriveSignIn brand={hit.brand} next={hit.brand.basePath + rest} />;
     }
 
     return <Drive defaultTheme="dark" defaultView="grid" brand={hit.brand} />;
@@ -112,7 +114,7 @@ export default async function DrivePage({ params }: { params: Params }) {
   // Gated like the drive itself: the answer here is drawn from that drive's
   // folder names, so without the check a stranger could tell a real name from
   // an invented one by the status code alone — which is exactly what the
-  // passcode is meant to withhold.
+  // password is meant to withhold.
   const legacy = await legacyRootDrive();
   if (legacy && (await canOpenDrive(legacy))) {
     const wanted = slugify(drive);
