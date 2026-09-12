@@ -697,7 +697,14 @@ function UserRow({
   onDelete: () => Promise<boolean>;
 }) {
   const [confirming, setConfirming] = useState(false);
+  // Setting a password has its own control rather than living only inside the
+  // edit form. It is the thing an admin comes to this row to do — somebody has
+  // forgotten theirs, or is being handed the drive — and burying it behind a
+  // button labelled "Edit" meant it read as though there was no way to do it.
+  const [settingPassword, setSettingPassword] = useState(false);
+  const [password, setPassword] = useState("");
   const deleting = savingId === `user-delete:${user.id}`;
+  const saving = savingId === `user:${user.id}`;
   const drive = drives.find((d) => d.key === user.driveKey);
 
   return (
@@ -770,12 +777,26 @@ function UserRow({
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <button
             className="btn btn-secondary"
+            onClick={() => {
+              setSettingPassword((v) => !v);
+              setPassword("");
+            }}
+            disabled={locked}
+            aria-expanded={settingPassword}
+            title={`Give ${user.name} a new password`}
+          >
+            <Icon name={settingPassword ? "close" : "lock"} size={14} />
+            {settingPassword ? "Cancel" : "Set password"}
+          </button>
+          <button
+            className="btn btn-secondary btn-icon"
             onClick={onToggle}
             disabled={locked}
             aria-expanded={open}
+            title="Edit this user's name, email or drive"
+            aria-label="Edit this user"
           >
-            <Icon name={open ? "close" : "edit"} size={14} />
-            {open ? "Close" : "Edit"}
+            <Icon name={open ? "close" : "edit"} size={15} />
           </button>
           <button
             className="btn btn-secondary btn-icon"
@@ -789,6 +810,58 @@ function UserRow({
           </button>
         </div>
       </div>
+
+      {settingPassword && (
+        <form
+          onSubmit={async (ev) => {
+            ev.preventDefault();
+            // Trimmed here because the sign-in page trims what is typed and the
+            // server compares hashes exactly: a password saved with a space
+            // around it could never be entered again.
+            const next = password.trim();
+            if (!next) return;
+            const done = await onSave({ password: next });
+            if (done) {
+              setSettingPassword(false);
+              setPassword("");
+            }
+          }}
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            gap: 12,
+            flexWrap: "wrap",
+            padding: "14px 16px",
+            borderTop: "1px solid var(--color-divider)",
+            background: "color-mix(in srgb, var(--color-accent) 5%, transparent)",
+            animation: "pop .12s ease-out both",
+          }}
+        >
+          <div className="field" style={{ flex: 1, minWidth: 240, marginBottom: 0 }}>
+            <label htmlFor={`pw-${user.id}`}>New password for {user.name}</label>
+            <input
+              id={`pw-${user.id}`}
+              className="input"
+              type="text"
+              autoComplete="off"
+              autoFocus
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="What you will send them"
+              disabled={locked}
+            />
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={locked || !password.trim()}>
+            <Icon name="lock" size={14} />
+            {saving ? "Saving…" : "Set it"}
+          </button>
+          <p style={{ flexBasis: "100%", margin: 0, fontSize: 12, opacity: 0.7 }}>
+            Copy it before you save — it is stored hashed and can never be read back, only
+            replaced. Setting it signs {user.name} out of the drive straight away, and the old
+            password stops working at once.
+          </p>
+        </form>
+      )}
 
       {confirming && (
         <div
