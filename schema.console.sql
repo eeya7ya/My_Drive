@@ -61,7 +61,6 @@ CREATE TABLE IF NOT EXISTS drives (
   passcode_hash TEXT,
   owner_name    TEXT NOT NULL DEFAULT '',
   owner_email   TEXT NOT NULL DEFAULT '',
-  owner_hash    TEXT,
   legacy_root   INTEGER NOT NULL DEFAULT 0,
   position      INTEGER NOT NULL DEFAULT 0,
   created_at    INTEGER NOT NULL,
@@ -86,15 +85,15 @@ CREATE TABLE IF NOT EXISTS drive_requests (
 CREATE INDEX IF NOT EXISTS idx_drive_requests_status ON drive_requests(status, created_at DESC);
 INSERT OR IGNORE INTO drives
   (key, slug, name, tagline, title, short_name, description, numbered, powered_by,
-   visibility, listed, passcode_hash, owner_name, owner_email, owner_hash,
+   visibility, listed, passcode_hash, owner_name, owner_email,
    legacy_root, position, created_at, modified_at)
 VALUES
   ('main', 'yahya', 'YAHYA KHALED', 'Power Systems Drive',
    'Yahya Khaled — Power Systems Drive', 'PS Drive',
-   'Power systems study drive: folders, files, and owner management.',
-   0, NULL, 'public', 1, NULL, '', '', NULL, 1, 0, 1756000000000, 1756000000000),
+   'Power systems study drive: folders, files, and admin management.',
+   0, NULL, 'public', 1, NULL, '', '', 1, 0, 1756000000000, 1756000000000),
   ('advec', 'advec', 'eSpark', 'Drive', 'eSpark Drive', 'eSpark',
    'eSpark drive: numbered folders, files, and revisions.',
-   1, 'eSpark', 'public', 1, NULL, '', '', NULL, 0, 1, 1756000000000, 1756000000000);
+   1, 'eSpark', 'public', 1, NULL, '', '', 0, 1, 1756000000000, 1756000000000);
 INSERT OR IGNORE INTO drive_slugs (slug, drive_key, created_at)
 VALUES ('espark', 'advec', 1756000000000);
