@@ -11,7 +11,14 @@
  */
 
 import { createDrive, listDrives, listedDrives } from "@/lib/drives";
-import { canOpenDrive, hashPasscode, isAdmin, requireAdmin } from "@/lib/auth";
+import {
+  canOpenDrive,
+  hashOwnerPasscode,
+  hashPasscode,
+  isAdmin,
+  requireAdmin,
+} from "@/lib/auth";
+import { setQuota } from "@/lib/store";
 import { ok, fail, readJson, badRequest } from "@/lib/api";
 import type { DriveInput } from "@/lib/drives";
 import type { DriveCard } from "@/lib/types";
@@ -82,14 +89,24 @@ function driveFieldsFrom(body: Record<string, unknown>): DriveInput {
     }
     out.position = body.position;
   }
+  if (body.ownerName !== undefined) out.ownerName = asText(body.ownerName, "ownerName");
+  if (body.ownerEmail !== undefined) out.ownerEmail = asText(body.ownerEmail, "ownerEmail");
 
   return out;
 }
 
 /**
- * Add a drive. Admin only, and one of the two places a plaintext passcode is
- * accepted — it is hashed here and neither stored nor echoed back, so the
- * Brand that comes out says only whether a passcode exists.
+ * Add a drive, and say who is to run it.
+ *
+ * Admin only, because which drives exist is the level above the drives — and
+ * so is handing one to somebody, which is why the owner's passcode is set
+ * here rather than chosen by the owner. Both plaintext passcodes are hashed
+ * on the way through and neither is stored or echoed back, so the Brand that
+ * comes out says only whether each one exists.
+ *
+ * A drive may be created with no owner yet. It is then a drive nobody can add
+ * a folder to, which is honest: the admin has made the drive and not yet
+ * decided who runs it.
  */
 export async function POST(req: Request) {
   try {
@@ -108,7 +125,24 @@ export async function POST(req: Request) {
         ? null
         : await hashPasscode(asText(passcode, "passcode"));
 
-    const drive = await createDrive(driveFieldsFrom(body), hash);
+    const ownerPasscode = body.ownerPasscode;
+    const ownerHash =
+      ownerPasscode === undefined || ownerPasscode === null || ownerPasscode === ""
+        ? null
+        : await hashOwnerPasscode(asText(ownerPasscode, "ownerPasscode"));
+
+    const drive = await createDrive(driveFieldsFrom(body), hash, ownerHash);
+
+    // The quota is a settings row rather than a drives column, so it is written
+    // after the drive exists. Left out, the drive takes the default the
+    // storage counter falls back to.
+    if (body.quotaBytes !== undefined) {
+      if (typeof body.quotaBytes !== "number" || !Number.isFinite(body.quotaBytes)) {
+        badRequest("quotaBytes must be a number of bytes.");
+      }
+      await setQuota(drive.key, body.quotaBytes);
+    }
+
     return ok({ drive });
   } catch (err) {
     return fail(err);

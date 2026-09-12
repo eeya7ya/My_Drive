@@ -1,11 +1,16 @@
 "use client";
 
 /**
- * The owner's panel: the drives that exist, and the people asking to be let
- * into one.
+ * The admin panel: the level above the drives.
  *
- * It is an owner's tool, not a separate application, so it is assembled from
- * the same parts as everything else — blueprint frames with registration
+ * Which drives exist, who runs each one, and how much each may store. It is
+ * deliberately not where a drive's folders are added or its name is changed —
+ * those belong to the drive's owner and are done from inside the drive, behind
+ * the header's own control. The admin hands a drive to somebody and sets the
+ * ceiling on what it can hold; what happens inside is theirs.
+ *
+ * It is an operator's tool, not a separate application, so it is assembled
+ * from the same parts as everything else — blueprint frames with registration
  * marks, `.field` / `.input` controls, the letterspaced micro-label, the
  * accent rule under a heading. Somebody who arrives here from a drive should
  * recognise where they are.
@@ -14,7 +19,7 @@
  * that actually changed and then calls router.refresh(), so the server render
  * stays the single copy of the truth; a panel that patched its own list would
  * drift from the database the first time a save half succeeded, and the admin
- * would have no way to tell. And the passcode is a three-way choice rather
+ * would have no way to tell. And each passcode is a three-way choice rather
  * than a text box, because the API has three cases — leave it, set it, clear
  * it — and a blank field that silently means "leave it" is how people lock
  * themselves out of their own drive.
@@ -23,49 +28,18 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
+import Choice, {
+  DANGER,
+  DANGER_TEXT,
+  GROUP,
+  GROUP_LABEL,
+  LABEL,
+  TAGLINE,
+} from "./Choice";
 import { Brand, DriveVisibility, SITE, slugifyDrive } from "@/lib/brand";
+import { humanSizeTrim } from "@/lib/types";
 import type { DriveRequest } from "@/lib/drives";
-
-/** The design's recurring micro-label: 11px, uppercase, letterspaced, accent. */
-const LABEL: React.CSSProperties = {
-  fontSize: 11,
-  letterSpacing: ".12em",
-  textTransform: "uppercase",
-  color: "var(--color-accent-700)",
-};
-
-/** The sidebar's small line under a name, at panel scale. */
-const TAGLINE: React.CSSProperties = {
-  fontSize: 10,
-  letterSpacing: ".18em",
-  textTransform: "uppercase",
-  color: "var(--color-accent-700)",
-};
-
-/** The one red in the system, used for refusals and for destructive controls. */
-const DANGER = "var(--color-danger)";
-/**
- * A confirm button paints DANGER over `.btn-primary`, which colours its label
- * with `--color-bg` — nearly black under the dark theme, and unreadable on the
- * red. The two go together, so both are stated here rather than at either call
- * site, and white is the one that holds in both themes because the background
- * behind it is the same red whatever the page is doing.
- */
-const DANGER_TEXT = "var(--color-danger-fg)";
-
-/**
- * A group of radios is a fieldset with a legend rather than a label, since a
- * label may only name one control. These two carry the `.field > label` look
- * across, so a choice sits in a form beside the text inputs without announcing
- * that it is built from different parts.
- */
-const GROUP: React.CSSProperties = { border: "none", padding: 0, margin: 0, minWidth: 0 };
-const GROUP_LABEL: React.CSSProperties = {
-  padding: 0,
-  fontSize: 12,
-  marginBottom: 5,
-  color: "color-mix(in srgb, var(--color-text) 70%, transparent)",
-};
+import type { DriveMember } from "@/lib/types";
 
 /**
  * What the panel says after a write. A confirmation and a refusal share one
@@ -75,50 +49,42 @@ const GROUP_LABEL: React.CSSProperties = {
  */
 type Note = { tone: "ok" | "bad"; text: string } | null;
 
-/** A drive's editable identity in the shape the controls hold it. */
-interface DriveForm {
-  name: string;
-  tagline: string;
-  title: string;
-  shortName: string;
-  description: string;
-  slug: string;
-  numbered: boolean;
-  poweredBy: string;
-  listed: boolean;
-  visibility: DriveVisibility;
-}
+/** One gibibyte, the unit the quota field is typed in. */
+const GIB = 1024 * 1024 * 1024;
 
-/** The body of a PATCH: absent means unchanged, so every field is optional. */
+/**
+ * The body of a PATCH the admin is allowed to send. The drive's identity is
+ * absent on purpose — the API refuses those fields from an admin, because they
+ * are the owner's, and a form that could not send them cannot accidentally try.
+ */
 interface DrivePatch {
-  name?: string;
-  tagline?: string;
-  title?: string;
-  shortName?: string;
-  description?: string;
-  slug?: string;
-  numbered?: boolean;
-  poweredBy?: string | null;
   listed?: boolean;
-  visibility?: DriveVisibility;
-  passcode?: string | null;
+  ownerName?: string;
+  ownerEmail?: string;
+  ownerPasscode?: string | null;
+  quotaBytes?: number;
 }
 
-/** The three things an admin can mean by touching the passcode. */
+/** What the admin holds about one drive while editing it. */
+interface MemberForm {
+  ownerName: string;
+  ownerEmail: string;
+  listed: boolean;
+  /** Typed in GB, because bytes are not a number anybody chooses in. */
+  quotaGb: string;
+}
+
+/** The three things an admin can mean by touching an owner passcode. */
 type PasscodeMode = "keep" | "set" | "clear";
 
-function formOf(brand: Brand): DriveForm {
+function formOf(member: DriveMember, brand: Brand): MemberForm {
   return {
-    name: brand.name,
-    tagline: brand.tagline,
-    title: brand.title,
-    shortName: brand.shortName,
-    description: brand.description,
-    slug: brand.slug,
-    numbered: brand.numbered,
-    poweredBy: brand.poweredBy ?? "",
+    ownerName: member.ownerName,
+    ownerEmail: member.ownerEmail,
     listed: brand.listed,
-    visibility: brand.visibility,
+    // Trailing zeros are trimmed so a round 200 GB reads as "200" rather than
+    // "200.00", and a quota that is not a whole number of GB still round-trips.
+    quotaGb: String(Number((member.quotaBytes / GIB).toFixed(2))),
   };
 }
 
@@ -129,43 +95,35 @@ function formOf(brand: Brand): DriveForm {
  * one's edit.
  */
 function patchFor(
+  member: DriveMember,
   brand: Brand,
-  form: DriveForm,
+  form: MemberForm,
   mode: PasscodeMode,
   passcode: string
 ): DrivePatch {
   const patch: DrivePatch = {};
 
-  const name = form.name.trim();
-  if (name !== brand.name) patch.name = name;
-  if (form.tagline !== brand.tagline) patch.tagline = form.tagline;
+  const ownerName = form.ownerName.trim();
+  if (ownerName !== member.ownerName) patch.ownerName = ownerName;
 
-  const title = form.title.trim();
-  if (title !== brand.title) patch.title = title;
-
-  const shortName = form.shortName.trim();
-  if (shortName !== brand.shortName) patch.shortName = shortName;
-
-  if (form.description !== brand.description) patch.description = form.description;
-
-  // The address is slugified here as well as on the server, so what is sent is
-  // exactly the address the form has been showing underneath the field.
-  const slug = slugifyDrive(form.slug.trim());
-  if (slug !== brand.slug) patch.slug = slug;
-
-  if (form.numbered !== brand.numbered) patch.numbered = form.numbered;
-
-  const poweredBy = form.poweredBy.trim();
-  if (poweredBy !== (brand.poweredBy ?? "")) patch.poweredBy = poweredBy || null;
+  const ownerEmail = form.ownerEmail.trim();
+  if (ownerEmail !== member.ownerEmail) patch.ownerEmail = ownerEmail;
 
   if (form.listed !== brand.listed) patch.listed = form.listed;
-  if (form.visibility !== brand.visibility) patch.visibility = form.visibility;
 
-  // The unlock form trims what the visitor types and the server compares the
-  // hashes exactly, so a passcode saved with a space around it could never be
-  // entered again. It is trimmed on the way in as well, and the two ends agree.
-  if (mode === "set") patch.passcode = passcode.trim();
-  if (mode === "clear") patch.passcode = null;
+  // Compared in bytes rather than in the typed text, so re-saving a form that
+  // was never touched sends nothing even though "200" and "200.00" differ.
+  const gb = Number(form.quotaGb);
+  if (Number.isFinite(gb) && gb > 0) {
+    const bytes = Math.round(gb * GIB);
+    if (bytes !== member.quotaBytes) patch.quotaBytes = bytes;
+  }
+
+  // The sign-in forms trim what is typed and the server compares the hashes
+  // exactly, so a passcode saved with a space around it could never be entered
+  // again. It is trimmed on the way in as well, and the two ends agree.
+  if (mode === "set") patch.ownerPasscode = passcode.trim();
+  if (mode === "clear") patch.ownerPasscode = null;
 
   return patch;
 }
@@ -188,9 +146,16 @@ function when(ms: number): string {
 
 export default function AdminPanel({
   drives,
+  members,
   requests,
 }: {
   drives: Brand[];
+  /**
+   * One entry per drive, in the same order: who runs it and what it may store.
+   * Read on the server beside `drives` rather than fetched here, which is what
+   * lets every write end with router.refresh().
+   */
+  members: DriveMember[];
   requests: DriveRequest[];
 }) {
   const router = useRouter();
@@ -244,6 +209,8 @@ export default function AdminPanel({
 
   const locked = busy !== null;
   const waiting = requests.filter((r) => r.status === "new").length;
+  const byKey = new Map(members.map((m) => [m.key, m]));
+  const unowned = drives.filter((d) => !d.hasOwner).length;
 
   async function signOut() {
     setBusy("sign-out");
@@ -341,7 +308,7 @@ export default function AdminPanel({
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30 }}>
           <h1 className="dc-title" style={{ margin: 0, fontSize: 42 }}>
-            Drives &amp; requests
+            Drives, owners &amp; storage
           </h1>
           <div
             style={{
@@ -353,8 +320,9 @@ export default function AdminPanel({
           />
           <p style={{ margin: 0, fontSize: 15, opacity: 0.75, maxWidth: "64ch" }}>
             A drive added here appears on the dashboard straight away — no deploy. Its key is
-            fixed at creation because every folder and file row carries it; everything else,
-            including the address, can be changed later.
+            fixed at creation because every folder and file row carries it. What this panel sets
+            is who runs each drive and how much it may hold; the drive&rsquo;s own name, address
+            and folders are its owner&rsquo;s, and are changed from inside the drive.
           </p>
         </div>
 
@@ -425,6 +393,8 @@ export default function AdminPanel({
             </h2>
             <span style={LABEL}>
               {drives.length === 1 ? "One drive" : `${drives.length} drives`}
+              {unowned > 0 &&
+                ` · ${unowned === 1 ? "one has" : `${unowned} have`} no owner`}
             </span>
             <div style={{ marginLeft: "auto" }}>
               <button
@@ -465,6 +435,18 @@ export default function AdminPanel({
               <DriveRow
                 key={brand.key}
                 brand={brand}
+                member={
+                  byKey.get(brand.key) ?? {
+                    key: brand.key,
+                    name: brand.name,
+                    slug: brand.slug,
+                    ownerName: "",
+                    ownerEmail: "",
+                    hasOwner: brand.hasOwner,
+                    usedBytes: 0,
+                    quotaBytes: 200 * GIB,
+                  }
+                }
                 open={editing === brand.key}
                 locked={locked}
                 savingId={busy}
@@ -474,9 +456,12 @@ export default function AdminPanel({
                     setNote({ tone: "ok", text: "Nothing to save — no field changed." });
                     return true;
                   }
-                  const moved = patch.slug
-                    ? ` It answers at /${patch.slug} now, and its old address still works.`
-                    : "";
+                  const handed =
+                    patch.ownerPasscode === null
+                      ? ` Its owner passcode is cleared, so nobody can manage it until you set a new one.`
+                      : patch.ownerPasscode
+                        ? ` Send the new owner passcode to ${patch.ownerName ?? byKey.get(brand.key)?.ownerName ?? "its owner"} — the previous one no longer works.`
+                        : "";
                   const done = await call(
                     `save:${brand.key}`,
                     `/api/drives/${encodeURIComponent(brand.key)}`,
@@ -485,11 +470,23 @@ export default function AdminPanel({
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(patch),
                     },
-                    `Saved ${patch.name ?? brand.name}.${moved}`
+                    `Saved ${brand.name}.${handed}`
                   );
                   if (done) setEditing(null);
                   return done;
                 }}
+                onTakeOver={() =>
+                  call(
+                    `seat:${brand.key}`,
+                    `/api/drives/${encodeURIComponent(brand.key)}/owner`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ takeOver: true }),
+                    },
+                    `You hold ${brand.name}'s owner seat now. Open the drive to add folders or change its identity.`
+                  )
+                }
                 onDelete={() =>
                   call(
                     `delete:${brand.key}`,
@@ -540,8 +537,9 @@ export default function AdminPanel({
 
           <p style={{ margin: "0 0 20px", fontSize: 13, opacity: 0.75, maxWidth: "68ch" }}>
             Approving is bookkeeping — it marks the request as dealt with and grants nothing on
-            its own. What actually opens a private drive is its passcode, so send that to the
-            person yourself.
+            its own. What opens a private drive is its reader passcode, which its owner sets from
+            inside the drive; what lets somebody run a drive is the owner passcode you set here.
+            Send whichever one you meant, and only that one.
           </p>
 
           {requests.length === 0 ? (
@@ -593,30 +591,43 @@ export default function AdminPanel({
 /* ── drives ──────────────────────────────────────────────────────────────── */
 
 /**
- * One drive at rest: what it is called, where it answers, and the three facts
- * that decide who can see it. The editor is mounted only while it is open, so
- * every time it opens it is seeded from the freshest server data rather than
- * from whatever was typed and abandoned an hour ago.
+ * One drive at rest: who runs it, what it holds, and the facts that decide who
+ * can find it. What it is *called* is here too, but only as a label — changing
+ * it is the owner's, from inside the drive.
+ *
+ * The editor is mounted only while it is open, so every time it opens it is
+ * seeded from the freshest server data rather than from whatever was typed and
+ * abandoned an hour ago.
  */
 function DriveRow({
   brand,
+  member,
   open,
   locked,
   savingId,
   onToggle,
   onSave,
+  onTakeOver,
   onDelete,
 }: {
   brand: Brand;
+  member: DriveMember;
   open: boolean;
   locked: boolean;
   savingId: string | null;
   onToggle: () => void;
   onSave: (patch: DrivePatch) => Promise<boolean>;
+  onTakeOver: () => Promise<boolean>;
   onDelete: () => Promise<boolean>;
 }) {
   const [confirming, setConfirming] = useState(false);
   const deleting = savingId === `delete:${brand.key}`;
+  const seating = savingId === `seat:${brand.key}`;
+
+  const full = member.quotaBytes > 0 ? member.usedBytes / member.quotaBytes : 0;
+  // Three bands rather than a gradient: the bar is read at a glance, and what
+  // it has to answer is "is this drive fine, filling up, or a problem".
+  const barColour = full >= 0.9 ? DANGER : full >= 0.7 ? "var(--color-accent-600)" : "var(--color-accent)";
 
   return (
     <div
@@ -675,6 +686,44 @@ function DriveRow({
           >
             <a href={brand.basePath}>{brand.basePath}</a>
             <span style={{ opacity: 0.5 }}>key {brand.key}</span>
+            {/* The owner in the same breath as the address, because "whose
+                drive is that?" is the question this panel exists to answer. */}
+            <span style={{ opacity: 0.75 }}>
+              {member.ownerName || member.ownerEmail ? (
+                <>
+                  run by <strong style={{ opacity: 0.9 }}>{member.ownerName || member.ownerEmail}</strong>
+                </>
+              ) : brand.hasOwner ? (
+                "owner unnamed"
+              ) : (
+                <span style={{ color: DANGER }}>no owner</span>
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* Storage, as the number and the bar the drive's own sidebar shows.
+            It is the other half of what this panel manages, so it sits in the
+            row rather than behind the editor. */}
+        <div style={{ width: 168, flex: "none" }}>
+          <div style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span>{humanSizeTrim(member.usedBytes)}</span>
+            <span style={{ opacity: 0.6 }}>of {humanSizeTrim(member.quotaBytes)}</span>
+          </div>
+          <div
+            style={{
+              height: 4,
+              marginTop: 5,
+              background: "color-mix(in srgb, var(--color-text) 12%, transparent)",
+            }}
+          >
+            <div
+              style={{
+                height: "100%",
+                width: `${Math.min(100, Math.round(full * 100))}%`,
+                background: barColour,
+              }}
+            />
           </div>
         </div>
 
@@ -688,11 +737,6 @@ function DriveRow({
           {!brand.listed && (
             <span className="tag tag-neutral" style={{ fontSize: 10 }}>
               UNLISTED
-            </span>
-          )}
-          {brand.hasPasscode && (
-            <span className="tag tag-accent" style={{ fontSize: 10 }}>
-              PASSCODE SET
             </span>
           )}
           {brand.legacyRoot && (
@@ -713,7 +757,7 @@ function DriveRow({
             aria-expanded={open}
           >
             <Icon name={open ? "close" : "edit"} size={14} />
-            {open ? "Close" : "Edit"}
+            {open ? "Close" : "Manage"}
           </button>
           <button
             className="btn btn-secondary btn-icon"
@@ -728,17 +772,41 @@ function DriveRow({
         </div>
       </div>
 
+      {!brand.hasOwner && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            padding: "10px 16px",
+            borderTop: "1px solid var(--color-divider)",
+            fontSize: 13,
+            background: `color-mix(in srgb, ${DANGER} 6%, transparent)`,
+          }}
+        >
+          <span style={{ flex: 1, minWidth: 260 }}>
+            Nobody can add a folder to this drive until it has an owner. Set an owner passcode
+            below and send it to them — or take the seat yourself.
+          </span>
+          <button className="btn btn-secondary" onClick={onTakeOver} disabled={locked}>
+            <Icon name="shield" size={14} />
+            {seating ? "Taking…" : "Take the seat"}
+          </button>
+        </div>
+      )}
+
       {brand.visibility === "private" && !brand.hasPasscode && (
         <div
           style={{
             padding: "10px 16px",
             borderTop: "1px solid var(--color-divider)",
             fontSize: 13,
-            color: DANGER,
-            background: `color-mix(in srgb, ${DANGER} 6%, transparent)`,
+            opacity: 0.85,
           }}
         >
-          This drive is private with no passcode set, so nobody but you can open it.
+          This drive is private with no reader passcode, so only its owner and you can open it.
+          Setting one is the owner&rsquo;s to do, from inside the drive.
         </div>
       )}
 
@@ -782,11 +850,13 @@ function DriveRow({
       )}
 
       {open && (
-        <DriveEditor
+        <DriveMembership
           brand={brand}
+          member={member}
           locked={locked}
           saving={savingId === `save:${brand.key}`}
           onSave={onSave}
+          onTakeOver={onTakeOver}
           onCancel={onToggle}
         />
       )}
@@ -795,49 +865,57 @@ function DriveRow({
 }
 
 /**
- * The whole of a drive's identity in one form. It is a form rather than a set
- * of inline controls because most of these fields are read together — a name,
- * the line under it, the tab title — and changing one usually means looking at
- * the others.
+ * Everything the admin decides about one drive, in one form: who runs it, how
+ * much it may store, and whether the dashboard names it.
+ *
+ * What is conspicuously not here is the drive's identity — its name, tagline,
+ * address and numbering. Those used to live in this form, and moving them into
+ * the drive is the whole point: the person who runs a drive should not have to
+ * ask the person who minds the quotas to rename a folder.
  */
-function DriveEditor({
+function DriveMembership({
   brand,
+  member,
   locked,
   saving,
   onSave,
+  onTakeOver,
   onCancel,
 }: {
   brand: Brand;
+  member: DriveMember;
   locked: boolean;
   saving: boolean;
   onSave: (patch: DrivePatch) => Promise<boolean>;
+  onTakeOver: () => Promise<boolean>;
   onCancel: () => void;
 }) {
-  const [form, setForm] = useState<DriveForm>(() => formOf(brand));
+  const [form, setForm] = useState<MemberForm>(() => formOf(member, brand));
   const [mode, setMode] = useState<PasscodeMode>("keep");
   const [passcode, setPasscode] = useState("");
 
   const id = (field: string) => `drive-${brand.key}-${field}`;
-  const set = <K extends keyof DriveForm>(field: K, value: DriveForm[K]) =>
+  const set = <K extends keyof MemberForm>(field: K, value: MemberForm[K]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const preview = slugifyDrive(form.slug.trim());
   // "Set a passcode" with the box left empty would reach the API as an empty
   // string, which it reads as "clear it" — the exact accident this control was
   // shaped to prevent. So the save waits rather than guessing which was meant.
   const blank = mode === "set" && !passcode.trim();
-  // Clearing the passcode on a drive that stays private leaves it with no door
-  // at all, and the API refuses exactly that. The form refuses it first, since
-  // an admin reads a disabled button as a choice still to be made and a failed
-  // save as something having gone wrong. The visibility read here is the one
-  // the form is holding rather than the saved one, so clearing the passcode and
-  // making the drive public in the same edit remains a legitimate thing to do.
-  const shutOut = mode === "clear" && form.visibility === "private";
+
+  const gb = Number(form.quotaGb);
+  const badQuota = form.quotaGb.trim() !== "" && (!Number.isFinite(gb) || gb <= 0);
+  // The server refuses a quota below what the drive already holds; saying so
+  // here means the admin sees it while the number is still in front of them.
+  const belowUsed =
+    !badQuota && Number.isFinite(gb) && gb > 0 && Math.round(gb * GIB) < member.usedBytes;
+
+  const stopped = blank || badQuota || belowUsed;
 
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
-    if (blank || shutOut) return;
-    await onSave(patchFor(brand, form, mode, passcode));
+    if (stopped) return;
+    await onSave(patchFor(member, brand, form, mode, passcode));
   }
 
   return (
@@ -850,7 +928,7 @@ function DriveEditor({
         animation: "pop .12s ease-out both",
       }}
     >
-      <div style={{ ...LABEL, marginBottom: 14 }}>Identity</div>
+      <div style={{ ...LABEL, marginBottom: 14 }}>Who runs it</div>
 
       <div
         style={{
@@ -860,118 +938,143 @@ function DriveEditor({
         }}
       >
         <div className="field">
-          <label htmlFor={id("name")}>Name</label>
+          <label htmlFor={id("owner-name")}>Owner</label>
           <input
-            id={id("name")}
+            id={id("owner-name")}
             className="input"
-            value={form.name}
-            onChange={(e) => set("name", e.target.value)}
+            value={form.ownerName}
+            onChange={(e) => set("ownerName", e.target.value)}
+            placeholder="Who you handed the drive to"
             disabled={locked}
           />
         </div>
 
         <div className="field">
-          <label htmlFor={id("tagline")}>Tagline</label>
+          <label htmlFor={id("owner-email")}>Owner email</label>
           <input
-            id={id("tagline")}
+            id={id("owner-email")}
             className="input"
-            value={form.tagline}
-            onChange={(e) => set("tagline", e.target.value)}
-            placeholder="The small line under the name"
+            type="email"
+            value={form.ownerEmail}
+            onChange={(e) => set("ownerEmail", e.target.value)}
+            placeholder="Where to send the passcode"
             disabled={locked}
           />
-        </div>
-
-        <div className="field">
-          <label htmlFor={id("title")}>Browser tab title</label>
-          <input
-            id={id("title")}
-            className="input"
-            value={form.title}
-            onChange={(e) => set("title", e.target.value)}
-            disabled={locked}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor={id("shortName")}>Home-screen name</label>
-          <input
-            id={id("shortName")}
-            className="input"
-            value={form.shortName}
-            onChange={(e) => set("shortName", e.target.value)}
-            placeholder="Short — iOS truncates"
-            disabled={locked}
-          />
-        </div>
-
-        <div className="field" style={{ gridColumn: "1 / -1" }}>
-          <label htmlFor={id("description")}>Description</label>
-          <textarea
-            id={id("description")}
-            className="input"
-            value={form.description}
-            onChange={(e) => set("description", e.target.value)}
-            rows={2}
-            disabled={locked}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor={id("poweredBy")}>Powered-by mark</label>
-          <input
-            id={id("poweredBy")}
-            className="input"
-            value={form.poweredBy}
-            onChange={(e) => set("poweredBy", e.target.value)}
-            placeholder="Leave empty for none"
-            disabled={locked}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor={id("slug")}>Address</label>
-          <input
-            id={id("slug")}
-            className="input"
-            value={form.slug}
-            onChange={(e) => set("slug", e.target.value)}
-            disabled={locked}
-          />
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-            The drive will answer at <strong>/{preview}</strong>. Renaming it keeps the old
-            address working, so links already shared still land, and the drive&rsquo;s key
-            ({brand.key}) never changes whatever the address becomes.
-          </div>
         </div>
       </div>
 
+      <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.65, maxWidth: "62ch" }}>
+        These two are a record for you, not a login. What actually lets somebody run the drive is
+        the owner passcode below.
+      </p>
+
       <div className="hr" style={{ margin: "22px 0 18px" }} />
 
-      <div style={{ ...LABEL, marginBottom: 14 }}>Who sees it</div>
+      <div style={{ ...LABEL, marginBottom: 6 }}>Owner passcode</div>
+      <p style={{ margin: "0 0 12px", fontSize: 13, opacity: 0.75, maxWidth: "62ch" }}>
+        {brand.hasOwner
+          ? "This drive has an owner passcode. It is stored hashed and cannot be read back, only replaced or removed — and replacing it signs the current owner out of the drive's controls straight away."
+          : "This drive has no owner passcode, so nobody can add folders to it or change what it is called. Set one and send it to whoever is to run the drive."}
+      </p>
 
       <div
-        style={{
-          display: "flex",
-          gap: 26,
-          flexWrap: "wrap",
-          alignItems: "flex-start",
-          marginBottom: 4,
-        }}
+        role="radiogroup"
+        aria-label="Owner passcode"
+        style={{ display: "flex", flexDirection: "column", gap: 9 }}
       >
-        <fieldset style={GROUP}>
-          <legend style={GROUP_LABEL}>Visibility</legend>
-          <Choice
-            name={id("visibility")}
-            value={form.visibility}
+        <label className="radio">
+          <input
+            type="radio"
+            name={id("owner-mode")}
+            checked={mode === "keep"}
+            onChange={() => setMode("keep")}
             disabled={locked}
-            onChange={(next) => set("visibility", next)}
-            options={[
-              { value: "public", label: "Public" },
-              { value: "private", label: "Private" },
-            ]}
           />
-        </fieldset>
+          <span className="dot" />
+          <span>Leave the owner passcode as it is</span>
+        </label>
+
+        <label className="radio">
+          <input
+            type="radio"
+            name={id("owner-mode")}
+            checked={mode === "set"}
+            onChange={() => setMode("set")}
+            disabled={locked}
+          />
+          <span className="dot" />
+          <span>{brand.hasOwner ? "Hand the drive over with a new one" : "Set an owner passcode"}</span>
+        </label>
+
+        {mode === "set" && (
+          <div className="field" style={{ maxWidth: 320, marginLeft: 24 }}>
+            <label htmlFor={id("owner-passcode")}>New owner passcode</label>
+            <input
+              id={id("owner-passcode")}
+              className="input"
+              type="text"
+              autoComplete="off"
+              value={passcode}
+              onChange={(e) => setPasscode(e.target.value)}
+              placeholder="What you will send the owner"
+              disabled={locked}
+            />
+          </div>
+        )}
+
+        <label className="radio" style={{ opacity: brand.hasOwner ? 1 : 0.5 }}>
+          <input
+            type="radio"
+            name={id("owner-mode")}
+            checked={mode === "clear"}
+            onChange={() => setMode("clear")}
+            disabled={locked || !brand.hasOwner}
+          />
+          <span className="dot" />
+          <span>Take the drive back — remove its owner passcode</span>
+        </label>
+      </div>
+
+      {mode === "clear" && (
+        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
+          The drive and everything in it stay exactly as they are. Nobody will be able to add or
+          rename anything in it until you name the next owner.
+        </div>
+      )}
+
+      {blank && (
+        <div style={{ marginTop: 10, fontSize: 13, color: DANGER }}>
+          Type the new owner passcode, or choose to leave the current one alone.
+        </div>
+      )}
+
+      <div className="hr" style={{ margin: "22px 0 18px" }} />
+
+      <div style={{ ...LABEL, marginBottom: 14 }}>How much it may store</div>
+
+      <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div className="field" style={{ maxWidth: 200 }}>
+          <label htmlFor={id("quota")}>Quota</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              id={id("quota")}
+              className="input"
+              type="number"
+              min="1"
+              step="1"
+              inputMode="decimal"
+              value={form.quotaGb}
+              onChange={(e) => set("quotaGb", e.target.value)}
+              disabled={locked}
+              style={{ width: 120 }}
+            />
+            <span style={{ fontSize: 13, opacity: 0.7 }}>GB</span>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+            {humanSizeTrim(member.usedBytes)} in use. This is the number the drive&rsquo;s own
+            sidebar counts against, and uploads are refused once it is reached.
+          </div>
+        </div>
 
         <fieldset style={GROUP}>
           <legend style={GROUP_LABEL}>On the dashboard</legend>
@@ -986,109 +1089,44 @@ function DriveEditor({
             ]}
           />
         </fieldset>
-
-        <fieldset style={GROUP}>
-          <legend style={GROUP_LABEL}>Folders</legend>
-          <Choice
-            name={id("numbered")}
-            value={form.numbered ? "numbered" : "plain"}
-            disabled={locked}
-            onChange={(next) => set("numbered", next === "numbered")}
-            options={[
-              { value: "plain", label: "Plain" },
-              { value: "numbered", label: "Numbered" },
-            ]}
-          />
-        </fieldset>
       </div>
 
-      <div className="hr" style={{ margin: "22px 0 18px" }} />
-
-      <div style={{ ...LABEL, marginBottom: 6 }}>Passcode</div>
-      <p style={{ margin: "0 0 12px", fontSize: 13, opacity: 0.75, maxWidth: "62ch" }}>
-        {brand.hasPasscode
-          ? "This drive has a passcode. It is stored hashed and cannot be read back, only replaced or removed."
-          : "This drive has no passcode. A private drive needs one before it can be opened by anyone but you."}
-      </p>
-
-      <div
-        role="radiogroup"
-        aria-label="Passcode"
-        style={{ display: "flex", flexDirection: "column", gap: 9 }}
-      >
-        <label className="radio">
-          <input
-            type="radio"
-            name={id("passcode-mode")}
-            checked={mode === "keep"}
-            onChange={() => setMode("keep")}
-            disabled={locked}
-          />
-          <span className="dot" />
-          <span>Leave the passcode as it is</span>
-        </label>
-
-        <label className="radio">
-          <input
-            type="radio"
-            name={id("passcode-mode")}
-            checked={mode === "set"}
-            onChange={() => setMode("set")}
-            disabled={locked}
-          />
-          <span className="dot" />
-          <span>{brand.hasPasscode ? "Replace it with a new one" : "Set a passcode"}</span>
-        </label>
-
-        {mode === "set" && (
-          <div className="field" style={{ maxWidth: 320, marginLeft: 24 }}>
-            <label htmlFor={id("passcode")}>New passcode</label>
-            <input
-              id={id("passcode")}
-              className="input"
-              type="text"
-              autoComplete="off"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              placeholder="What you will send the visitor"
-              disabled={locked}
-            />
-          </div>
-        )}
-
-        <label className="radio" style={{ opacity: brand.hasPasscode ? 1 : 0.5 }}>
-          <input
-            type="radio"
-            name={id("passcode-mode")}
-            checked={mode === "clear"}
-            onChange={() => setMode("clear")}
-            disabled={locked || !brand.hasPasscode}
-          />
-          <span className="dot" />
-          <span>Remove the passcode</span>
-        </label>
-      </div>
-
-      {shutOut && (
+      {badQuota && (
         <div style={{ marginTop: 10, fontSize: 13, color: DANGER }}>
-          Removing the passcode would shut this private drive to everyone, so the panel will not
-          send it. Make the drive public first, or set a new passcode instead.
+          A quota has to be a positive number of gigabytes.
         </div>
       )}
 
-      {blank && (
+      {belowUsed && (
         <div style={{ marginTop: 10, fontSize: 13, color: DANGER }}>
-          Type the new passcode, or choose to leave the current one alone.
+          {brand.name} already stores {humanSizeTrim(member.usedBytes)}. A quota under that would
+          refuse every upload while the drive sat over a limit it was under a moment ago — raise
+          the number, or have its owner clear some files first.
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 9, marginTop: 24, flexWrap: "wrap" }}>
-        <button className="btn btn-primary" type="submit" disabled={locked || blank || shutOut}>
+      <div style={{ display: "flex", gap: 9, marginTop: 24, flexWrap: "wrap", alignItems: "center" }}>
+        <button className="btn btn-primary" type="submit" disabled={locked || stopped}>
           <Icon name="edit" size={14} />
           {saving ? "Saving…" : "Save changes"}
         </button>
         <button className="btn btn-secondary" type="button" onClick={onCancel} disabled={locked}>
           Cancel
+        </button>
+        {/* Offered on every drive, not only an unowned one: an admin sometimes
+            has to go in and fix something, and this is the honest way to do it
+            — a seat taken deliberately rather than an admin who was quietly
+            every drive's owner all along. */}
+        <button
+          className="btn btn-secondary"
+          type="button"
+          onClick={onTakeOver}
+          disabled={locked}
+          title="Hold this drive's owner seat yourself"
+          style={{ marginLeft: "auto" }}
+        >
+          <Icon name="shield" size={14} />
+          Take the owner&rsquo;s seat
         </button>
       </div>
     </form>
@@ -1097,8 +1135,13 @@ function DriveEditor({
 
 /**
  * A new drive asks for as little as it can: a name, the address it will answer
- * at, and whether it is open. Everything else has a sensible default and is
- * easier to judge once the drive exists and can be looked at.
+ * at, whether it is open, and who is to run it. Everything else — the tagline,
+ * the tab title, the numbering — has a sensible default and is the owner's to
+ * judge once the drive exists and can be looked at.
+ *
+ * The owner is asked for here rather than left for later because a drive
+ * without one is a drive nobody can put a folder in, and the admin who has
+ * just made it is the only person who can fix that.
  */
 function CreateDrive({
   locked,
@@ -1113,6 +1156,10 @@ function CreateDrive({
     slug: string;
     visibility: DriveVisibility;
     passcode?: string;
+    ownerName?: string;
+    ownerEmail?: string;
+    ownerPasscode?: string;
+    quotaBytes?: number;
   }) => Promise<boolean>;
   onCancel: () => void;
 }) {
@@ -1120,6 +1167,10 @@ function CreateDrive({
   const [slug, setSlug] = useState("");
   const [visibility, setVisibility] = useState<DriveVisibility>("public");
   const [passcode, setPasscode] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerPasscode, setOwnerPasscode] = useState("");
+  const [quotaGb, setQuotaGb] = useState("200");
   // The address follows the name until the admin writes one themselves, after
   // which typing the name no longer rewrites what they chose.
   const [slugTouched, setSlugTouched] = useState(false);
@@ -1144,6 +1195,8 @@ function CreateDrive({
     // passcode of nothing but spaces would otherwise pass for one and open a
     // private drive that not even the person sent it could unlock.
     const secret = passcode.trim();
+    const ownerSecret = ownerPasscode.trim();
+    const gb = Number(quotaGb);
     await onCreate({
       name: name.trim(),
       slug: preview,
@@ -1151,6 +1204,12 @@ function CreateDrive({
       // An empty passcode is left out entirely: the API reads its absence as
       // "no passcode", and refuses that on a private drive.
       ...(visibility === "private" && secret ? { passcode: secret } : {}),
+      ...(ownerName.trim() ? { ownerName: ownerName.trim() } : {}),
+      ...(ownerEmail.trim() ? { ownerEmail: ownerEmail.trim() } : {}),
+      ...(ownerSecret ? { ownerPasscode: ownerSecret } : {}),
+      // Left out when the field is empty or nonsense, so the drive takes the
+      // default rather than being created with a quota nobody meant.
+      ...(Number.isFinite(gb) && gb > 0 ? { quotaBytes: Math.round(gb * GIB) } : {}),
     });
   }
 
@@ -1234,7 +1293,7 @@ function CreateDrive({
 
       {visibility === "private" && (
         <div className="field" style={{ marginTop: 16, maxWidth: 320 }}>
-          <label htmlFor="new-drive-passcode">Passcode</label>
+          <label htmlFor="new-drive-passcode">Reader passcode</label>
           <input
             id="new-drive-passcode"
             className="input"
@@ -1245,8 +1304,86 @@ function CreateDrive({
             placeholder="Required for a private drive"
             disabled={locked}
           />
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+            What a reader is given. The owner can change it later from inside the drive.
+          </div>
         </div>
       )}
+
+      <div className="hr" style={{ margin: "22px 0 18px" }} />
+
+      <div style={{ ...LABEL, marginBottom: 14 }}>Who will run it</div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gap: 14,
+        }}
+      >
+        <div className="field">
+          <label htmlFor="new-drive-owner-name">Owner</label>
+          <input
+            id="new-drive-owner-name"
+            className="input"
+            value={ownerName}
+            onChange={(e) => setOwnerName(e.target.value)}
+            placeholder="Who the drive is for"
+            disabled={locked}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="new-drive-owner-email">Owner email</label>
+          <input
+            id="new-drive-owner-email"
+            className="input"
+            type="email"
+            value={ownerEmail}
+            onChange={(e) => setOwnerEmail(e.target.value)}
+            placeholder="Where to send the passcode"
+            disabled={locked}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="new-drive-owner-passcode">Owner passcode</label>
+          <input
+            id="new-drive-owner-passcode"
+            className="input"
+            type="text"
+            autoComplete="off"
+            value={ownerPasscode}
+            onChange={(e) => setOwnerPasscode(e.target.value)}
+            placeholder="Leave empty to decide later"
+            disabled={locked}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="new-drive-quota">Quota</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              id="new-drive-quota"
+              className="input"
+              type="number"
+              min="1"
+              step="1"
+              inputMode="decimal"
+              value={quotaGb}
+              onChange={(e) => setQuotaGb(e.target.value)}
+              disabled={locked}
+              style={{ width: 110 }}
+            />
+            <span style={{ fontSize: 13, opacity: 0.7 }}>GB</span>
+          </div>
+        </div>
+      </div>
+
+      <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.7, maxWidth: "62ch" }}>
+        Without an owner passcode the drive exists but nobody can put anything in it — including
+        you, until you take its seat. Both can be set later.
+      </p>
 
       <div style={{ display: "flex", gap: 9, marginTop: 22, flexWrap: "wrap" }}>
         <button className="btn btn-primary" type="submit" disabled={locked || !name.trim()}>
@@ -1449,45 +1586,6 @@ function RequestRow({
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-/* ── shared controls ─────────────────────────────────────────────────────── */
-
-/**
- * A two-or-three way choice as the design system draws it: real radio inputs
- * inside a `.seg`, so it is a keyboard control and a form field rather than a
- * pair of buttons pretending to be one.
- */
-function Choice<T extends string>({
-  name,
-  value,
-  options,
-  onChange,
-  disabled,
-}: {
-  name: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (next: T) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="seg">
-      {options.map((option) => (
-        <label key={option.value} className="seg-opt">
-          <input
-            type="radio"
-            name={name}
-            value={option.value}
-            checked={value === option.value}
-            onChange={() => onChange(option.value)}
-            disabled={disabled}
-          />
-          {option.label}
-        </label>
-      ))}
     </div>
   );
 }

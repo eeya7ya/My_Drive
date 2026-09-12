@@ -1,29 +1,52 @@
 /**
  * Who is allowed to see and change what.
  *
- * Two independent kinds of session, both signed cookies rather than rows, so
- * D1 is untouched on every page load:
+ * Three kinds of session, all signed cookies rather than rows, so D1 is
+ * untouched on every page load:
  *
- *   - the admin session. One admin, one password from the environment, who
- *     manages every drive and can open all of them.
- *   - a per-drive access session. A private drive carries a passcode set in
- *     the admin panel; entering it mints a cookie that opens that drive and
- *     no other, so sharing one drive never discloses the rest.
+ *   - the admin session. One admin, one password from the environment, at the
+ *     level above the drives: which of them exist, who owns each one, and how
+ *     much each may store. The admin does not add folders — see below.
+ *   - a per-drive OWNER session. Each drive has an owner passcode, set by the
+ *     admin, and whoever holds it runs that drive: its folders, its files and
+ *     revisions, and the identity it wears. One drive's owner is nobody in
+ *     another drive.
+ *   - a per-drive ACCESS session. A private drive carries a reader's passcode;
+ *     entering it mints a cookie that opens that drive and no other, so
+ *     sharing one drive never discloses the rest. It grants reading, never
+ *     managing.
  *
- * Both are an HMAC over an expiry stamp under SESSION_SECRET, and the drive
- * cookie signs the drive key alongside it so a token cannot be moved sideways
- * onto a different drive.
+ * All three are an HMAC over an expiry stamp under SESSION_SECRET, and both
+ * per-drive cookies sign the drive key alongside it so a token cannot be moved
+ * sideways onto a different drive.
+ *
+ * Why the admin is not simply allowed everything: running a drive and
+ * overseeing the drives are two jobs, usually two people, and folding them
+ * into one password meant the person minding quotas was also the only person
+ * who could add a folder. So the admin session does not carry a drive's
+ * management rights — it carries the right to *hand them out*. An admin who
+ * needs to run a drive themselves takes its owner seat deliberately
+ * (`claimOwnerSession`), which is honest about what has happened rather than
+ * silently making every admin every drive's owner. It is not a wall: whoever
+ * holds ADMIN_PASSWORD can set any drive's owner passcode, so nothing here
+ * pretends to keep the admin out. It keeps the roles distinct.
  */
 
 import { cookies } from "next/headers";
-import { passcodeHashFor } from "./drives";
+import { ownerHashFor, passcodeHashFor } from "./drives";
 import type { Brand, DriveKey } from "./brand";
 
 const COOKIE = "drive_session";
 const MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
 
-/** A drive pass lasts longer than an admin session; it grants far less. */
+/** A reading pass lasts longer than an admin session; it grants far less. */
 const DRIVE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
+/**
+ * An owner's seat is as short-lived as the admin's session, because it is the
+ * same kind of thing: the right to change something, not merely to look at it.
+ */
+const OWNER_MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
 
 function secret(): string {
   const s = process.env.SESSION_SECRET;
@@ -136,53 +159,91 @@ export function isAuthConfigured(): boolean {
   return Boolean(process.env.ADMIN_PASSWORD && process.env.SESSION_SECRET);
 }
 
-/* ── per-drive access ─────────────────────────────────────────────────────── */
+/* ── per-drive sessions: the owner's seat and the reader's pass ───────────── */
 
 /**
- * One cookie per drive, named after the drive's permanent key. Separate
- * cookies rather than one list keeps the drives independent: revoking one
- * drive's passcode touches no other drive's passes.
+ * The two per-drive credentials. They are handled by one set of helpers
+ * because they are the same mechanism pointed at different columns — what
+ * differs is which hash is signed in and how long the cookie lives.
  */
-function driveCookieName(key: DriveKey): string {
-  return `drive_pass_${key.replace(/[^a-z0-9_-]/gi, "_")}`;
+type DrivePass = "pass" | "owner";
+
+/**
+ * One cookie per drive per kind, named after the drive's permanent key.
+ * Separate cookies rather than one list keeps the drives independent:
+ * revoking one drive's passcode touches no other drive's passes, and taking
+ * back one drive's ownership leaves its readers alone.
+ */
+function driveCookieName(kind: DrivePass, key: DriveKey): string {
+  return `drive_${kind}_${key.replace(/[^a-z0-9_-]/gi, "_")}`;
 }
 
 /**
- * What a drive's passcode is stored as. The HMAC is keyed by SESSION_SECRET,
- * so the database never holds the passcode itself and a leaked row does not
- * open the drive.
+ * What a drive's reader passcode is stored as. The HMAC is keyed by
+ * SESSION_SECRET, so the database never holds the passcode itself and a
+ * leaked row does not open the drive.
  */
 export async function hashPasscode(passcode: string): Promise<string> {
   return hmac(`passcode:${passcode}`);
 }
 
 /**
- * Mint the pass that opens one drive.
- *
- * The passcode's own hash is inside what gets signed, so a pass is only valid
- * against the passcode it was issued for. Changing or clearing a drive's
- * passcode therefore invalidates every pass already handed out — which is what
- * an admin means by revoking one, and would not happen if the signature
- * covered only the key and the expiry.
+ * The same for the owner's passcode, under a different label — so an owner who
+ * happens to choose the word the readers were given does not end up with a
+ * row that matches theirs, and neither hash can be pasted into the other's
+ * column to gain the other's rights.
  */
-export async function createDriveSession(key: DriveKey): Promise<void> {
-  const expires = Date.now() + DRIVE_MAX_AGE_SECONDS * 1000;
-  const secretOfDrive = (await passcodeHashFor(key)) ?? "";
-  const payload = `${key}.${secretOfDrive}.${expires}`;
-  const token = `${expires}.${await hmac(payload)}`;
+export async function hashOwnerPasscode(passcode: string): Promise<string> {
+  return hmac(`owner-passcode:${passcode}`);
+}
 
-  (await cookies()).set(driveCookieName(key), token, {
+/** Whichever hash this kind of pass is signed against, or "" when unset. */
+async function hashBehind(kind: DrivePass, key: DriveKey): Promise<string> {
+  const stored = kind === "owner" ? await ownerHashFor(key) : await passcodeHashFor(key);
+  return stored ?? "";
+}
+
+/**
+ * What gets signed.
+ *
+ * The reader's pass keeps the exact payload it has always had, so the passes
+ * already sitting in browsers stay valid across this change. The owner's is
+ * labelled, which costs nothing and means the two can never be mistaken for
+ * each other even if the hashes behind them somehow collided.
+ */
+function passPayload(kind: DrivePass, key: DriveKey, behind: string, stamp: string): string {
+  return kind === "owner"
+    ? `owner.${key}.${behind}.${stamp}`
+    : `${key}.${behind}.${stamp}`;
+}
+
+/**
+ * Mint a pass for one drive.
+ *
+ * The relevant passcode's own hash is inside what gets signed, so a pass is
+ * only valid against the passcode it was issued for. Changing or clearing a
+ * drive's passcode therefore invalidates every pass already handed out —
+ * which is what revoking one means, and would not happen if the signature
+ * covered only the key and the expiry. The same holds for ownership: the
+ * moment the admin sets a new owner passcode, the previous owner's session
+ * stops opening the drive's controls.
+ */
+async function mintPass(kind: DrivePass, key: DriveKey, maxAge: number): Promise<void> {
+  const expires = Date.now() + maxAge * 1000;
+  const behind = await hashBehind(kind, key);
+  const token = `${expires}.${await hmac(passPayload(kind, key, behind, String(expires)))}`;
+
+  (await cookies()).set(driveCookieName(kind, key), token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: DRIVE_MAX_AGE_SECONDS,
+    maxAge,
   });
 }
 
-/** Drop one drive's pass, leaving any others in place. */
-export async function destroyDriveSession(key: DriveKey): Promise<void> {
-  (await cookies()).set(driveCookieName(key), "", {
+async function clearPass(kind: DrivePass, key: DriveKey): Promise<void> {
+  (await cookies()).set(driveCookieName(kind, key), "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -191,10 +252,10 @@ export async function destroyDriveSession(key: DriveKey): Promise<void> {
   });
 }
 
-/** Whether the caller holds a valid, unexpired pass for this drive. */
-async function hasDrivePass(key: DriveKey): Promise<boolean> {
+/** Whether the caller holds a valid, unexpired pass of this kind for this drive. */
+async function holdsPass(kind: DrivePass, key: DriveKey): Promise<boolean> {
   try {
-    const token = (await cookies()).get(driveCookieName(key))?.value;
+    const token = (await cookies()).get(driveCookieName(kind, key))?.value;
     if (!token) return false;
 
     const idx = token.lastIndexOf(".");
@@ -206,8 +267,8 @@ async function hasDrivePass(key: DriveKey): Promise<boolean> {
     // The drive key is inside the signed payload, so a pass for one drive
     // cannot be replayed against another by renaming the cookie; the passcode
     // hash is in there too, so a rotated passcode retires the old passes.
-    const secretOfDrive = (await passcodeHashFor(key)) ?? "";
-    if (!safeEqual(sig, await hmac(`${key}.${secretOfDrive}.${stamp}`))) return false;
+    const behind = await hashBehind(kind, key);
+    if (!safeEqual(sig, await hmac(passPayload(kind, key, behind, stamp)))) return false;
 
     const expires = Number(stamp);
     return Number.isFinite(expires) && Date.now() < expires;
@@ -216,18 +277,43 @@ async function hasDrivePass(key: DriveKey): Promise<boolean> {
   }
 }
 
+/** Mint the pass that opens one private drive for reading. */
+export async function createDriveSession(key: DriveKey): Promise<void> {
+  return mintPass("pass", key, DRIVE_MAX_AGE_SECONDS);
+}
+
+/** Drop one drive's reading pass, leaving any others in place. */
+export async function destroyDriveSession(key: DriveKey): Promise<void> {
+  return clearPass("pass", key);
+}
+
+/** Take the owner's seat at one drive. */
+export async function createOwnerSession(key: DriveKey): Promise<void> {
+  return mintPass("owner", key, OWNER_MAX_AGE_SECONDS);
+}
+
+/**
+ * Leave the owner's seat, keeping any reading pass. Signing out of managing a
+ * drive should not also shut a private drive in the owner's face.
+ */
+export async function destroyOwnerSession(key: DriveKey): Promise<void> {
+  return clearPass("owner", key);
+}
+
 /**
  * May the caller see this drive at all?
  *
- * A public drive is open to everyone. A private one needs either the admin
- * session or that drive's pass. A private drive whose passcode has been
- * cleared is shut to everyone but the admin — that is the safe reading of a
- * half-configured drive, and the admin panel refuses to create one.
+ * A public drive is open to everyone. A private one needs the admin session,
+ * that drive's reading pass, or its owner's seat — an owner who can restructure
+ * the drive but not open it would be absurd. A private drive whose passcode
+ * has been cleared is shut to everyone but those two — that is the safe reading
+ * of a half-configured drive, and the admin panel refuses to create one.
  */
 export async function canOpenDrive(brand: Brand): Promise<boolean> {
   if (brand.visibility !== "private") return true;
   if (await isAdmin()) return true;
-  return hasDrivePass(brand.key);
+  if (await holdsPass("pass", brand.key)) return true;
+  return holdsPass("owner", brand.key);
 }
 
 /** Throws 403 unless the caller may see the drive. */
@@ -239,8 +325,8 @@ export async function requireDriveAccess(brand: Brand): Promise<void> {
 }
 
 /**
- * Check a passcode against the stored hash. A drive with no passcode set
- * accepts none, so an unfinished private drive never falls open.
+ * Check a reader's passcode against the stored hash. A drive with no passcode
+ * set accepts none, so an unfinished private drive never falls open.
  */
 export async function verifyDrivePasscode(
   key: DriveKey,
@@ -249,4 +335,69 @@ export async function verifyDrivePasscode(
   const stored = await passcodeHashFor(key);
   if (!stored) return false;
   return safeEqual(stored, await hashPasscode(candidate));
+}
+
+/**
+ * The same for the owner's passcode. A drive the admin has not yet given an
+ * owner accepts nothing, so an unassigned drive cannot be claimed by guessing.
+ */
+export async function verifyOwnerPasscode(
+  key: DriveKey,
+  candidate: string
+): Promise<boolean> {
+  const stored = await ownerHashFor(key);
+  if (!stored) return false;
+  return safeEqual(stored, await hashOwnerPasscode(candidate));
+}
+
+/* ── who the caller is, for this drive ────────────────────────────────────── */
+
+/** Whether the caller holds this drive's owner seat. */
+export async function isDriveOwner(brand: Brand): Promise<boolean> {
+  return holdsPass("owner", brand.key);
+}
+
+/**
+ * Throws unless the caller owns this drive.
+ *
+ * Deliberately not satisfied by the admin session: adding a folder is the
+ * owner's job, and an admin who wants to do it takes the seat first. The
+ * message says which of the three situations the caller is in, because
+ * "forbidden" alone would leave an admin staring at a drive they administer
+ * with no idea what to do next.
+ */
+export async function requireDriveOwner(brand: Brand): Promise<void> {
+  if (await isDriveOwner(brand)) return;
+
+  const message = !brand.hasOwner
+    ? `${brand.name} has no owner yet. An admin assigns one in the admin panel before its folders and files can be managed.`
+    : (await isAdmin())
+      ? `Managing ${brand.name} is its owner's job. Take the owner's seat for this drive first — the admin panel offers it beside the drive.`
+      : `Only ${brand.name}'s owner can change this. Sign in with the drive's owner passcode.`;
+
+  const err = new Error(message);
+  (err as Error & { status?: number }).status = 403;
+  throw err;
+}
+
+/**
+ * The admin taking a drive's owner seat, without its passcode.
+ *
+ * Not a back door so much as a shortcut for one the admin already has: they
+ * can set the drive's owner passcode to anything they like and sign in with
+ * it, so refusing this would cost a round trip and buy nothing. What it does
+ * buy is that the admin holds management rights only while they have asked
+ * for them, rather than always and invisibly.
+ */
+export async function claimOwnerSession(key: DriveKey): Promise<void> {
+  await requireAdmin();
+  await createOwnerSession(key);
+}
+
+/** Both roles at once, for the payloads and pages that render by role. */
+export async function driveRoles(
+  brand: Brand
+): Promise<{ isAdmin: boolean; isOwner: boolean }> {
+  const [admin, owner] = await Promise.all([isAdmin(), isDriveOwner(brand)]);
+  return { isAdmin: admin, isOwner: owner };
 }

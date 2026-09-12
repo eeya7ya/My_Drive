@@ -206,6 +206,76 @@ export async function getUsage(drive: DriveKey): Promise<{
   };
 }
 
+/**
+ * Every named drive's usage and quota in one query.
+ *
+ * The admin panel shows a row per drive, and asking getUsage() per drive would
+ * be a read apiece against a table that holds a handful of rows. The settings
+ * table is small enough to fetch the relevant keys at once and match them up
+ * here instead.
+ */
+export async function usageForDrives(
+  drives: DriveKey[]
+): Promise<Map<DriveKey, { usedBytes: number; quotaBytes: number }>> {
+  const out = new Map<DriveKey, { usedBytes: number; quotaBytes: number }>();
+  if (!drives.length) return out;
+
+  const keys = drives.flatMap((d) => [
+    settingKey(d, "used_bytes"),
+    settingKey(d, "quota_bytes"),
+  ]);
+  const rows = await d1Query<{ key: string; value: string }>(
+    `SELECT key, value FROM settings WHERE key IN (${keys.map(() => "?").join(", ")})`,
+    keys
+  );
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+
+  for (const drive of drives) {
+    const quota = Number(map.get(settingKey(drive, "quota_bytes")) ?? DEFAULT_QUOTA);
+    out.set(drive, {
+      usedBytes: Number(map.get(settingKey(drive, "used_bytes")) ?? 0),
+      quotaBytes: quota || DEFAULT_QUOTA,
+    });
+  }
+  return out;
+}
+
+/**
+ * Set how much one drive may store. The admin's lever, and the only one of the
+ * two counters that is a decision rather than a measurement — used_bytes is
+ * maintained by the uploads themselves and is repaired by recalcCounters(),
+ * never typed in.
+ *
+ * The floor is what the drive already holds: a quota below that would render a
+ * storage bar past its own end and refuse every upload while saying the drive
+ * is over a limit it was under a moment ago. Refusing the number and saying
+ * why is the honest answer.
+ */
+export async function setQuota(drive: DriveKey, bytes: number): Promise<void> {
+  const n = Math.trunc(bytes);
+  if (!Number.isFinite(n) || n <= 0) {
+    const err = new Error("A quota has to be a positive number of bytes.");
+    (err as Error & { status?: number }).status = 400;
+    throw err;
+  }
+
+  const { usedBytes } = await getUsage(drive);
+  if (n < usedBytes) {
+    const err = new Error(
+      `That drive already stores ${humanSize(usedBytes)}. Set a quota of at least that, or clear some files first.`
+    );
+    (err as Error & { status?: number }).status = 400;
+    throw err;
+  }
+
+  // OR REPLACE rather than an INSERT-then-UPDATE pair: `settings` holds nothing
+  // but the key and the value, so there is no column a replace could lose.
+  await d1Execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [
+    settingKey(drive, "quota_bytes"),
+    String(n),
+  ]);
+}
+
 /** Move one drive's running storage total. Negative delta for deletions. */
 async function bumpUsedBytes(drive: DriveKey, delta: number): Promise<void> {
   const n = Math.trunc(delta);

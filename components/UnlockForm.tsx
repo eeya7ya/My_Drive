@@ -15,6 +15,13 @@
  * A wrong code is a near miss far more often than a wrong person, so the field
  * keeps what was typed and the server's own message is shown as-is rather than
  * being softened into something unhelpful.
+ *
+ * One card, two keys. A private drive's own owner arrives at this wall like
+ * everybody else, and the settings panel they would otherwise sign in through
+ * is behind it — so the form flips to ask for the owner passcode instead, and
+ * posts to the owner's door rather than the reader's. Which one is being asked
+ * for is always stated, because the two grant very different things and being
+ * handed the wrong one is the ordinary mistake here.
  */
 
 import React, { useState } from "react";
@@ -32,6 +39,8 @@ export default function UnlockForm({
   const [passcode, setPasscode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Whether the field is asking for the owner's passcode rather than a reader's. */
+  const [asOwner, setAsOwner] = useState(false);
 
   // A deep link is worth honouring, but an empty one must still land somewhere,
   // and the drive's own root is the only address we know is inside it.
@@ -45,7 +54,7 @@ export default function UnlockForm({
       // A pasted code usually carries the whitespace it was copied with, and
       // the server compares exactly, so the trim happens before it is sent.
       const res = await fetch(
-        `/api/drives/${encodeURIComponent(brand.key)}/unlock`,
+        `/api/drives/${encodeURIComponent(brand.key)}/${asOwner ? "owner" : "unlock"}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -59,6 +68,13 @@ export default function UnlockForm({
       setError(e instanceof Error ? e.message : "That passcode was not accepted");
       setBusy(false);
     }
+  }
+
+  /** Swapping keys clears the field and the refusal that belonged to the other one. */
+  function swap(next: boolean) {
+    setAsOwner(next);
+    setPasscode("");
+    setError(null);
   }
 
   return (
@@ -127,7 +143,7 @@ export default function UnlockForm({
                 color: "var(--color-accent-700)",
               }}
             >
-              {brand.tagline || "Private drive"}
+              {asOwner ? "Owner sign in" : brand.tagline || "Private drive"}
             </div>
           </div>
         </div>
@@ -148,12 +164,16 @@ export default function UnlockForm({
             color: "color-mix(in srgb, var(--color-text) 65%, transparent)",
           }}
         >
-          This drive is private. Enter its passcode to open it.
+          {asOwner
+            ? "Enter this drive's owner passcode to open it and manage what is in it."
+            : "This drive is private. Enter its passcode to open it."}
         </p>
 
         <form onSubmit={submit}>
           <div className="field">
-            <label htmlFor="drive-passcode">Passcode</label>
+            <label htmlFor="drive-passcode">
+              {asOwner ? "Owner passcode" : "Passcode"}
+            </label>
             <input
               id="drive-passcode"
               className="input"
@@ -162,7 +182,9 @@ export default function UnlockForm({
               autoFocus
               value={passcode}
               onChange={(e) => setPasscode(e.target.value)}
-              placeholder="Enter the drive passcode"
+              placeholder={
+                asOwner ? "What the admin sent you" : "Enter the drive passcode"
+              }
             />
           </div>
 
@@ -181,8 +203,14 @@ export default function UnlockForm({
             disabled={busy || !passcode.trim()}
             style={{ marginTop: 18, justifyContent: "center" }}
           >
-            <Icon name="lock" size={14} />
-            {busy ? "Unlocking…" : "Unlock"}
+            <Icon name={asOwner ? "drive" : "lock"} size={14} />
+            {busy
+              ? asOwner
+                ? "Signing in…"
+                : "Unlocking…"
+              : asOwner
+                ? "Sign in as owner"
+                : "Unlock"}
           </button>
         </form>
 
@@ -193,17 +221,30 @@ export default function UnlockForm({
           Don&apos;t have it? <a href="/">Ask for access</a>
         </div>
 
-        <a
-          href={`/admin/login?next=${encodeURIComponent(target)}`}
+        {/* A button rather than a link: it changes which door this form knocks
+            on, and goes nowhere. Offered even on a drive with no owner set —
+            the reply says so, and hiding it would tell a stranger which drives
+            are unclaimed. */}
+        <button
+          type="button"
+          onClick={() => swap(!asOwner)}
           style={{
             display: "inline-block",
             marginTop: 10,
+            padding: 0,
             fontSize: 12,
             opacity: 0.55,
+            background: "transparent",
+            border: "none",
+            color: "var(--color-accent)",
+            cursor: "pointer",
+            textDecoration: "underline",
           }}
         >
-          Owner? Sign in to the admin panel
-        </a>
+          {asOwner
+            ? "Not the owner? Use the reader passcode"
+            : "Own this drive? Sign in to manage it"}
+        </button>
       </div>
     </div>
   );
