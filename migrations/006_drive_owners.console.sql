@@ -1,5 +1,6 @@
 ALTER TABLE drives ADD COLUMN owner_name  TEXT NOT NULL DEFAULT '';
 ALTER TABLE drives ADD COLUMN owner_email TEXT NOT NULL DEFAULT '';
+ALTER TABLE drives ADD COLUMN owner_hash  TEXT;
 INSERT OR IGNORE INTO settings (key, value)
 SELECT
   CASE WHEN key = 'main' THEN 'quota_bytes' ELSE key || '/quota_bytes' END,

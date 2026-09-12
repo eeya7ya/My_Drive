@@ -22,13 +22,11 @@ export interface DriveMember {
   key: string;
   name: string;
   slug: string;
-  /** Who the drive is for. Free text; may be empty. */
+  /** Who the drive was handed to. Free text; may be empty. */
   ownerName: string;
   ownerEmail: string;
-  /** Whether a passcode is set — for a private drive, whether anyone can get in. */
-  hasPasscode: boolean;
-  /** Whether the drive is private, i.e. whether its passcode gates anything. */
-  isPrivate: boolean;
+  /** Whether an owner passcode is set, i.e. whether anyone can sign in to run it. */
+  hasOwner: boolean;
   usedBytes: number;
   quotaBytes: number;
 }
@@ -122,12 +120,11 @@ export interface DrivePayload {
   usedBytes: number;
   quotaBytes: number;
   /**
-   * Whether this viewer may change the drive: add folders, rename, delete,
-   * restore a revision, edit its identity. True for whoever can open the
-   * drive, because being in a drive is what makes it theirs to run — the admin
-   * decides who is in it.
+   * Whether this viewer holds the drive's owner seat. This is what decides
+   * whether the drive shows its management controls — adding folders, renaming,
+   * deleting, revisions — because those are the owner's, not the admin's.
    */
-  canManage: boolean;
+  isOwner: boolean;
   /**
    * Whether this viewer holds the admin session. Only decides whether the
    * header offers a way through to the admin panel; it unlocks nothing in the

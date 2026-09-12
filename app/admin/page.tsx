@@ -32,10 +32,10 @@ export const metadata: Metadata = {
  * render is the only copy of the truth, so the panel can never show a list
  * that disagrees with the database.
  *
- * `members` is the second half of what this panel is for — who each drive is
- * for and what it may store. It is assembled here rather than folded into the
- * Brand because a Brand is serialised into every visitor's page and an email
- * address is not a visitor's business.
+ * `members` is the second half of what this panel is for — who runs each drive
+ * and what it may store. It is assembled here rather than folded into the
+ * Brand because a Brand is serialised into every visitor's page and an owner's
+ * email address is not a visitor's business.
  */
 export default async function AdminPage() {
   if (!(await isAdmin())) redirect("/admin/login?next=%2Fadmin");
@@ -61,8 +61,7 @@ export default async function AdminPage() {
       slug: brand.slug,
       ownerName: owner?.ownerName ?? "",
       ownerEmail: owner?.ownerEmail ?? "",
-      hasPasscode: brand.hasPasscode,
-      isPrivate: brand.visibility === "private",
+      hasOwner: owner?.hasOwner ?? brand.hasOwner,
       usedBytes: counted?.usedBytes ?? 0,
       quotaBytes: counted?.quotaBytes ?? 214748364800,
     };

@@ -43,13 +43,11 @@ export interface DriveRow {
   visibility: string;
   listed: number;
   passcode_hash: string | null;
-  /**
-   * Who the admin gave this drive to. Bookkeeping, not a credential — what
-   * actually lets that person in, and therefore run the drive, is
-   * passcode_hash above.
-   */
+  /** Who the admin handed this drive to. Bookkeeping, not a credential. */
   owner_name: string;
   owner_email: string;
+  /** HMAC of the owner's passcode; NULL on a drive with no owner yet. */
+  owner_hash: string | null;
   legacy_root: number;
   position: number;
   created_at: number;
@@ -95,6 +93,7 @@ function toBrand(row: DriveRow): Brand {
     visibility: row.visibility === "private" ? "private" : "public",
     listed: Number(row.listed) === 1,
     hasPasscode: Boolean(row.passcode_hash),
+    hasOwner: Boolean(row.owner_hash),
     legacyRoot: Number(row.legacy_root) === 1,
     position: Number(row.position) || 0,
   });
@@ -125,7 +124,7 @@ const BASE_COLUMNS =
   "key, slug, name, tagline, title, short_name, description, numbered, powered_by, " +
   "visibility, listed, passcode_hash, legacy_root, position, created_at, modified_at";
 
-const OWNER_COLUMNS = "owner_name, owner_email";
+const OWNER_COLUMNS = "owner_name, owner_email, owner_hash";
 
 /**
  * Whether this database has the owner columns. Null until the first query has
@@ -134,9 +133,9 @@ const OWNER_COLUMNS = "owner_name, owner_email";
  */
 let ownerColumns: boolean | null = null;
 
-/** Fill in what a pre-006 row cannot tell us: nobody is recorded against it. */
+/** Fill in what a pre-006 row cannot tell us: nobody owns it yet. */
 function withoutOwner(row: DriveRow): DriveRow {
-  return { ...row, owner_name: "", owner_email: "" };
+  return { ...row, owner_name: "", owner_email: "", owner_hash: null };
 }
 
 /**
@@ -285,16 +284,43 @@ export async function passcodeHashFor(key: DriveKey): Promise<string | null> {
 }
 
 /**
- * Who each drive was given to, for the admin panel's roster.
+ * The stored owner-passcode hash, read only by the owner check in lib/auth.ts.
+ *
+ * Null covers three situations that all mean the same thing to a caller — no
+ * database, no registry, no owner assigned — because every one of them is a
+ * drive nobody can sign in to manage.
+ */
+export async function ownerHashFor(key: DriveKey): Promise<string | null> {
+  if (!isD1Configured()) return null;
+  if (ownerColumns === false) return null;
+  try {
+    const rows = await d1Query<{ owner_hash: string | null }>(
+      "SELECT owner_hash FROM drives WHERE key = ? LIMIT 1",
+      [key]
+    );
+    ownerColumns = true;
+    return rows[0]?.owner_hash ?? null;
+  } catch (err) {
+    if (isMissingOwnerColumns(err)) {
+      ownerColumns = false;
+      return null;
+    }
+    if (isMissingRegistry(err)) return null;
+    throw err;
+  }
+}
+
+/**
+ * Who runs each drive, for the admin panel's roster.
  *
  * Read separately from the Brand rather than folded into it, because a Brand
- * is serialised into every page a visitor sees and an email address is not a
- * visitor's business. Only the admin page asks for this.
+ * is serialised into every page a visitor sees and an owner's email address is
+ * not a visitor's business. Only the admin page asks for this.
  */
 export async function listDriveOwners(): Promise<
-  Map<string, { ownerName: string; ownerEmail: string }>
+  Map<string, { ownerName: string; ownerEmail: string; hasOwner: boolean }>
 > {
-  const out = new Map<string, { ownerName: string; ownerEmail: string }>();
+  const out = new Map<string, { ownerName: string; ownerEmail: string; hasOwner: boolean }>();
   if (!isD1Configured()) return out;
   try {
     const rows = await queryDrives("ORDER BY position ASC, name ASC");
@@ -302,6 +328,7 @@ export async function listDriveOwners(): Promise<
       out.set(row.key, {
         ownerName: row.owner_name ?? "",
         ownerEmail: row.owner_email ?? "",
+        hasOwner: Boolean(row.owner_hash),
       });
     }
     return out;
@@ -324,32 +351,24 @@ export interface DriveInput {
   visibility?: DriveVisibility;
   listed?: boolean;
   position?: number;
-  /** Who the drive was given to. The admin's record; see ADMIN_FIELDS below. */
+  /** Who runs the drive. Admin-only fields; see OWNER_FIELDS below. */
   ownerName?: string;
   ownerEmail?: string;
 }
 
 /**
- * Which of the fields above belong to which level. The routes split a request
+ * Which of the fields above belong to which role. The routes split a request
  * body against these two sets rather than each inventing its own list, so
  * there is one answer to "may this caller change that?" and adding a field
  * means choosing a side for it here.
  *
- * The drive's user gets the drive itself — what it is called, where it
- * answers, how it looks — because running the drive is their job and this is
- * the drive. The admin gets the two things that are not about the drive so
- * much as about its place among the others and among people: **who is in it**
- * (its visibility and its passcode — the membership) and **how much it may
- * store** (via lib/store.ts), plus whether the dashboard names it and in what
- * order.
- *
- * The passcode is the one that moved. It is the credential that lets somebody
- * into a drive, and being in a drive is what makes it theirs to run — so
- * handing it out is exactly "managing the drive's members", and it belongs to
- * the level above. A drive's user cannot quietly change the lock on a drive
- * they were let into.
+ * The owner gets the drive's identity — what it is called, where it answers,
+ * how it looks — because that is the drive itself, and running it is their
+ * job. The admin gets the things that are about the drive's place among the
+ * others: who owns it, whether the dashboard lists it, where it sits in the
+ * order, and (via lib/store.ts) how much it may store.
  */
-export const USER_FIELDS = [
+export const OWNER_FIELDS = [
   "name",
   "tagline",
   "title",
@@ -358,15 +377,10 @@ export const USER_FIELDS = [
   "slug",
   "numbered",
   "poweredBy",
+  "visibility",
 ] as const;
 
-export const ADMIN_FIELDS = [
-  "visibility",
-  "listed",
-  "position",
-  "ownerName",
-  "ownerEmail",
-] as const;
+export const ADMIN_FIELDS = ["listed", "position", "ownerName", "ownerEmail"] as const;
 
 function badRequest(message: string): never {
   const err = new Error(message);
@@ -403,7 +417,7 @@ async function requireRegistry(): Promise<void> {
 /**
  * A write that touches the owner columns cannot fall back the way a read can.
  * Say which migration is owed, in the same words requireRegistry uses, rather
- * than letting "no such column: owner_name" reach the admin panel.
+ * than letting "no such column: owner_hash" reach the admin panel.
  */
 /**
  * Settle whether this database has the owner columns, asking it if no read has
@@ -413,7 +427,7 @@ async function requireRegistry(): Promise<void> {
 async function probeOwnerColumns(): Promise<boolean> {
   if (ownerColumns === null) {
     try {
-      await d1Query("SELECT owner_name FROM drives LIMIT 1");
+      await d1Query("SELECT owner_hash FROM drives LIMIT 1");
       ownerColumns = true;
     } catch (err) {
       if (!isMissingOwnerColumns(err)) throw err;
@@ -464,13 +478,14 @@ async function assertSlugFree(slug: string, exceptKey?: string): Promise<void> {
  */
 export async function createDrive(
   input: DriveInput,
-  passcodeHash: string | null
+  passcodeHash: string | null,
+  ownerHash: string | null
 ): Promise<Brand> {
   await requireRegistry();
-  // Recording who the drive is for needs the columns; creating one without a
-  // name against it only needs to know whether they are there, so the INSERT
-  // below does not name a column this database has not got.
-  if (input.ownerName || input.ownerEmail) await requireOwnerColumns();
+  // Naming an owner needs the columns; creating a drive without one only needs
+  // to know whether they are there, so the INSERT below does not name a column
+  // this database has not got.
+  if (ownerHash || input.ownerName || input.ownerEmail) await requireOwnerColumns();
   const withOwner = await probeOwnerColumns();
 
   const name = (input.name ?? "").trim();
@@ -499,7 +514,7 @@ export async function createDrive(
   const columns =
     "key, slug, name, tagline, title, short_name, description, numbered, powered_by, " +
     "visibility, listed, passcode_hash, legacy_root, position, created_at, modified_at" +
-    (withOwner ? ", owner_name, owner_email" : "");
+    (withOwner ? ", owner_name, owner_email, owner_hash" : "");
   const values = [
     key,
     slug,
@@ -519,7 +534,7 @@ export async function createDrive(
     now,
   ];
   if (withOwner) {
-    values.push((input.ownerName ?? "").trim(), (input.ownerEmail ?? "").trim());
+    values.push((input.ownerName ?? "").trim(), (input.ownerEmail ?? "").trim(), ownerHash);
   }
 
   await d1Execute(
@@ -542,10 +557,15 @@ export async function createDrive(
 export async function updateDrive(
   key: DriveKey,
   patch: DriveInput,
-  passcodeHash?: string | null
+  passcodeHash?: string | null,
+  ownerHash?: string | null
 ): Promise<Brand> {
   await requireRegistry();
-  if (patch.ownerName !== undefined || patch.ownerEmail !== undefined) {
+  if (
+    ownerHash !== undefined ||
+    patch.ownerName !== undefined ||
+    patch.ownerEmail !== undefined
+  ) {
     await requireOwnerColumns();
   }
 
@@ -591,10 +611,11 @@ export async function updateDrive(
   if (patch.ownerName !== undefined) push("owner_name", patch.ownerName.trim());
   if (patch.ownerEmail !== undefined) push("owner_email", patch.ownerEmail.trim());
 
-  // Setting this retires every pass already issued to the drive, because each
-  // one is signed against the hash it replaces. That is the point: taking
-  // somebody out of a drive should not leave them still holding its controls.
   if (passcodeHash !== undefined) push("passcode_hash", passcodeHash);
+  // Setting this retires the previous owner's session, because their pass is
+  // signed against the hash it replaces. That is the point: handing a drive to
+  // somebody else should not leave the last owner still holding the controls.
+  if (ownerHash !== undefined) push("owner_hash", ownerHash);
 
   // A drive left private with no passcode is shut to everyone, the people it
   // was closed for included. Judge the state the write would leave behind

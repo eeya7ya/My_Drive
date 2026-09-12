@@ -21,8 +21,9 @@ export type DriveVisibility = "public" | "private";
 
 /**
  * Everything about a drive that a page — including the client bundle — may
- * see. Deliberately not the passcode hash: this object is serialised into the
- * page, so it carries only whether a passcode exists, never the passcode.
+ * see. Deliberately neither hash it holds — not the reader's passcode and not
+ * the owner's: this object is serialised into the page, so it carries only
+ * whether each credential exists, never the credential.
  */
 export interface Brand {
   /** The value stored in folders.drive and files.drive. Never changes. */
@@ -53,6 +54,13 @@ export interface Brand {
   listed: boolean;
   /** Whether a passcode is actually set. A private drive without one is shut. */
   hasPasscode: boolean;
+  /**
+   * Whether an owner passcode has been set for this drive — that is, whether
+   * anybody can sign in to run it. Safe to hand the browser: it says that the
+   * drive has somebody managing it, which is what the "manage this drive"
+   * prompt has to know, and nothing about who or with what.
+   */
+  hasOwner: boolean;
   /**
    * True for the one drive whose folders used to sit at the site root, so
    * /literature/papers can still be redirected to its new address.
@@ -118,6 +126,7 @@ export function brandFrom(partial: Partial<Brand> & { key: string; slug: string;
     visibility: partial.visibility ?? "public",
     listed: partial.listed ?? true,
     hasPasscode: partial.hasPasscode ?? false,
+    hasOwner: partial.hasOwner ?? false,
     legacyRoot: partial.legacyRoot ?? false,
     position: partial.position ?? 0,
   };
