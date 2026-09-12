@@ -11,6 +11,26 @@ export interface DriveCard extends Brand {
   unlocked: boolean;
 }
 
+/**
+ * One drive as the admin manages it: who runs it, and what it may store.
+ *
+ * Kept apart from Brand because a Brand goes to every visitor and this does
+ * not — an owner's email address and a drive's quota are the admin's business.
+ * Assembled on the admin page from the registry and the storage counters.
+ */
+export interface DriveMember {
+  key: string;
+  name: string;
+  slug: string;
+  /** Who the drive was handed to. Free text; may be empty. */
+  ownerName: string;
+  ownerEmail: string;
+  /** Whether an owner passcode is set, i.e. whether anyone can sign in to run it. */
+  hasOwner: boolean;
+  usedBytes: number;
+  quotaBytes: number;
+}
+
 export interface FolderRow {
   id: string;
   parent_id: string | null;
@@ -99,6 +119,17 @@ export interface DrivePayload {
   rootFiles: DriveFile[];
   usedBytes: number;
   quotaBytes: number;
+  /**
+   * Whether this viewer holds the drive's owner seat. This is what decides
+   * whether the drive shows its management controls — adding folders, renaming,
+   * deleting, revisions — because those are the owner's, not the admin's.
+   */
+  isOwner: boolean;
+  /**
+   * Whether this viewer holds the admin session. Only decides whether the
+   * header offers a way through to the admin panel; it unlocks nothing in the
+   * drive itself, which is the whole point of the split.
+   */
   isAdmin: boolean;
 }
 

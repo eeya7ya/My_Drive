@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireVersionOwner } from "@/lib/owner";
 import { deleteVersion } from "@/lib/store";
 import { deleteObject } from "@/lib/r2";
 import { ok, fail } from "@/lib/api";
@@ -7,11 +7,14 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string; versionId: string }> };
 
-/** Delete one older revision, freeing its R2 object. */
+/**
+ * Delete one older revision, freeing its R2 object. The drive's owner only —
+ * a drive's history is part of what its owner is keeping.
+ */
 export async function DELETE(_req: Request, { params }: Ctx) {
   try {
-    await requireAdmin();
     const { id, versionId } = await params;
+    await requireVersionOwner(versionId);
 
     const key = await deleteVersion(id, versionId);
     if (key) {

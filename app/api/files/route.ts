@@ -13,11 +13,12 @@ const MAX_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB — R2's single-PUT ceiling.
  * The browser uploads straight to R2, then calls the confirm route.
  * Re-uploading an existing name in the same folder creates revision N+1.
  *
- * Deliberately NOT admin-gated: anyone who can see the drive can add to it.
- * Creating, renaming and deleting stay with the admin, so a visitor can only
- * ever add — never remove or restructure. The quota is enforced here because
- * it is now the only bound on what an anonymous upload can consume, and it
- * is the quota of the drive being uploaded to.
+ * Deliberately open to anyone who can see the drive, owner or not: adding to a
+ * drive is the one change a reader is trusted with. Renaming, deleting and
+ * restructuring belong to the drive's owner, so a visitor can only ever add —
+ * never remove or rearrange. The quota is enforced here because it is the only
+ * bound on what an anonymous upload can consume; it is the quota of the drive
+ * being uploaded to, and the admin is the one who sets it.
  *
  * "Anyone who can see the drive" is checked rather than assumed, since being
  * open to visitors is exactly what makes this the easiest way into a private

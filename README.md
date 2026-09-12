@@ -1,16 +1,15 @@
 # Yahya Khaled — Power Systems Drive
 
-Several web drives behind one dashboard, whose folders and files are managed
-from an admin panel. The front end is the Claude Design canvas
-(`Yahya Khaled Drive Design-handoff.zip`) ported as-is; this repo wires it to
-real hosting and storage.
+Several web drives behind one dashboard, each run by its own owner. The front
+end is the Claude Design canvas (`Yahya Khaled Drive Design-handoff.zip`) ported
+as-is; this repo wires it to real hosting and storage.
 
 | Concern | Choice |
 | --- | --- |
 | Hosting | Next.js 16 (App Router) on Vercel |
 | File storage | Cloudflare R2, via its S3-compatible API |
 | Metadata | Cloudflare D1, via its HTTP query API |
-| Auth | Single admin password, signed session cookie; per-drive passcodes |
+| Auth | Three roles — admin password, per-drive owner passcode, per-drive reader passcode — all signed cookies |
 
 ## How the pieces fit
 
@@ -180,8 +179,8 @@ reserving an upload — and the server rejects an unknown key rather than fallin
 through to the wrong tree.
 
 **Drives are rows, not code.** `migrations/005_drive_registry.sql` adds a
-`drives` table and the admin panel at `/admin` creates and edits them, so a new
-drive needs no deploy and no route file. Two columns carry the weight:
+`drives` table and the admin panel at `/admin` creates them, so a new drive
+needs no deploy and no route file. Two columns carry the weight:
 
 - `key` is what `folders.drive` and `files.drive` store. It is fixed when the
   drive is created and never changes.
@@ -192,16 +191,64 @@ drive needs no deploy and no route file. Two columns carry the weight:
 The identity a drive wears travels with the row: the name and tagline in the
 sidebar, the tab title, the home-screen name, whether folders are numbered, and
 the "powered by" mark. That is why the heading changes as you move between
-`/yahya` and `/advec` — the page is the same code wearing a different row.
+`/yahya` and `/advec` — the page is the same code wearing a different row. All
+of it is edited by the drive's **owner**, from inside the drive.
+
+### Three roles: owner, admin, reader
+
+Running a drive and overseeing the drives are two jobs, usually two people.
+They used to be one password, which meant the person minding storage was also
+the only one who could add a folder. They are separate now.
+
+| | Signs in with | What it is for |
+| --- | --- | --- |
+| **Drive owner** | that drive's owner passcode | Runs one drive: its folders, files and revisions, and the identity it wears — name, tagline, tab title, address, numbering, powered-by mark — plus the reader passcode it hands out |
+| **Admin** | `ADMIN_PASSWORD` | The level above the drives: which drives exist, who owns each one, how much each may store, whether the dashboard lists it, and the access requests |
+| **Reader** | that drive's reader passcode (private drives only) | Looking, and adding files. Never renaming, deleting or restructuring |
+
+Concretely, **the admin does not add folders**. `/api/folders`, the per-file and
+per-revision routes and the drive's own identity fields all check the drive's
+owner seat (`requireDriveOwner` in `lib/auth.ts`, `lib/owner.ts` for the routes
+addressed by row id). `/api/drives` and `/api/drives/[key]`'s `DELETE`, the
+quota, the owner columns, `/api/requests` and `/api/admin/recalc` check the
+admin session. `PATCH /api/drives/[key]` serves both and splits the body by
+role — the field lists are `OWNER_FIELDS` and `ADMIN_FIELDS` in `lib/drives.ts`,
+and a body that reaches for the other role's fields is refused by name rather
+than quietly ignored.
+
+This is a separation of jobs, not a wall. Whoever holds `ADMIN_PASSWORD` can set
+any drive's owner passcode and sign in with it, so the admin panel offers
+**"Take the owner's seat"** directly — a shortcut for something they can already
+do. The point is that an admin holds a drive's controls only while they have
+asked for them, rather than always and invisibly. Taking the seat mints the same
+owner cookie the passcode would, and the drive's header shows the settings it
+unlocks.
+
+Every owner passcode is stored as an HMAC under `SESSION_SECRET`, exactly as the
+reader passcode is, under a different label so the same word in both places does
+not produce the same row. Both passes sign the hash they were issued against, so
+**setting a new owner passcode signs the previous owner out immediately** — which
+is what handing a drive to somebody else should mean. An owner seat lasts twelve
+hours, like the admin session; a reader pass lasts thirty days, because it grants
+far less.
+
+A drive can be created before it has an owner. Nobody can add a folder to it
+until one is named — including the admin, until they take its seat — and the
+admin panel says so on the row.
 
 ### Public, private, and who may look
 
 A drive is either **public**, readable by anyone with the address, or
-**private**, which asks for a passcode first. The passcode is set in the admin
-panel and stored as an HMAC under `SESSION_SECRET`, so the database never holds
-the passcode itself. Entering it mints a cookie that opens **that drive only**,
-for thirty days; sharing one drive never discloses another. The admin session
-opens all of them.
+**private**, which asks for a passcode first. The reader passcode is set by the
+drive's owner and stored as an HMAC under `SESSION_SECRET`, so the database never
+holds the passcode itself. Entering it mints a cookie that opens **that drive
+only**, for thirty days; sharing one drive never discloses another. The drive's
+owner and the admin session open it too.
+
+A private drive shows its passcode wall instead of itself, and its own owner
+arrives there like anyone else — so that card flips to ask for the owner
+passcode instead ("Own this drive? Sign in to manage it"), because the settings
+panel they would otherwise use is behind the wall.
 
 Private means private all the way down: `/api/drive`, the folder and upload
 routes, and every per-file route — including the ones that hand back a signed
@@ -209,15 +256,28 @@ R2 URL — check access before answering, so a private drive's contents cannot b
 read by calling the API directly.
 
 A drive can also be **unlisted**, which only decides whether the dashboard names
-it. Unlisted and private are independent: a private drive is usually worth
-listing, so people can see it exists and ask.
+it. That one is the admin's, since the dashboard belongs to the site rather than
+to any one drive. Unlisted and private are independent: a private drive is
+usually worth listing, so people can see it exists and ask.
+
+### Storage quotas
+
+Each drive's `quota_bytes` is the denominator in its sidebar and the ceiling
+uploads are refused at. It is the admin's lever — `/admin` shows every drive's
+usage against it and edits the number in GB — and it is the one of the two
+counters that is a decision rather than a measurement: `used_bytes` is maintained
+by the uploads themselves and repaired by `POST /api/admin/recalc`, never typed
+in. A quota below what the drive already holds is refused, because it would
+refuse every upload while reporting the drive over a limit it was under a moment
+before.
 
 ### Asking for access
 
 The dashboard carries a short form — name, email, which drive, an optional note
 — that writes a row to `drive_requests`. Requests are answered in the admin
-panel, and approving one is bookkeeping: the actual grant is giving the person
-the drive's passcode.
+panel, and approving one is bookkeeping: the actual grant is sending a passcode.
+Which passcode depends on what was meant — the drive's reader passcode, which
+its owner sets, or an owner passcode, which the admin sets.
 
 ### Addresses that no longer match
 
@@ -247,6 +307,17 @@ the site keeps serving if the deploy lands ahead of the migration; what does not
 work until then is adding or editing a drive, which says so rather than failing
 obscurely.
 
+Finally `migrations/006_drive_owners.console.sql`, which adds the `owner_name`,
+`owner_email` and `owner_hash` columns that make a drive somebody's to run, and
+writes the quota row for every drive so the admin panel has a number to show
+rather than an implicit default. The registry tolerates their absence the same
+way — a drive reads as one nobody owns yet, so a deploy ahead of the migration
+serves the site — and a write that would touch those columns says which
+migration is owed. **Both existing drives come out of it with no owner**, which
+means nobody can add a folder until the admin sets an owner passcode or takes a
+drive's seat; that is the state to expect on the first deploy after this change,
+not a fault.
+
 On the eSpark drive:
 
 - **Folders are numbered in outline style** — `1`, `1.1`, `1.2`, `2` — from
@@ -255,8 +326,8 @@ On the eSpark drive:
   Nothing is stored for this; the number is computed from the folder's
   position when the drive loads, so it can never drift from the tree.
 - A new folder takes the next number among its siblings. To renumber, the
-  admin right-clicks a folder and picks **Move up** or **Move down**; the
-  siblings' positions are rewritten and every number below follows.
+  drive's owner right-clicks a folder and picks **Move up** or **Move down**;
+  the siblings' positions are rewritten and every number below follows.
 - The listing keeps tree order by default so the numbers read in sequence.
   The sort menu gains a **Number** option and still offers Name / Newest /
   Oldest.
@@ -299,12 +370,13 @@ the Power Systems tree, now clears and reseeds only `drive = 'main'`.
 **Re-uploading a file keeps the old copy.** Upload `Thesis Draft.pdf` into a
 folder that already has one and it becomes revision 2 — not a second file. The
 row shows a `REV n` badge; a chevron expands the history, where every revision
-carries its size and exact upload time and can be downloaded, restored, or
-deleted individually. Restoring moves a pointer (`files.current_version_id`),
-so no bytes are copied and nothing is lost.
+carries its size and exact upload time and can be downloaded by anyone who can
+see the drive, and restored or deleted by its owner. Restoring moves a pointer
+(`files.current_version_id`), so no bytes are copied and nothing is lost.
 
 The cost of this is storage: every revision keeps its own R2 object, and all of
-them count toward the sidebar total. Delete individual revisions to reclaim it.
+them count toward the sidebar total — and toward the quota the admin set. The
+drive's owner deletes individual revisions to reclaim it.
 
 **Dates.** Every file shows its upload timestamp to the minute, and a toolbar
 above the listing sorts by name / newest / oldest and filters to an upload date
@@ -611,9 +683,9 @@ be downloaded and opened in a real CAD program.
 ### A note on safety
 
 Markdown and .docx become HTML, and an uploaded file is untrusted input. Left
-raw, a crafted document could run script in this origin and take the admin's
-session cookie, so everything generated goes through DOMPurify before it
-renders. SVGs go through `<img>`, which never executes their script, rather
+raw, a crafted document could run script in this origin and take whichever
+session cookie the reader is carrying — a drive owner's, or the admin's — so
+everything generated goes through DOMPurify before it renders. SVGs go through `<img>`, which never executes their script, rather
 than being inlined.
 
 mammoth and SheetJS are large and most files need neither, so both are
@@ -647,17 +719,24 @@ showing a drive the visitor did not ask for.
 
 `/` lists the drives. A public one opens straight from there; a private one
 asks for its passcode first. A drive is read-only to visitors — browse folders,
-download files — and management is gated behind the admin session.
+download files, and add a file — and everything else is gated behind its owner.
 
-Click the padlock in the header (or go to `/admin/login`) and enter
-`ADMIN_PASSWORD`. Once signed in, the design's own management affordances
-appear — the **Upload** and **New folder** buttons, and the right-click menus on
-folders, files, and empty space (open, new folder, upload, rename, delete).
-Sign out with the button that replaces the padlock.
+**Running a drive.** Click the padlock in the drive's header and enter the
+owner passcode the admin sent you. The design's own management affordances then
+appear — the **New folder** button, and the right-click menus on folders, files
+and empty space (open, new folder, upload, rename, delete, restore a revision) —
+and the padlock becomes the drive's **settings**: its name, tagline, tab title,
+address, numbering, powered-by mark, and the reader passcode you hand out. The
+same panel has **Stop managing**, which gives the seat back without closing the
+drive.
 
-`/admin` is the owner's panel: it adds and edits drives — name, address,
-visibility, passcode, whether the dashboard lists them — and answers the access
-requests raised from the dashboard.
+**Overseeing the drives.** Go to `/admin/login`, enter `ADMIN_PASSWORD`, and
+`/admin` shows every drive with who runs it and how full it is. From there you
+add and remove drives, name each one's owner and set their passcode, set the
+quota, choose whether the dashboard lists a drive, and answer the access
+requests raised from the dashboard. What you cannot do from there is add a
+folder or rename a drive — those are its owner's. When you need to, **Take the
+owner's seat** on the drive's row and the drive itself will let you.
 
 ## Layout
 
@@ -667,18 +746,21 @@ app/
   [drive]/[[...path]]/page.tsx a drive by its slug, and deep links into it
   [drive]/manifest.webmanifest that drive's PWA manifest
   not-found.tsx                an address that matches nothing
-  admin/page.tsx               drives and access requests (admin)
+  admin/page.tsx               drives, owners, quotas, requests (admin)
   admin/login/page.tsx         admin sign-in
   globals.css                  design system + the canvas's own styles
   design-system.css            Industry tokens, copied byte-for-byte
   api/
     drive/                     GET the whole drive in one call
-    drives/                    list, create, edit, delete a drive (admin)
-    drives/[key]/unlock/       enter a private drive's passcode
+    drives/                    list; create and delete a drive (admin)
+    drives/[key]/              edit a drive — split by role, owner and admin
+    drives/[key]/owner/        take or leave a drive's owner seat
+    drives/[key]/unlock/       enter a private drive's reader passcode
     requests/                  ask for access; answer the asking (admin)
-    auth/login|logout/         session in, session out
-    folders/[id]/              create, rename, delete (admin)
-    files/[id]/                reserve, confirm, rename, delete, download
+    auth/login|logout/         admin session in, admin session out
+    folders/[id]/              create, rename, delete (drive owner)
+    files/[id]/                reserve and confirm (anyone who can see the
+                               drive); rename and delete (drive owner)
     files/[id]/versions/       history, restore, delete a revision
     files/[id]/view            signed inline URL, for media previews
     files/[id]/raw             same-origin bytes, for parsed previews
@@ -689,13 +771,17 @@ components/
   DrawingCanvas.tsx            pan and zoom for a converted drawing
   NoteEditor.tsx               writing a text note into the drive
   Dashboard.tsx                the front door
-  UnlockForm.tsx               a private drive's passcode gate
-  AdminPanel.tsx               drives and requests, for the owner
+  UnlockForm.tsx               a private drive's passcode gate, either key
+  DriveSettings.tsx            owner sign-in, and the drive's own settings
+  AdminPanel.tsx               drives, owners, quotas and requests (admin)
+  Choice.tsx                   the segmented radio both panels use
   FileViewer.tsx               the in-app viewer
   LoginForm.tsx                sign-in, built from the design system
   icons.tsx                    the canvas's Lucide paths
 lib/
   d1.ts  r2.ts  store.ts  auth.ts  types.ts  api.ts
+  owner.ts                     "whose drive is this row in, and do you run it?"
+  guard.ts                     the throttle in front of both passcodes
   dwg.ts                       DWG to SVG, server-side only (GPL-3, see above)
   brand.ts                     the shape of a drive's identity, and the fallback
   drives.ts                    the drive registry — rows, slugs, requests
@@ -725,10 +811,11 @@ Two things had to change shape rather than value:
 - The canvas held its tree in a constructor array and mutated it in place;
   here the same shape is fetched from D1 and mutations go to the API.
 
-Additions the backend made necessary: an admin sign-in page, a padlock/sign-out
-button in the header (same button classes as the theme toggle beside it), and a
-download action on files. Management controls hide for visitors via the design's
-own `showActions` flag.
+Additions the backend made necessary: an admin sign-in page, a padlock in the
+drive header that opens the owner's sign-in and settings (and, for an admin, a
+second button through to `/admin`) — both using the same button classes as the
+theme toggle beside them — and a download action on files. Management controls
+hide for anyone but the drive's owner via the design's own `showActions` flag.
 
 The typefaces (Barlow, Barlow Condensed) load from Google Fonts through the
 design system's `@import`, exactly as the design does.

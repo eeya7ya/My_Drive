@@ -11,6 +11,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
+import DriveSettings from "./DriveSettings";
 import FileViewer from "./FileViewer";
 import { isNoteFile, kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
@@ -112,6 +113,7 @@ const EMPTY: DrivePayload = {
   rootFiles: [],
   usedBytes: 0,
   quotaBytes: 214748364800,
+  isOwner: false,
   isAdmin: false,
 };
 
@@ -161,6 +163,13 @@ export default function Drive({
   const [navOpen, setNavOpen] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+
+  /**
+   * Whether the drive's own settings panel is open. It doubles as the owner's
+   * sign-in, so it is offered to every viewer rather than only to somebody who
+   * can already manage the drive — that is the only way in.
+   */
+  const [managing, setManaging] = useState(false);
 
   // The file open in the viewer, with the revision being shown.
   const [viewing, setViewing] = useState<{
@@ -963,12 +972,6 @@ export default function Drive({
     [call, run, refreshHistory]
   );
 
-  const signOut = useCallback(() => {
-    run("Signing out", async () => {
-      await call("/api/auth/logout", { method: "POST" });
-    });
-  }, [call, run]);
-
   /** Point the view at whatever the current URL names. */
   const applyUrl = useCallback(
     (pathname: string) => {
@@ -1055,7 +1058,17 @@ export default function Drive({
 
   const closeMenu = useCallback(() => setMenu(null), []);
 
-  const isAdmin = data.isAdmin;
+  /**
+   * What decides whether this drive shows its management controls.
+   *
+   * The drive's owner, not the admin. Adding a folder, renaming, deleting and
+   * restoring a revision are the job of whoever runs this drive; the admin
+   * panel is the level above — which drives exist, who owns them, how much
+   * each may store — and holding the admin password lights nothing up in here.
+   * An admin who needs these controls takes the drive's owner seat, which the
+   * panel behind the header's lock offers them.
+   */
+  const canManage = data.isOwner;
 
   const folderMenu = useCallback(
     (ev: React.MouseEvent, p: string[]) => {
@@ -1067,7 +1080,7 @@ export default function Drive({
         { label: "Upload file", icon: "upload", action: () => triggerUpload(p) },
         { label: "New note", icon: "file", action: () => newNote(p) }
       );
-      if (isAdmin) {
+      if (canManage) {
         items.push(
           { label: "New folder", icon: "plus", action: () => addFolder(p) },
           { sep: true },
@@ -1094,7 +1107,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [isAdmin, numbered, listAt, enter, copyLink, addFolder, triggerUpload, newNote, renameNode, moveNode, deleteNode, openMenu]
+    [canManage, numbered, listAt, enter, copyLink, addFolder, triggerUpload, newNote, renameNode, moveNode, deleteNode, openMenu]
   );
 
   const fileMenu = useCallback(
@@ -1136,7 +1149,7 @@ export default function Drive({
           action: () => toggleHistory(file.id),
         });
       }
-      if (isAdmin) {
+      if (canManage) {
         items.push(
           { sep: true },
           { label: "Rename", icon: "edit", action: () => renameFileAction(file) },
@@ -1150,7 +1163,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [isAdmin, openFile, downloadFile, downloadReport, copyLink, toggleHistory, isEditableNote, editNote, renameFileAction, deleteFileAction, openMenu]
+    [canManage, openFile, downloadFile, downloadReport, copyLink, toggleHistory, isEditableNote, editNote, renameFileAction, deleteFileAction, openMenu]
   );
 
   const canvasMenu = useCallback(
@@ -1166,12 +1179,12 @@ export default function Drive({
           action: () => downloadReport(reportScope(path), reportLabel),
         });
       }
-      if (isAdmin) {
+      if (canManage) {
         items.push({ label: "New folder", icon: "plus", action: () => addFolder(path) });
       }
       openMenu(ev, items);
     },
-    [isAdmin, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
+    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
   );
 
   const rootMenu = useCallback(
@@ -1187,12 +1200,12 @@ export default function Drive({
           action: () => downloadReport(reportScope(path), reportLabel),
         });
       }
-      if (isAdmin) {
+      if (canManage) {
         items.push({ label: "New folder", icon: "plus", action: () => addFolder([]) });
       }
       openMenu(ev, items);
     },
-    [isAdmin, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
+    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
   );
 
   // Touch equivalents of right-click. Declared here so each has its menu
@@ -1366,9 +1379,9 @@ export default function Drive({
         .filter(Boolean)
         .join(" · ") || "Empty";
 
-  // Anyone may add to the drive; only the admin may restructure it.
+  // Anyone may add to the drive; only its owner may restructure it.
   const showUpload = !searching;
-  const showNewFolder = !searching && isAdmin;
+  const showNewFolder = !searching && canManage;
   // Offered wherever there is something to report on, which at the drive root
   // means the whole drive and inside a folder means that folder and below.
   const showReport = !searching && notesHere > 0;
@@ -1955,24 +1968,35 @@ export default function Drive({
               <Icon name="moon" size={15} />
             )}
           </button>
-          {/* Entry point to the admin panel. Same button grammar as the
-              theme toggle beside it, so the header keeps the design's shape. */}
-          {isAdmin ? (
-            <button
-              className="btn btn-secondary btn-icon"
-              onClick={signOut}
-              title="Sign out of the admin panel"
-            >
-              <Icon name="logout" size={15} />
-            </button>
-          ) : (
+          {/* The way in and out of running this drive. Same button grammar as
+              the theme toggle beside it, so the header keeps the design's
+              shape. It is the owner's door, not the admin's: the panel behind
+              it asks for the drive's owner passcode, and offers an admin the
+              drive's seat without one. */}
+          <button
+            className="btn btn-secondary btn-icon"
+            onClick={() => setManaging(true)}
+            title={
+              canManage
+                ? `Settings for ${brand.name}`
+                : `Sign in to manage ${brand.name}`
+            }
+            aria-label={canManage ? "Drive settings" : "Sign in to manage this drive"}
+          >
+            <Icon name={canManage ? "drive" : "lock"} size={15} />
+          </button>
+
+          {/* Only shown to an admin, and only ever a way through to the panel
+              above the drives. It unlocks nothing here — see `canManage`. */}
+          {data.isAdmin && (
             <a
               className="btn btn-secondary btn-icon"
-              href={`/admin/login?next=${encodeURIComponent(basePath || "/")}`}
-              title="Admin sign in"
+              href="/admin"
+              title="The admin panel — drives, owners and storage"
+              aria-label="The admin panel"
               style={{ textDecoration: "none" }}
             >
-              <Icon name="lock" size={15} />
+              <Icon name="shield" size={15} />
             </a>
           )}
         </header>
@@ -2490,7 +2514,7 @@ export default function Drive({
                     >
                       <Icon name="download" size={15} />
                     </button>
-                    {isAdmin && (
+                    {canManage && (
                       <button
                         className="dc-file-btn dc-danger"
                         onClick={(ev) => {
@@ -2577,7 +2601,7 @@ export default function Drive({
                             >
                               <Icon name="download" size={14} />
                             </button>
-                            {isAdmin && !v.isCurrent && (
+                            {canManage && !v.isCurrent && (
                               <>
                                 <button
                                   className="dc-file-btn"
@@ -2641,7 +2665,7 @@ export default function Drive({
                 <div style={{ fontSize: 13, opacity: 0.6, maxWidth: 280 }}>
                   {searching
                     ? "No folder names match your search. Try a shorter term."
-                    : isAdmin
+                    : canManage
                       ? "Use the buttons above to add a folder, upload files, or write a note."
                       : "Nothing here yet — upload a file, or write a note."}
                 </div>
@@ -2709,12 +2733,12 @@ export default function Drive({
                 input device without a client-only check that would mismatch
                 during hydration. */}
             <span className="dc-hint-mouse">
-              {isAdmin
+              {canManage
                 ? "Right-click a folder, a file, or empty space to manage."
                 : "Right-click to upload, or a file to open and download it."}
             </span>
             <span className="dc-hint-touch">
-              {isAdmin
+              {canManage
                 ? "Touch and hold a folder, a file, or empty space to manage."
                 : "Touch and hold to upload, or tap a file to open it."}
             </span>
@@ -2882,6 +2906,15 @@ export default function Drive({
             setNoteEdit(null);
           }}
           onSave={saveNote}
+        />
+      )}
+
+      {managing && (
+        <DriveSettings
+          brand={brand}
+          isOwner={canManage}
+          isAdmin={data.isAdmin}
+          onClose={() => setManaging(false)}
         />
       )}
 
