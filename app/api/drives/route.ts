@@ -10,7 +10,7 @@
  */
 
 import { createDrive, listDrives, listedDrives } from "@/lib/drives";
-import { isAdmin, requireAdmin } from "@/lib/auth";
+import { hashPasscode, isAdmin, requireAdmin } from "@/lib/auth";
 import { setQuota } from "@/lib/store";
 import { ok, fail, readJson, badRequest } from "@/lib/api";
 import type { DriveInput } from "@/lib/drives";
@@ -86,8 +86,9 @@ function driveFieldsFrom(body: Record<string, unknown>): DriveInput {
  * they do, nobody can add a folder to it, which is honest — the drive exists
  * and has not been given to anyone.
  *
- * A new drive is closed until somebody can sign in to it, which is the honest
- * state for a drive that has not been given to anyone yet.
+ * A drive's password may be given here or set on its row afterwards. Until it
+ * has one the drive is shut to everybody, which is the honest state for a
+ * drive that has not been given to anyone yet.
  */
 export async function POST(req: Request) {
   try {
@@ -98,9 +99,13 @@ export async function POST(req: Request) {
       badRequest("Expected a JSON object.");
     }
 
-    // No passcode: a drive is opened by its users' passwords, and those are
-    // created against it afterwards with POST /api/users.
-    const drive = await createDrive(driveFieldsFrom(body), null);
+    // The password may be set now or later; a drive without one is shut to
+    // everybody, which the panel says on its row.
+    const password = body.password === undefined ? "" : asText(body.password, "password").trim();
+    const drive = await createDrive(
+      driveFieldsFrom(body),
+      password ? await hashPasscode(password) : null
+    );
 
     // The quota is a settings row rather than a drives column, so it is written
     // after the drive exists. Left out, the drive takes the default the

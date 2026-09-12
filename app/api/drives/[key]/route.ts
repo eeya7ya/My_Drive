@@ -11,8 +11,9 @@
  *   - the drive's own USERS may change the drive itself — what it is called,
  *     where it answers, whether its folders are numbered. That is the drive
  *     they run.
- *   - the ADMIN may change whether the dashboard lists it, where it sits in
- *     the order, and how much it may store.
+ *   - the ADMIN may set the drive's password — which is what gives the drive
+ *     to somebody — and change whether the dashboard lists it, where it sits
+ *     in the order, and how much it may store.
  *
  * The two lists are below, so there is one answer to "whose field is that?",
  * and a body that reaches for the other level's fields is refused by name
@@ -20,13 +21,13 @@
  * send should hear about it, not watch the save succeed and the value stay as
  * it was.
  *
- * There is no passcode here. A drive has exactly one kind of credential — its
- * users' passwords — and those are created in the admin panel, not edited from
- * inside the drive.
+ * The password is the admin's and not the drive's own, deliberately: it is how
+ * somebody is let into the drive in the first place, so whoever is already
+ * inside must not be able to quietly change the lock behind them.
  */
 
 import { deleteDrive, getDrive, updateDrive } from "@/lib/drives";
-import { requireAdmin, requireDriveUser } from "@/lib/auth";
+import { hashPasscode, requireAdmin, requireDriveUser } from "@/lib/auth";
 import { setQuota } from "@/lib/store";
 import { ok, fail, readJson, badRequest } from "@/lib/api";
 import type { DriveInput } from "@/lib/drives";
@@ -83,8 +84,8 @@ function driveFieldsFrom(body: Record<string, unknown>): DriveInput {
  * The drive's users get the drive itself — what it is called, where it
  * answers, how it looks, and the passcode a visitor is given to look at it.
  * The admin gets the two things that are about the drive's place among the
- * others rather than about the drive: whether the dashboard lists it and in
- * what order, and — via `quotaBytes` — how much it may store.
+ * others rather than about the drive: its password, whether the dashboard
+ * lists it and in what order, and — via `quotaBytes` — how much it may store.
  */
 const USER_FIELDS = [
   "name",
@@ -97,7 +98,7 @@ const USER_FIELDS = [
   "poweredBy",
 ] as const;
 
-const ADMIN_FIELDS = ["listed", "position", "quotaBytes"] as const;
+const ADMIN_FIELDS = ["listed", "position", "quotaBytes", "password"] as const;
 
 /** Refuse a body that reaches past the caller's level, naming what it reached for. */
 function assertFieldsAllowed(
@@ -143,11 +144,21 @@ export async function PATCH(req: Request, { params }: Ctx) {
       badRequest("Expected a JSON object.");
     }
 
+    let passcodeHash: string | undefined;
     const wantsAdminField = ADMIN_FIELDS.some((field) => body[field] !== undefined);
 
     if (wantsAdminField) {
       await requireAdmin();
       assertFieldsAllowed(body, ADMIN_FIELDS, "admin");
+
+      // Setting this signs out everybody currently in the drive, because their
+      // session was signed against the hash it replaces. That is the point of
+      // changing a password.
+      if (body.password !== undefined) {
+        const password = asText(body.password, "password").trim();
+        if (!password) badRequest("A password cannot be blank.");
+        passcodeHash = await hashPasscode(password);
+      }
     } else {
       // Not satisfied by the admin session. Renaming a drive is its users'
       // business, the same as adding a folder is, and an admin who genuinely
@@ -170,7 +181,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
     // `key` is the address, not a field — a body that repeats it is ignored
     // rather than obeyed, since renaming it would orphan every row.
-    const drive = await updateDrive(key, driveFieldsFrom(body));
+    const drive = await updateDrive(key, driveFieldsFrom(body), passcodeHash);
     return ok({ drive });
   } catch (err) {
     return fail(err);

@@ -1,52 +1,39 @@
 /**
  * Who is allowed to see and change what.
  *
- * Two kinds of session, both signed cookies rather than rows, so D1 is
- * untouched on every page load:
+ * Two passwords, and that is the whole of it:
  *
- *   - the admin session. One admin, one password from the environment. The
- *     admin creates users, gives them passwords, and sets how much each drive
- *     may store. That is all it is for — it does not add folders.
- *   - a USER session. The admin creates a user against one drive; that person
- *     signs in on their own drive with their own password and does everything
- *     in it. One drive's user is nobody on any other drive.
- * There is no third kind, and no second password. A drive sits behind its
- * users' passwords and nothing else: no separate viewing passcode, no drive
- * that opens to anyone with the link. Getting in and being able to change
- * everything are the same act, because that is what somebody means when they
- * say a drive is theirs.
+ *   - each DRIVE has one. The admin sets it in the admin panel and gives it to
+ *     whoever the drive is for. They open the drive's link, enter it, and
+ *     everything in there is theirs — folders, files, revisions, and the
+ *     drive's own name and address. There is no separate account to manage and
+ *     nothing else to be granted: the drive's password is the drive.
+ *   - the ADMIN has one, from the environment. It opens the admin panel, where
+ *     the drives are created, their passwords set, and their storage limits
+ *     decided. It does not open a drive.
  *
- * Both are an HMAC over an expiry stamp under SESSION_SECRET. The user session
- * signs the drive key, the user id and the user's own password hash alongside
- * it, so a cookie cannot be moved sideways onto another drive and changing
- * somebody's password — or deleting them — signs them out at once.
- *
- * Why the admin is not simply allowed everything: running a drive and
- * overseeing the drives are two jobs, usually two people, and folding them
- * into one password meant the person minding storage was also the only person
- * who could add a folder. The admin's part is creating the user and handing
- * them their password; after that the drive runs without them, and there is no
- * shortcut that lends a drive's controls back to the admin.
+ * Both sessions are an HMAC over an expiry stamp under SESSION_SECRET. A
+ * drive's session signs the drive key and the drive's own password hash
+ * alongside it, so a cookie cannot be moved sideways onto another drive, and
+ * the admin changing a drive's password signs out everybody holding the old
+ * one — immediately, which is what changing it is for.
  */
 
 import { cookies } from "next/headers";
 import { passcodeHashFor } from "./drives";
-import { getUser, userWithPassword } from "./users";
-import type { UserRow } from "./users";
 import type { Brand, DriveKey } from "./brand";
 
 const COOKIE = "drive_session";
 const MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
 
 /**
- * A user's session lasts as long as a drive pass, and far longer than the
- * admin's. It is held by the person who uses the drive every day; asking them
- * for their password twice a day to add a folder is how a drive ends up back
- * with the admin doing its user's work. It stays revocable in a way the admin
- * session is not: the cookie signs the password hash it was issued against, so
- * the admin changing or deleting the user ends it immediately.
+ * A drive's session lasts far longer than the admin's. It is held by the person
+ * who uses the drive every day, and asking them for the password twice a day to
+ * add a folder would be absurd. It stays revocable in a way the admin session
+ * is not: the cookie signs the password hash it was issued against, so changing
+ * the drive's password in the panel ends every session on it at once.
  */
-const USER_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+const DRIVE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 function secret(): string {
   const s = process.env.SESSION_SECRET;
@@ -162,78 +149,50 @@ export function isAuthConfigured(): boolean {
 /* ── getting into a drive ─────────────────────────────────────────────────── */
 
 /**
- * May the caller see this drive at all?
- *
- * One answer, and it is the same one that decides whether they may change it:
- * are they signed in as one of the drive's users? A drive is somebody's, it
- * sits behind their password, and once they are through that password
- * everything in it is theirs. There is no second, weaker credential that lets
- * somebody look without touching — there was one, and having two passwords for
- * one drive was worse than useless.
- *
- * Not satisfied by the admin session either. The admin creates the users and
- * hands out the passwords; looking inside somebody's drive means being one of
- * its users, which is visible in the panel rather than silent.
+ * One cookie per drive, named after the drive's permanent key. Separate
+ * cookies rather than one list keeps the drives independent: changing one
+ * drive's password touches nobody's session on any other.
  */
-export async function canOpenDrive(brand: Brand): Promise<boolean> {
-  return Boolean(await currentUser(brand.key));
-}
-
-/** Throws 403 unless the caller may open the drive. */
-export async function requireDriveAccess(brand: Brand): Promise<void> {
-  if (await canOpenDrive(brand)) return;
-  const err = new Error(
-    `${brand.name} asks for a password. Open the drive and sign in — the admin creates the users and hands out the passwords.`
-  );
-  (err as Error & { status?: number }).status = 403;
-  throw err;
-}
-
-/* ── users: the people who run the drives ─────────────────────────────────── */
-
-/**
- * One cookie per drive, so somebody who runs two drives is signed in to both
- * independently and signing out of one leaves the other alone.
- */
-function userCookieName(key: DriveKey): string {
-  return `drive_user_${key.replace(/[^a-z0-9_-]/gi, "_")}`;
+function driveCookieName(key: DriveKey): string {
+  return `drive_pass_${key.replace(/[^a-z0-9_-]/gi, "_")}`;
 }
 
 /**
- * What a user's password is stored as. Keyed by SESSION_SECRET, and labelled
- * differently from a drive's passcode so the same word used for both does not
- * produce the same row, and neither hash can be pasted into the other's column
- * to gain the other's rights.
+ * What a drive's password is stored as. The HMAC is keyed by SESSION_SECRET,
+ * so the database never holds the password itself, a leaked row opens nothing,
+ * and nobody — the admin included — can read a password back out. It can only
+ * be replaced.
  */
-export async function hashUserPassword(password: string): Promise<string> {
-  return hmac(`user-password:${password}`);
+export async function hashPasscode(password: string): Promise<string> {
+  return hmac(`passcode:${password}`);
 }
 
 /**
- * Sign somebody in on their own drive.
+ * Let somebody into one drive.
  *
- * The user's id and their password's hash are both inside what gets signed, so
- * the cookie is only valid for that person with that password: the admin
- * changing it, or deleting them, retires the session at once rather than
- * leaving somebody signed in to a drive they have been taken off.
+ * The drive's own password hash is inside what gets signed, so a session is
+ * only valid against the password it was issued for: changing the password in
+ * the admin panel invalidates every session already handed out, which is what
+ * changing it means and would not happen if the signature covered only the key
+ * and the expiry.
  */
-export async function createUserSession(user: UserRow): Promise<void> {
-  const expires = Date.now() + USER_MAX_AGE_SECONDS * 1000;
-  const payload = `user.${user.drive_key}.${user.id}.${user.password_hash}.${expires}`;
-  const token = `${expires}.${user.id}.${await hmac(payload)}`;
+export async function createDriveSession(key: DriveKey): Promise<void> {
+  const expires = Date.now() + DRIVE_MAX_AGE_SECONDS * 1000;
+  const behind = (await passcodeHashFor(key)) ?? "";
+  const token = `${expires}.${await hmac(`${key}.${behind}.${expires}`)}`;
 
-  (await cookies()).set(userCookieName(user.drive_key), token, {
+  (await cookies()).set(driveCookieName(key), token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: USER_MAX_AGE_SECONDS,
+    maxAge: DRIVE_MAX_AGE_SECONDS,
   });
 }
 
-/** Sign out of one drive, leaving any others — and any drive pass — alone. */
-export async function destroyUserSession(key: DriveKey): Promise<void> {
-  (await cookies()).set(userCookieName(key), "", {
+/** Sign out of one drive, leaving any others alone. */
+export async function destroyDriveSession(key: DriveKey): Promise<void> {
+  (await cookies()).set(driveCookieName(key), "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -243,82 +202,92 @@ export async function destroyUserSession(key: DriveKey): Promise<void> {
 }
 
 /**
- * The user signed in on this drive, or null.
+ * May the caller see this drive at all?
  *
- * Costs one indexed read of the users table, and only when a cookie is
- * actually present — a visitor with no session never touches D1 for this.
+ * One question, and it is the same one that decides whether they may change
+ * it: are they through the drive's password? A drive is somebody's, it sits
+ * behind one password, and once they are through it everything in it is
+ * theirs. There is no weaker credential that would let somebody look without
+ * touching, and no drive that opens to anyone with the link.
+ *
+ * Not satisfied by the admin session. The admin sets the passwords and hands
+ * them out; opening a drive means having its password, like anybody else.
+ *
+ * A drive with no password set is shut to everyone — that is the honest
+ * reading of a drive that has not been given to anybody yet, and the admin
+ * panel says so on its row.
  */
-export async function currentUser(key: DriveKey): Promise<UserRow | null> {
+export async function canOpenDrive(brand: Brand): Promise<boolean> {
   try {
-    const token = (await cookies()).get(userCookieName(key))?.value;
-    if (!token) return null;
+    const token = (await cookies()).get(driveCookieName(brand.key))?.value;
+    if (!token) return false;
 
-    // stamp.userId.signature — the id is carried in the clear so the row can be
-    // fetched before the signature is checked; it is inside the signed payload
-    // too, so swapping it invalidates the token.
-    const first = token.indexOf(".");
-    const last = token.lastIndexOf(".");
-    if (first <= 0 || last <= first) return null;
+    const idx = token.lastIndexOf(".");
+    if (idx <= 0) return false;
 
-    const stamp = token.slice(0, first);
-    const id = token.slice(first + 1, last);
-    const sig = token.slice(last + 1);
+    const stamp = token.slice(0, idx);
+    const sig = token.slice(idx + 1);
 
     const expires = Number(stamp);
-    if (!Number.isFinite(expires) || Date.now() >= expires) return null;
+    if (!Number.isFinite(expires) || Date.now() >= expires) return false;
 
-    const user = await getUser(id);
-    if (!user || user.drive_key !== key) return null;
+    // A drive with no password cannot be open, whatever cookie is presented:
+    // the empty hash must not become a signature anybody can hold.
+    const behind = await passcodeHashFor(brand.key);
+    if (!behind) return false;
 
-    const payload = `user.${user.drive_key}.${user.id}.${user.password_hash}.${stamp}`;
-    if (!safeEqual(sig, await hmac(payload))) return null;
-
-    return user;
+    return safeEqual(sig, await hmac(`${brand.key}.${behind}.${stamp}`));
   } catch {
-    // A missing SESSION_SECRET or an unmigrated database must read as "nobody
-    // is signed in", never as a crash on a page a visitor is entitled to see.
-    return null;
+    // A missing SESSION_SECRET or an unreachable database must read as "not
+    // signed in", never as a crash on a page somebody is entitled to see.
+    return false;
   }
 }
 
-/** Check a typed password against this drive's users; the row, or null. */
-export async function verifyUserPassword(
-  key: DriveKey,
-  candidate: string
-): Promise<UserRow | null> {
-  if (!candidate) return null;
-  return userWithPassword(key, await hashUserPassword(candidate));
-}
-
-/* ── what a caller may do with a drive ────────────────────────────────────── */
-
-/**
- * Whether the caller runs this drive — that is, whether they are signed in as
- * one of its users.
- *
- * Deliberately not true for the admin. The admin creates the users and hands
- * out the passwords; adding a folder is the user's job, and an admin who
- * genuinely has to work inside a drive makes themselves a user of it, which is
- * visible in the panel rather than silent.
- */
-export async function isDriveUser(brand: Brand): Promise<boolean> {
-  return Boolean(await currentUser(brand.key));
-}
-
-/** Throws 403 unless the caller runs this drive. */
-export async function requireDriveUser(brand: Brand): Promise<void> {
-  if (await isDriveUser(brand)) return;
+/** Throws 403 unless the caller is through the drive's password. */
+export async function requireDriveAccess(brand: Brand): Promise<void> {
+  if (await canOpenDrive(brand)) return;
   const err = new Error(
-    `Only ${brand.name}'s own users can change it. Sign in with your password — the admin creates the users and hands out the passwords.`
+    `${brand.name} asks for its password. Open the drive and sign in — the admin sets the passwords.`
   );
   (err as Error & { status?: number }).status = 403;
   throw err;
 }
 
+/**
+ * Check a typed password against the drive's own. A drive with no password set
+ * accepts none, so a drive nobody has been given never falls open.
+ */
+export async function verifyDrivePassword(
+  key: DriveKey,
+  candidate: string
+): Promise<boolean> {
+  if (!candidate) return false;
+  const stored = await passcodeHashFor(key);
+  if (!stored) return false;
+  return safeEqual(stored, await hashPasscode(candidate));
+}
+
+/* ── what the caller may do ───────────────────────────────────────────────── */
+
+/**
+ * Whether the caller runs this drive. The same question as whether they can
+ * open it: being through a drive's password is what makes it theirs, and there
+ * is nothing further to be granted.
+ */
+export async function isDriveUser(brand: Brand): Promise<boolean> {
+  return canOpenDrive(brand);
+}
+
+/** Throws unless the caller runs this drive. */
+export async function requireDriveUser(brand: Brand): Promise<void> {
+  return requireDriveAccess(brand);
+}
+
 /** Both facts at once, for the payloads and pages that render by role. */
 export async function driveRoles(
   brand: Brand
-): Promise<{ isAdmin: boolean; isUser: boolean; userName: string | null }> {
-  const [admin, user] = await Promise.all([isAdmin(), currentUser(brand.key)]);
-  return { isAdmin: admin, isUser: Boolean(user), userName: user?.name ?? null };
+): Promise<{ isAdmin: boolean; isUser: boolean }> {
+  const [admin, user] = await Promise.all([isAdmin(), isDriveUser(brand)]);
+  return { isAdmin: admin, isUser: user };
 }

@@ -21,8 +21,6 @@ export interface DriveMember {
   key: string;
   name: string;
   slug: string;
-  /** How many users the admin has created against this drive. */
-  users: number;
   usedBytes: number;
   quotaBytes: number;
 }
@@ -116,14 +114,12 @@ export interface DrivePayload {
   usedBytes: number;
   quotaBytes: number;
   /**
-   * Whether this viewer is signed in as one of this drive's own users. That is
-   * what decides whether the drive shows its management controls — adding
-   * folders, renaming, deleting, revisions — because those are the user's, not
-   * the admin's.
+   * Whether this viewer is through the drive's password. That is what decides
+   * whether the drive shows its management controls — adding folders,
+   * renaming, deleting, revisions — because being through the password is what
+   * makes the drive theirs.
    */
   isUser: boolean;
-  /** Who they are signed in as, for the header. Null when nobody is. */
-  userName: string | null;
   /**
    * Whether this viewer holds the admin session. Only decides whether the
    * header offers a way through to the admin panel; it unlocks nothing in the

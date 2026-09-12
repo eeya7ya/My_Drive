@@ -112,28 +112,6 @@ CREATE TABLE IF NOT EXISTS drive_slugs (
 
 CREATE INDEX IF NOT EXISTS idx_drive_slugs_drive ON drive_slugs(drive_key);
 
--- The people who run the drives. The admin panel creates them and gives each
--- one a password; that password signs them in to their own drive and lets them
--- do everything in it. One row per person, several allowed per drive, and a
--- deleted drive takes its users with it.
---
--- password_hash is an HMAC under SESSION_SECRET, so the database never holds a
--- password. Signing in looks a hash up against one drive's users, which is what
--- the second index is for; the session signs that hash alongside the user id,
--- so changing a password or deleting the row signs the person out at once.
-CREATE TABLE IF NOT EXISTS users (
-  id            TEXT PRIMARY KEY,
-  name          TEXT NOT NULL,
-  email         TEXT NOT NULL DEFAULT '',
-  drive_key     TEXT NOT NULL REFERENCES drives(key) ON DELETE CASCADE,
-  password_hash TEXT NOT NULL,
-  created_at    INTEGER NOT NULL,
-  modified_at   INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_users_drive ON users(drive_key);
-CREATE INDEX IF NOT EXISTS idx_users_signin ON users(drive_key, password_hash);
-
 -- Access requests raised from the dashboard, answered in the admin panel.
 CREATE TABLE IF NOT EXISTS drive_requests (
   id         TEXT PRIMARY KEY,
