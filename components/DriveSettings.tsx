@@ -121,14 +121,17 @@ function patchFor(
 
 export default function DriveSettings({
   brand,
-  isOwner,
+  isUser,
+  userName,
   isAdmin,
   onClose,
 }: {
   brand: Brand;
-  /** Whether this viewer already holds the drive's owner seat. */
-  isOwner: boolean;
-  /** Only decides whether the note about where the passcode is set is shown. */
+  /** Whether this viewer is already signed in as one of the drive's users. */
+  isUser: boolean;
+  /** Who they are signed in as, shown so they can tell which account is open. */
+  userName: string | null;
+  /** Only decides whether the note about where passwords come from is shown. */
   isAdmin: boolean;
   onClose: () => void;
 }) {
@@ -151,9 +154,9 @@ export default function DriveSettings({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={isOwner ? `Settings for ${brand.name}` : `Manage ${brand.name}`}
+        aria-label={isUser ? `Settings for ${brand.name}` : `Sign in to ${brand.name}`}
         style={{
-          width: isOwner ? "min(760px, 100%)" : "min(420px, 100%)",
+          width: isUser ? "min(760px, 100%)" : "min(420px, 100%)",
           maxHeight: "100%",
           overflow: "auto",
           background: "var(--color-surface)",
@@ -183,7 +186,7 @@ export default function DriveSettings({
               border: "1px solid var(--color-accent-300)",
             }}
           >
-            <Icon name={isOwner ? "drive" : "lock"} size={16} />
+            <Icon name={isUser ? "drive" : "lock"} size={16} />
           </div>
           <div style={{ marginRight: "auto", minWidth: 0 }}>
             <div
@@ -197,7 +200,9 @@ export default function DriveSettings({
             >
               {brand.name}
             </div>
-            <div style={TAGLINE}>{isOwner ? "Drive settings" : "Owner sign in"}</div>
+            <div style={TAGLINE}>
+              {isUser ? (userName ?? "Drive settings") : "Sign in"}
+            </div>
           </div>
           <button
             className="btn btn-secondary btn-icon"
@@ -209,10 +214,10 @@ export default function DriveSettings({
           </button>
         </header>
 
-        {isOwner ? (
-          <OwnerSettings brand={brand} onClose={onClose} />
+        {isUser ? (
+          <DriveForm brand={brand} onClose={onClose} />
         ) : (
-          <OwnerSignIn brand={brand} isAdmin={isAdmin} />
+          <SignIn brand={brand} isAdmin={isAdmin} />
         )}
       </div>
     </div>
@@ -231,8 +236,8 @@ export default function DriveSettings({
  * control that should now appear is decided on the server, so asking for the
  * page again is both simpler and the only thing that cannot disagree with it.
  */
-function OwnerSignIn({ brand, isAdmin }: { brand: Brand; isAdmin: boolean }) {
-  const [passcode, setPasscode] = useState("");
+function SignIn({ brand, isAdmin }: { brand: Brand; isAdmin: boolean }) {
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -240,16 +245,16 @@ function OwnerSignIn({ brand, isAdmin }: { brand: Brand; isAdmin: boolean }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/drives/${encodeURIComponent(brand.key)}/owner`, {
+      const res = await fetch(`/api/drives/${encodeURIComponent(brand.key)}/signin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const answer: { error?: string } = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(answer?.error || "That passcode was not accepted");
+      if (!res.ok) throw new Error(answer?.error || "That password was not accepted");
       window.location.reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "That passcode was not accepted");
+      setError(e instanceof Error ? e.message : "That password was not accepted");
       setBusy(false);
     }
   }
@@ -257,32 +262,31 @@ function OwnerSignIn({ brand, isAdmin }: { brand: Brand; isAdmin: boolean }) {
   return (
     <div style={{ padding: "20px 18px 22px" }}>
       <p style={{ margin: "0 0 16px", fontSize: 13, opacity: 0.75 }}>
-        {brand.hasOwner
-          ? "Adding folders, renaming and deleting belong to this drive's owner. Enter the owner passcode to take the seat."
-          : "This drive has no owner yet, so nobody can add folders to it. An admin assigns one in the admin panel."}
+        Adding folders, renaming and deleting belong to this drive&rsquo;s own users. Enter your
+        password to sign in and manage {brand.name}.
       </p>
 
-      {brand.hasOwner && (
+      {true && (
         <form
           onSubmit={(ev) => {
             ev.preventDefault();
             // Trimmed before sending, because the server compares hashes
             // exactly and a pasted code carries the whitespace it was copied
             // with.
-            if (passcode.trim()) void send({ passcode: passcode.trim() });
+            if (password.trim()) void send({ password: password.trim() });
           }}
         >
           <div className="field">
-            <label htmlFor="owner-passcode">Owner passcode</label>
+            <label htmlFor="drive-password">Your password</label>
             <input
-              id="owner-passcode"
+              id="drive-password"
               className="input"
               type="password"
               autoComplete="current-password"
               autoFocus
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              placeholder="What the admin sent you"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="The password the admin gave you"
               disabled={busy}
             />
           </div>
@@ -290,11 +294,11 @@ function OwnerSignIn({ brand, isAdmin }: { brand: Brand; isAdmin: boolean }) {
           <button
             className="btn btn-primary btn-block"
             type="submit"
-            disabled={busy || !passcode.trim()}
+            disabled={busy || !password.trim()}
             style={{ marginTop: 16, justifyContent: "center" }}
           >
             <Icon name="lock" size={14} />
-            {busy ? "Signing in…" : "Manage this drive"}
+            {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
       )}
@@ -324,7 +328,7 @@ function OwnerSignIn({ brand, isAdmin }: { brand: Brand; isAdmin: boolean }) {
 
 /* ── the settings themselves ─────────────────────────────────────────────── */
 
-function OwnerSettings({ brand, onClose }: { brand: Brand; onClose: () => void }) {
+function DriveForm({ brand, onClose }: { brand: Brand; onClose: () => void }) {
   const [form, setForm] = useState<Form>(() => formOf(brand));
   const [mode, setMode] = useState<PasscodeMode>("keep");
   const [passcode, setPasscode] = useState("");
@@ -391,7 +395,7 @@ function OwnerSettings({ brand, onClose }: { brand: Brand; onClose: () => void }
     setBusy("leave");
     setNote(null);
     try {
-      const res = await fetch(`/api/drives/${encodeURIComponent(brand.key)}/owner`, {
+      const res = await fetch(`/api/drives/${encodeURIComponent(brand.key)}/signin`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Could not step out of the owner's seat.");
@@ -399,7 +403,7 @@ function OwnerSettings({ brand, onClose }: { brand: Brand; onClose: () => void }
     } catch (e) {
       setNote({
         tone: "bad",
-        text: e instanceof Error ? e.message : "Could not step out of the owner's seat.",
+        text: e instanceof Error ? e.message : "Could not sign out.",
       });
       setBusy(null);
     }
@@ -661,11 +665,11 @@ function OwnerSettings({ brand, onClose }: { brand: Brand; onClose: () => void }
           type="button"
           onClick={leave}
           disabled={locked}
-          title="Stop managing this drive on this device"
+          title="Sign out of this drive on this device"
           style={{ marginLeft: "auto" }}
         >
           <Icon name="logout" size={14} />
-          {busy === "leave" ? "Leaving…" : "Stop managing"}
+          {busy === "leave" ? "Signing out…" : "Sign out"}
         </button>
       </div>
     </form>

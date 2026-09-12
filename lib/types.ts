@@ -12,21 +12,19 @@ export interface DriveCard extends Brand {
 }
 
 /**
- * One drive as the admin manages it: who runs it, and what it may store.
+ * One drive's numbers as the admin panel shows them: how full it is against
+ * what it is allowed, and how many people run it.
  *
- * Kept apart from Brand because a Brand goes to every visitor and this does
- * not — an owner's email address and a drive's quota are the admin's business.
- * Assembled on the admin page from the registry and the storage counters.
+ * Kept apart from Brand because a Brand goes to every visitor and a quota is
+ * the admin's business. Assembled on the admin page from the storage counters
+ * and the users table.
  */
 export interface DriveMember {
   key: string;
   name: string;
   slug: string;
-  /** Who the drive was handed to. Free text; may be empty. */
-  ownerName: string;
-  ownerEmail: string;
-  /** Whether an owner passcode is set, i.e. whether anyone can sign in to run it. */
-  hasOwner: boolean;
+  /** How many users the admin has created against this drive. */
+  users: number;
   usedBytes: number;
   quotaBytes: number;
 }
@@ -120,11 +118,14 @@ export interface DrivePayload {
   usedBytes: number;
   quotaBytes: number;
   /**
-   * Whether this viewer holds the drive's owner seat. This is what decides
-   * whether the drive shows its management controls — adding folders, renaming,
-   * deleting, revisions — because those are the owner's, not the admin's.
+   * Whether this viewer is signed in as one of this drive's own users. That is
+   * what decides whether the drive shows its management controls — adding
+   * folders, renaming, deleting, revisions — because those are the user's, not
+   * the admin's.
    */
-  isOwner: boolean;
+  isUser: boolean;
+  /** Who they are signed in as, for the header. Null when nobody is. */
+  userName: string | null;
   /**
    * Whether this viewer holds the admin session. Only decides whether the
    * header offers a way through to the admin panel; it unlocks nothing in the

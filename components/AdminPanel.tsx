@@ -1,28 +1,28 @@
 "use client";
 
 /**
- * The admin panel: the level above the drives.
+ * The admin panel: users, and how much each drive may store.
  *
- * Which drives exist, who runs each one, and how much each may store. It is
- * deliberately not where a drive's folders are added or its name is changed —
- * those belong to the drive's owner and are done from inside the drive, behind
- * the header's own control. The admin hands a drive to somebody and sets the
- * ceiling on what it can hold; what happens inside is theirs.
+ * That is the whole of it, and the shortness is the point. The admin creates a
+ * person, gives them a password, and says which drive is theirs. From then on
+ * that person signs in on their own drive and does everything in it — adds
+ * folders, renames them, uploads, manages revisions, edits the drive's name and
+ * address — without coming back here. Nothing on this page adds a folder,
+ * because adding folders is not the admin's job.
  *
- * It is an operator's tool, not a separate application, so it is assembled
- * from the same parts as everything else — blueprint frames with registration
- * marks, `.field` / `.input` controls, the letterspaced micro-label, the
- * accent rule under a heading. Somebody who arrives here from a drive should
- * recognise where they are.
+ * It is an operator's tool, not a separate application, so it is assembled from
+ * the same parts as everything else — blueprint frames with registration marks,
+ * `.field` / `.input` controls, the letterspaced micro-label, the accent rule
+ * under a heading. Somebody who arrives here from a drive should recognise
+ * where they are.
  *
  * Two decisions shape the rest of the file. Every write sends only the fields
  * that actually changed and then calls router.refresh(), so the server render
  * stays the single copy of the truth; a panel that patched its own list would
  * drift from the database the first time a save half succeeded, and the admin
- * would have no way to tell. And each passcode is a three-way choice rather
- * than a text box, because the API has three cases — leave it, set it, clear
- * it — and a blank field that silently means "leave it" is how people lock
- * themselves out of their own drive.
+ * would have no way to tell. And a password is write-only everywhere: it is
+ * never read back, never shown, and the form says so — the only thing anyone
+ * can do with a forgotten password is replace it.
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -39,93 +39,31 @@ import Choice, {
 import { Brand, DriveVisibility, SITE, slugifyDrive } from "@/lib/brand";
 import { humanSizeTrim } from "@/lib/types";
 import type { DriveRequest } from "@/lib/drives";
+import type { DriveUser } from "@/lib/users";
 import type { DriveMember } from "@/lib/types";
 
 /**
  * What the panel says after a write. A confirmation and a refusal share one
  * slot deliberately: whatever happened, the answer appears in the same place,
- * so there is no state in which the admin has to guess whether a change
- * landed.
+ * so there is no state in which the admin has to guess whether a change landed.
  */
 type Note = { tone: "ok" | "bad"; text: string } | null;
 
 /** One gibibyte, the unit the quota field is typed in. */
 const GIB = 1024 * 1024 * 1024;
 
-/**
- * The body of a PATCH the admin is allowed to send. The drive's identity is
- * absent on purpose — the API refuses those fields from an admin, because they
- * are the owner's, and a form that could not send them cannot accidentally try.
- */
+/** The body of a PATCH to /api/users. Absent means unchanged. */
+interface UserPatch {
+  name?: string;
+  email?: string;
+  driveKey?: string;
+  password?: string;
+}
+
+/** The body of a PATCH to /api/drives/[key] that an admin may send. */
 interface DrivePatch {
   listed?: boolean;
-  ownerName?: string;
-  ownerEmail?: string;
-  ownerPasscode?: string | null;
   quotaBytes?: number;
-}
-
-/** What the admin holds about one drive while editing it. */
-interface MemberForm {
-  ownerName: string;
-  ownerEmail: string;
-  listed: boolean;
-  /** Typed in GB, because bytes are not a number anybody chooses in. */
-  quotaGb: string;
-}
-
-/** The three things an admin can mean by touching an owner passcode. */
-type PasscodeMode = "keep" | "set" | "clear";
-
-function formOf(member: DriveMember, brand: Brand): MemberForm {
-  return {
-    ownerName: member.ownerName,
-    ownerEmail: member.ownerEmail,
-    listed: brand.listed,
-    // Trailing zeros are trimmed so a round 200 GB reads as "200" rather than
-    // "200.00", and a quota that is not a whole number of GB still round-trips.
-    quotaGb: String(Number((member.quotaBytes / GIB).toFixed(2))),
-  };
-}
-
-/**
- * The difference between the drive as it is and the form as it stands. Sending
- * the whole form instead would work, but it would also rewrite fields nobody
- * touched — and with two admins, or two tabs, that quietly reverts the other
- * one's edit.
- */
-function patchFor(
-  member: DriveMember,
-  brand: Brand,
-  form: MemberForm,
-  mode: PasscodeMode,
-  passcode: string
-): DrivePatch {
-  const patch: DrivePatch = {};
-
-  const ownerName = form.ownerName.trim();
-  if (ownerName !== member.ownerName) patch.ownerName = ownerName;
-
-  const ownerEmail = form.ownerEmail.trim();
-  if (ownerEmail !== member.ownerEmail) patch.ownerEmail = ownerEmail;
-
-  if (form.listed !== brand.listed) patch.listed = form.listed;
-
-  // Compared in bytes rather than in the typed text, so re-saving a form that
-  // was never touched sends nothing even though "200" and "200.00" differ.
-  const gb = Number(form.quotaGb);
-  if (Number.isFinite(gb) && gb > 0) {
-    const bytes = Math.round(gb * GIB);
-    if (bytes !== member.quotaBytes) patch.quotaBytes = bytes;
-  }
-
-  // The sign-in forms trim what is typed and the server compares the hashes
-  // exactly, so a passcode saved with a space around it could never be entered
-  // again. It is trimmed on the way in as well, and the two ends agree.
-  if (mode === "set") patch.ownerPasscode = passcode.trim();
-  if (mode === "clear") patch.ownerPasscode = null;
-
-  return patch;
 }
 
 /**
@@ -147,15 +85,14 @@ function when(ms: number): string {
 export default function AdminPanel({
   drives,
   members,
+  users,
   requests,
 }: {
   drives: Brand[];
-  /**
-   * One entry per drive, in the same order: who runs it and what it may store.
-   * Read on the server beside `drives` rather than fetched here, which is what
-   * lets every write end with router.refresh().
-   */
+  /** One entry per drive, in the same order: how full it is against its quota. */
   members: DriveMember[];
+  /** Every user, across every drive. Grouped per drive for display. */
+  users: DriveUser[];
   requests: DriveRequest[];
 }) {
   const router = useRouter();
@@ -167,11 +104,12 @@ export default function AdminPanel({
 
   const [note, setNote] = useState<Note>(null);
   // The action in flight, if any. One at a time: a panel that could run two
-  // writes against the same row would refresh into a result neither of them
-  // describes.
+  // writes against the same row would refresh into a result neither describes.
   const [busy, setBusy] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
+  const [addingUser, setAddingUser] = useState(false);
+  const [creatingDrive, setCreatingDrive] = useState(false);
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [editingDrive, setEditingDrive] = useState<string | null>(null);
 
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
@@ -210,7 +148,10 @@ export default function AdminPanel({
   const locked = busy !== null;
   const waiting = requests.filter((r) => r.status === "new").length;
   const byKey = new Map(members.map((m) => [m.key, m]));
-  const unowned = drives.filter((d) => !d.hasOwner).length;
+  const nameOfDrive = new Map(drives.map((d) => [d.key, d.name]));
+  // A drive nobody has been given is a drive nobody can add a folder to, which
+  // is the one state on this page that needs acting on rather than reading.
+  const unassigned = drives.filter((d) => !users.some((u) => u.driveKey === d.key));
 
   async function signOut() {
     setBusy("sign-out");
@@ -308,7 +249,7 @@ export default function AdminPanel({
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30 }}>
           <h1 className="dc-title" style={{ margin: 0, fontSize: 42 }}>
-            Drives, owners &amp; storage
+            Users &amp; storage
           </h1>
           <div
             style={{
@@ -318,11 +259,11 @@ export default function AdminPanel({
               animation: "sweepIn .55s cubic-bezier(.2,.7,.3,1) both",
             }}
           />
-          <p style={{ margin: 0, fontSize: 15, opacity: 0.75, maxWidth: "64ch" }}>
-            A drive added here appears on the dashboard straight away — no deploy. Its key is
-            fixed at creation because every folder and file row carries it. What this panel sets
-            is who runs each drive and how much it may hold; the drive&rsquo;s own name, address
-            and folders are its owner&rsquo;s, and are changed from inside the drive.
+          <p style={{ margin: 0, fontSize: 15, opacity: 0.75, maxWidth: "66ch" }}>
+            Create a user, give them a password, and say which drive is theirs. Send them the
+            password and you are done: they sign in on their own drive and do everything in it —
+            folders, files, revisions, and the drive&rsquo;s own name and address — without
+            coming back here. The other half of this page is how much each drive may store.
           </p>
         </div>
 
@@ -371,6 +312,155 @@ export default function AdminPanel({
           </div>
         )}
 
+        {/* ── users ────────────────────────────────────────────────────── */}
+
+        <section>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 14,
+              flexWrap: "wrap",
+              marginBottom: 16,
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-heading)",
+                fontWeight: 600,
+                fontSize: 26,
+              }}
+            >
+              Users
+            </h2>
+            <span style={LABEL}>
+              {users.length === 0
+                ? "None yet"
+                : users.length === 1
+                  ? "One user"
+                  : `${users.length} users`}
+            </span>
+            <div style={{ marginLeft: "auto" }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setAddingUser((v) => !v)}
+                disabled={locked || drives.length === 0}
+                title={drives.length === 0 ? "Add a drive first" : "Create a user"}
+              >
+                <Icon name={addingUser ? "close" : "plus"} size={14} />
+                {addingUser ? "Cancel" : "New user"}
+              </button>
+            </div>
+          </div>
+
+          {/* The one thing on this page that is actually broken, said once at
+              the top rather than repeated on every drive's row below. */}
+          {unassigned.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 9,
+                marginBottom: 16,
+                padding: "10px 13px",
+                fontSize: 13,
+                border: `1px solid color-mix(in srgb, ${DANGER} 45%, transparent)`,
+                background: `color-mix(in srgb, ${DANGER} 7%, transparent)`,
+                color: DANGER,
+              }}
+            >
+              <Icon name="info" size={15} style={{ flex: "none", marginTop: 2 }} />
+              <span>
+                {unassigned.map((d) => d.name).join(", ")}{" "}
+                {unassigned.length === 1 ? "has" : "have"} no user yet, so nobody can add a
+                folder there — not even you. Create one against{" "}
+                {unassigned.length === 1 ? "it" : "each"} below.
+              </span>
+            </div>
+          )}
+
+          {addingUser && (
+            <UserForm
+              drives={drives}
+              locked={locked}
+              busy={busy === "create-user"}
+              submitLabel="Create the user"
+              onSubmit={async (body) => {
+                const done = await call(
+                  "create-user",
+                  "/api/users",
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                  },
+                  `Created ${body.name ?? "the user"}. Send them their password — they sign in at /${
+                    drives.find((d) => d.key === body.driveKey)?.slug ?? ""
+                  } and the drive is theirs.`
+                );
+                if (done) setAddingUser(false);
+                return done;
+              }}
+              onCancel={() => setAddingUser(false)}
+            />
+          )}
+
+          {users.length === 0 && !addingUser ? (
+            <p style={{ margin: 0, fontSize: 14, opacity: 0.75 }}>
+              Nobody can change anything in any drive until a user exists. The first one takes a
+              name, a password, and the drive it is for.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {users.map((user) => (
+                <UserRow
+                  key={user.id}
+                  user={user}
+                  driveName={nameOfDrive.get(user.driveKey) ?? user.driveKey}
+                  drives={drives}
+                  open={editingUser === user.id}
+                  locked={locked}
+                  savingId={busy}
+                  onToggle={() => setEditingUser(editingUser === user.id ? null : user.id)}
+                  onSave={async (patch) => {
+                    if (Object.keys(patch).length === 0) {
+                      setNote({ tone: "ok", text: "Nothing to save — no field changed." });
+                      return true;
+                    }
+                    const done = await call(
+                      `user:${user.id}`,
+                      `/api/users/${encodeURIComponent(user.id)}`,
+                      {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(patch),
+                      },
+                      patch.password
+                        ? `Saved ${patch.name ?? user.name}. Send them the new password — the old one stopped working just now.`
+                        : `Saved ${patch.name ?? user.name}.`
+                    );
+                    if (done) setEditingUser(null);
+                    return done;
+                  }}
+                  onDelete={() =>
+                    call(
+                      `user-delete:${user.id}`,
+                      `/api/users/${encodeURIComponent(user.id)}`,
+                      { method: "DELETE" },
+                      `Removed ${user.name}. Their drive and everything in it is untouched.`
+                    )
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="hr" style={{ margin: "44px 0 28px" }} />
+
+        {/* ── drives ───────────────────────────────────────────────────── */}
+
         <section>
           <div
             style={{
@@ -393,40 +483,46 @@ export default function AdminPanel({
             </h2>
             <span style={LABEL}>
               {drives.length === 1 ? "One drive" : `${drives.length} drives`}
-              {unowned > 0 &&
-                ` · ${unowned === 1 ? "one has" : `${unowned} have`} no owner`}
             </span>
             <div style={{ marginLeft: "auto" }}>
               <button
-                className="btn btn-primary"
-                onClick={() => setCreating((v) => !v)}
+                className="btn btn-secondary"
+                onClick={() => setCreatingDrive((v) => !v)}
                 disabled={locked}
               >
-                <Icon name={creating ? "close" : "plus"} size={14} />
-                {creating ? "Cancel" : "New drive"}
+                <Icon name={creatingDrive ? "close" : "plus"} size={14} />
+                {creatingDrive ? "Cancel" : "New drive"}
               </button>
             </div>
           </div>
 
-          {creating && (
+          <p style={{ margin: "0 0 18px", fontSize: 13, opacity: 0.75, maxWidth: "66ch" }}>
+            A drive added here appears on the dashboard straight away — no deploy. Its key is
+            fixed at creation because every folder and file row carries it. What you set here is
+            its storage limit and whether the dashboard names it; everything else about a drive —
+            its name, tagline, address, numbering — belongs to its users and is changed from
+            inside the drive.
+          </p>
+
+          {creatingDrive && (
             <CreateDrive
               locked={locked}
-              busy={busy === "create"}
+              busy={busy === "create-drive"}
               onCreate={async (body) => {
                 const done = await call(
-                  "create",
+                  "create-drive",
                   "/api/drives",
                   {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(body),
                   },
-                  `Created ${body.name}. It answers at /${body.slug}.`
+                  `Created ${body.name} at /${body.slug}. Now create a user for it, or nobody can put anything in it.`
                 );
-                if (done) setCreating(false);
+                if (done) setCreatingDrive(false);
                 return done;
               }}
-              onCancel={() => setCreating(false)}
+              onCancel={() => setCreatingDrive(false)}
             />
           )}
 
@@ -440,44 +536,38 @@ export default function AdminPanel({
                     key: brand.key,
                     name: brand.name,
                     slug: brand.slug,
-                    ownerName: "",
-                    ownerEmail: "",
-                    hasOwner: brand.hasOwner,
+                    users: 0,
                     usedBytes: 0,
                     quotaBytes: 200 * GIB,
                   }
                 }
-                open={editing === brand.key}
+                open={editingDrive === brand.key}
                 locked={locked}
                 savingId={busy}
-                onToggle={() => setEditing(editing === brand.key ? null : brand.key)}
+                onToggle={() =>
+                  setEditingDrive(editingDrive === brand.key ? null : brand.key)
+                }
                 onSave={async (patch) => {
                   if (Object.keys(patch).length === 0) {
                     setNote({ tone: "ok", text: "Nothing to save — no field changed." });
                     return true;
                   }
-                  const handed =
-                    patch.ownerPasscode === null
-                      ? ` Its owner passcode is cleared, so nobody can manage it until you set a new one.`
-                      : patch.ownerPasscode
-                        ? ` Send the new owner passcode to ${patch.ownerName ?? byKey.get(brand.key)?.ownerName ?? "its owner"} — the previous one no longer works.`
-                        : "";
                   const done = await call(
-                    `save:${brand.key}`,
+                    `drive:${brand.key}`,
                     `/api/drives/${encodeURIComponent(brand.key)}`,
                     {
                       method: "PATCH",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(patch),
                     },
-                    `Saved ${brand.name}.${handed}`
+                    `Saved ${brand.name}.`
                   );
-                  if (done) setEditing(null);
+                  if (done) setEditingDrive(null);
                   return done;
                 }}
                 onDelete={() =>
                   call(
-                    `delete:${brand.key}`,
+                    `drive-delete:${brand.key}`,
                     `/api/drives/${encodeURIComponent(brand.key)}`,
                     { method: "DELETE" },
                     `Removed ${brand.name} from the registry.`
@@ -495,6 +585,8 @@ export default function AdminPanel({
         </section>
 
         <div className="hr" style={{ margin: "44px 0 28px" }} />
+
+        {/* ── requests ─────────────────────────────────────────────────── */}
 
         <section>
           <div
@@ -525,9 +617,8 @@ export default function AdminPanel({
 
           <p style={{ margin: "0 0 20px", fontSize: 13, opacity: 0.75, maxWidth: "68ch" }}>
             Approving is bookkeeping — it marks the request as dealt with and grants nothing on
-            its own. What opens a private drive is its reader passcode, which its owner sets from
-            inside the drive; what lets somebody run a drive is the owner passcode you set here.
-            Send whichever one you meant, and only that one.
+            its own. The grant is creating the person a user above and sending them their
+            password.
           </p>
 
           {requests.length === 0 ? (
@@ -552,7 +643,7 @@ export default function AdminPanel({
                         body: JSON.stringify({ status }),
                       },
                       status === "approved"
-                        ? `Marked ${request.name}'s request approved. Send them the passcode.`
+                        ? `Marked ${request.name}'s request approved. Create them a user above.`
                         : status === "dismissed"
                           ? `Dismissed ${request.name}'s request.`
                           : `Put ${request.name}'s request back on the waiting list.`
@@ -576,16 +667,394 @@ export default function AdminPanel({
   );
 }
 
+/* ── users ───────────────────────────────────────────────────────────────── */
+
+/**
+ * One person: their name, the drive that is theirs, and how to reach them. The
+ * form is mounted only while it is open, so every time it opens it is seeded
+ * from the freshest server data rather than from whatever was typed and
+ * abandoned an hour ago.
+ */
+function UserRow({
+  user,
+  driveName,
+  drives,
+  open,
+  locked,
+  savingId,
+  onToggle,
+  onSave,
+  onDelete,
+}: {
+  user: DriveUser;
+  driveName: string;
+  drives: Brand[];
+  open: boolean;
+  locked: boolean;
+  savingId: string | null;
+  onToggle: () => void;
+  onSave: (patch: UserPatch) => Promise<boolean>;
+  onDelete: () => Promise<boolean>;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const deleting = savingId === `user-delete:${user.id}`;
+  const drive = drives.find((d) => d.key === user.driveKey);
+
+  return (
+    <div
+      style={{
+        border: "1px solid var(--color-divider)",
+        borderTop: "2px solid var(--color-accent)",
+        background: "var(--color-surface)",
+        animation: "rise .35s both",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          padding: "14px 16px",
+          flexWrap: "wrap",
+        }}
+      >
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            flex: "none",
+            display: "grid",
+            placeItems: "center",
+            background: "var(--color-accent-100)",
+            color: "var(--color-accent-700)",
+            border: "1px solid var(--color-accent-300)",
+          }}
+        >
+          <Icon name="cap" size={16} />
+        </div>
+
+        <div style={{ minWidth: 180, flex: 1 }}>
+          <div
+            style={{
+              fontFamily: "var(--font-heading)",
+              fontWeight: 600,
+              fontSize: 19,
+              lineHeight: 1.15,
+              letterSpacing: ".01em",
+            }}
+          >
+            {user.name}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+              marginTop: 3,
+              fontSize: 12,
+            }}
+          >
+            <span style={{ opacity: 0.75 }}>
+              runs <strong style={{ opacity: 0.9 }}>{driveName}</strong>
+            </span>
+            {drive && <a href={drive.basePath}>{drive.basePath}</a>}
+            {user.email && (
+              <a href={`mailto:${user.email}`} style={{ opacity: 0.75 }}>
+                {user.email}
+              </a>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <button
+            className="btn btn-secondary"
+            onClick={onToggle}
+            disabled={locked}
+            aria-expanded={open}
+          >
+            <Icon name={open ? "close" : "edit"} size={14} />
+            {open ? "Close" : "Edit"}
+          </button>
+          <button
+            className="btn btn-secondary btn-icon"
+            onClick={() => setConfirming(true)}
+            disabled={locked || confirming}
+            title="Remove this user"
+            aria-label="Remove this user"
+            style={{ color: DANGER }}
+          >
+            <Icon name="trash" size={15} />
+          </button>
+        </div>
+      </div>
+
+      {confirming && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            padding: "12px 16px",
+            borderTop: "1px solid var(--color-divider)",
+            background: `color-mix(in srgb, ${DANGER} 6%, transparent)`,
+            fontSize: 13,
+          }}
+        >
+          <span style={{ flex: 1, minWidth: 240 }}>
+            Remove {user.name}? Their password stops working at once. {driveName} and everything
+            in it stays exactly as it is — only the person goes.
+          </span>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setConfirming(false)}
+            disabled={deleting}
+          >
+            Keep them
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              const done = await onDelete();
+              if (done) setConfirming(false);
+            }}
+            disabled={locked}
+            style={{ background: DANGER, borderColor: DANGER, color: DANGER_TEXT }}
+          >
+            <Icon name="trash" size={14} />
+            {deleting ? "Removing…" : "Remove the user"}
+          </button>
+        </div>
+      )}
+
+      {open && (
+        <UserForm
+          drives={drives}
+          user={user}
+          locked={locked}
+          busy={savingId === `user:${user.id}`}
+          submitLabel="Save changes"
+          onSubmit={onSave}
+          onCancel={onToggle}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * One form for creating a user and for editing one, because they ask for the
+ * same four things and a second copy would drift.
+ *
+ * The password is the field worth looking at. On a new user it is required —
+ * a user who cannot sign in is a note to self, not an account. On an existing
+ * one it is a replacement or nothing: the stored hash cannot be turned back
+ * into a password, so there is nothing to prefill and nothing to show, and the
+ * form says that rather than presenting an empty box that might mean "blank it".
+ */
+function UserForm({
+  drives,
+  user,
+  locked,
+  busy,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: {
+  drives: Brand[];
+  /** Absent when creating. */
+  user?: DriveUser;
+  locked: boolean;
+  busy: boolean;
+  submitLabel: string;
+  /**
+   * Creating sends all four fields; editing sends only what changed, so two
+   * admins editing two fields of the same user do not overwrite each other.
+   */
+  onSubmit: (body: UserPatch) => Promise<boolean>;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(user?.name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [driveKey, setDriveKey] = useState(user?.driveKey ?? drives[0]?.key ?? "");
+  const [password, setPassword] = useState("");
+
+  const editing = Boolean(user);
+  const id = (field: string) => `user-${user?.id ?? "new"}-${field}`;
+  const drive = drives.find((d) => d.key === driveKey);
+
+  // What is trimmed here is trimmed on the server too, and the server compares
+  // hashes exactly — a password saved with a space around it could never be
+  // typed back in.
+  const cleanName = name.trim();
+  const cleanPassword = password.trim();
+  const ready = Boolean(cleanName && driveKey && (editing || cleanPassword));
+
+  async function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (!ready) return;
+
+    if (!user) {
+      await onSubmit({
+        name: cleanName,
+        email: email.trim(),
+        driveKey,
+        password: cleanPassword,
+      });
+      return;
+    }
+
+    const patch: UserPatch = {};
+    if (cleanName !== user.name) patch.name = cleanName;
+    if (email.trim() !== user.email) patch.email = email.trim();
+    if (driveKey !== user.driveKey) patch.driveKey = driveKey;
+    // An empty box means "keep the current password", which is the only
+    // reading that does not risk blanking somebody's access by accident.
+    if (cleanPassword) patch.password = cleanPassword;
+    await onSubmit(patch);
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className={editing ? undefined : "blueprint"}
+      style={{
+        padding: editing ? "20px 16px 22px" : "26px 24px",
+        marginBottom: editing ? 0 : 20,
+        maxWidth: editing ? undefined : 660,
+        borderTop: editing ? "1px solid var(--color-divider)" : undefined,
+        background: editing
+          ? "color-mix(in srgb, var(--color-accent) 4%, var(--color-surface))"
+          : "var(--color-surface)",
+        animation: "pop .12s ease-out both",
+      }}
+    >
+      {!editing && (
+        <>
+          <i className="corner tl" />
+          <i className="corner tr" />
+          <i className="corner bl" />
+          <i className="corner br" />
+          <div
+            style={{
+              fontFamily: "var(--font-heading)",
+              fontWeight: 600,
+              fontSize: 22,
+              lineHeight: 1.1,
+              letterSpacing: ".02em",
+            }}
+          >
+            A new user
+          </div>
+          <div style={{ ...TAGLINE, marginTop: 2 }}>They run one drive, on their own</div>
+          <div
+            style={{
+              height: 2,
+              width: 58,
+              background: "var(--color-accent)",
+              margin: "16px 0 22px",
+            }}
+          />
+        </>
+      )}
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 14,
+        }}
+      >
+        <div className="field">
+          <label htmlFor={id("name")}>Name</label>
+          <input
+            id={id("name")}
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Who they are"
+            autoFocus={!editing}
+            disabled={locked}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor={id("email")}>Email</label>
+          <input
+            id={id("email")}
+            className="input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Optional — where to send the password"
+            disabled={locked}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor={id("drive")}>Their drive</label>
+          <select
+            id={id("drive")}
+            className="input"
+            value={driveKey}
+            onChange={(e) => setDriveKey(e.target.value)}
+            disabled={locked}
+          >
+            {drives.map((d) => (
+              <option key={d.key} value={d.key}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+          {drive && (
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+              They sign in at <strong>{drive.basePath}</strong> and manage everything there. Their
+              password does nothing on any other drive.
+            </div>
+          )}
+        </div>
+
+        <div className="field">
+          <label htmlFor={id("password")}>{editing ? "New password" : "Password"}</label>
+          <input
+            id={id("password")}
+            className="input"
+            type="text"
+            autoComplete="off"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={editing ? "Leave empty to keep the current one" : "What you will send them"}
+            disabled={locked}
+          />
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+            {editing
+              ? "Stored hashed and never readable, so a forgotten password is replaced rather than looked up. Setting a new one signs them out of the drive straight away."
+              : "Shown here once. It is stored hashed and cannot be read back afterwards, so copy it before you save."}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 9, marginTop: 22, flexWrap: "wrap" }}>
+        <button className="btn btn-primary" type="submit" disabled={locked || !ready}>
+          <Icon name={editing ? "edit" : "plus"} size={14} />
+          {busy ? "Saving…" : submitLabel}
+        </button>
+        <button className="btn btn-secondary" type="button" onClick={onCancel} disabled={locked}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 /* ── drives ──────────────────────────────────────────────────────────────── */
 
 /**
- * One drive at rest: who runs it, what it holds, and the facts that decide who
- * can find it. What it is *called* is here too, but only as a label — changing
- * it is the owner's, from inside the drive.
- *
- * The editor is mounted only while it is open, so every time it opens it is
- * seeded from the freshest server data rather than from whatever was typed and
- * abandoned an hour ago.
+ * One drive at rest: what it is called, where it answers, how full it is, and
+ * how many people run it. Its name and address are shown but not editable —
+ * those belong to its users and are changed from inside the drive.
  */
 function DriveRow({
   brand,
@@ -607,12 +1076,13 @@ function DriveRow({
   onDelete: () => Promise<boolean>;
 }) {
   const [confirming, setConfirming] = useState(false);
-  const deleting = savingId === `delete:${brand.key}`;
+  const deleting = savingId === `drive-delete:${brand.key}`;
 
   const full = member.quotaBytes > 0 ? member.usedBytes / member.quotaBytes : 0;
   // Three bands rather than a gradient: the bar is read at a glance, and what
   // it has to answer is "is this drive fine, filling up, or a problem".
-  const barColour = full >= 0.9 ? DANGER : full >= 0.7 ? "var(--color-accent-600)" : "var(--color-accent)";
+  const barColour =
+    full >= 0.9 ? DANGER : full >= 0.7 ? "var(--color-accent-600)" : "var(--color-accent)";
 
   return (
     <div
@@ -671,27 +1141,23 @@ function DriveRow({
           >
             <a href={brand.basePath}>{brand.basePath}</a>
             <span style={{ opacity: 0.5 }}>key {brand.key}</span>
-            {/* The owner in the same breath as the address, because "whose
-                drive is that?" is the question this panel exists to answer. */}
-            <span style={{ opacity: 0.75 }}>
-              {member.ownerName || member.ownerEmail ? (
-                <>
-                  run by <strong style={{ opacity: 0.9 }}>{member.ownerName || member.ownerEmail}</strong>
-                </>
-              ) : brand.hasOwner ? (
-                "owner unnamed"
-              ) : (
-                <span style={{ color: DANGER }}>no owner</span>
-              )}
+            <span style={{ opacity: member.users ? 0.75 : 1, color: member.users ? undefined : DANGER }}>
+              {member.users === 0
+                ? "no user"
+                : member.users === 1
+                  ? "1 user"
+                  : `${member.users} users`}
             </span>
           </div>
         </div>
 
         {/* Storage, as the number and the bar the drive's own sidebar shows.
-            It is the other half of what this panel manages, so it sits in the
-            row rather than behind the editor. */}
+            It is half of what this panel manages, so it sits in the row rather
+            than behind the form. */}
         <div style={{ width: 168, flex: "none" }}>
-          <div style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8 }}>
+          <div
+            style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8 }}
+          >
             <span>{humanSizeTrim(member.usedBytes)}</span>
             <span style={{ opacity: 0.6 }}>of {humanSizeTrim(member.quotaBytes)}</span>
           </div>
@@ -742,7 +1208,7 @@ function DriveRow({
             aria-expanded={open}
           >
             <Icon name={open ? "close" : "edit"} size={14} />
-            {open ? "Close" : "Manage"}
+            {open ? "Close" : "Storage"}
           </button>
           <button
             className="btn btn-secondary btn-icon"
@@ -756,41 +1222,6 @@ function DriveRow({
           </button>
         </div>
       </div>
-
-      {!brand.hasOwner && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-            padding: "10px 16px",
-            borderTop: "1px solid var(--color-divider)",
-            fontSize: 13,
-            background: `color-mix(in srgb, ${DANGER} 6%, transparent)`,
-          }}
-        >
-          <span style={{ flex: 1, minWidth: 260 }}>
-            Nobody can add a folder to this drive until it has an owner. Set an owner passcode
-            below and send it to whoever the drive is for — they sign in with it, in the drive
-            itself, and from then on run it without you.
-          </span>
-        </div>
-      )}
-
-      {brand.visibility === "private" && !brand.hasPasscode && (
-        <div
-          style={{
-            padding: "10px 16px",
-            borderTop: "1px solid var(--color-divider)",
-            fontSize: 13,
-            opacity: 0.85,
-          }}
-        >
-          This drive is private with no reader passcode, so only its owner and you can open it.
-          Setting one is the owner&rsquo;s to do, from inside the drive.
-        </div>
-      )}
 
       {confirming && (
         <div
@@ -807,7 +1238,8 @@ function DriveRow({
         >
           <span style={{ flex: 1, minWidth: 240 }}>
             Delete {brand.name}? Its folders and files are not touched — the registry row goes,
-            and {brand.basePath} stops answering. A drive that still holds anything is refused.
+            its users go with it, and {brand.basePath} stops answering. A drive that still holds
+            anything is refused.
           </span>
           <button
             className="btn btn-secondary"
@@ -832,11 +1264,11 @@ function DriveRow({
       )}
 
       {open && (
-        <DriveMembership
+        <DriveStorage
           brand={brand}
           member={member}
           locked={locked}
-          saving={savingId === `save:${brand.key}`}
+          saving={savingId === `drive:${brand.key}`}
           onSave={onSave}
           onCancel={onToggle}
         />
@@ -846,15 +1278,15 @@ function DriveRow({
 }
 
 /**
- * Everything the admin decides about one drive, in one form: who runs it, how
- * much it may store, and whether the dashboard names it.
+ * The two things about a drive that are the admin's: how much it may hold, and
+ * whether the dashboard names it.
  *
- * What is conspicuously not here is the drive's identity — its name, tagline,
- * address and numbering. Those used to live in this form, and moving them into
- * the drive is the whole point: the person who runs a drive should not have to
- * ask the person who minds the quotas to rename a folder.
+ * Everything else a drive has — its name, tagline, tab title, address,
+ * numbering, the passcode a visitor is given — used to live in this form, and
+ * moving it into the drive is the point: the person who uses a drive should not
+ * have to ask the person who minds the quotas to rename a folder.
  */
-function DriveMembership({
+function DriveStorage({
   brand,
   member,
   locked,
@@ -869,32 +1301,36 @@ function DriveMembership({
   onSave: (patch: DrivePatch) => Promise<boolean>;
   onCancel: () => void;
 }) {
-  const [form, setForm] = useState<MemberForm>(() => formOf(member, brand));
-  const [mode, setMode] = useState<PasscodeMode>("keep");
-  const [passcode, setPasscode] = useState("");
+  // Trailing zeros are trimmed so a round 200 GB reads as "200" rather than
+  // "200.00", and a quota that is not a whole number of GB still round-trips.
+  const [quotaGb, setQuotaGb] = useState(() =>
+    String(Number((member.quotaBytes / GIB).toFixed(2)))
+  );
+  const [listed, setListed] = useState(brand.listed);
 
   const id = (field: string) => `drive-${brand.key}-${field}`;
-  const set = <K extends keyof MemberForm>(field: K, value: MemberForm[K]) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
 
-  // "Set a passcode" with the box left empty would reach the API as an empty
-  // string, which it reads as "clear it" — the exact accident this control was
-  // shaped to prevent. So the save waits rather than guessing which was meant.
-  const blank = mode === "set" && !passcode.trim();
-
-  const gb = Number(form.quotaGb);
-  const badQuota = form.quotaGb.trim() !== "" && (!Number.isFinite(gb) || gb <= 0);
+  const gb = Number(quotaGb);
+  const badQuota = quotaGb.trim() !== "" && (!Number.isFinite(gb) || gb <= 0);
   // The server refuses a quota below what the drive already holds; saying so
   // here means the admin sees it while the number is still in front of them.
   const belowUsed =
     !badQuota && Number.isFinite(gb) && gb > 0 && Math.round(gb * GIB) < member.usedBytes;
-
-  const stopped = blank || badQuota || belowUsed;
+  const stopped = badQuota || belowUsed;
 
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
     if (stopped) return;
-    await onSave(patchFor(member, brand, form, mode, passcode));
+
+    const patch: DrivePatch = {};
+    if (listed !== brand.listed) patch.listed = listed;
+    // Compared in bytes rather than in the typed text, so re-saving a form that
+    // was never touched sends nothing even though "200" and "200.00" differ.
+    if (Number.isFinite(gb) && gb > 0) {
+      const bytes = Math.round(gb * GIB);
+      if (bytes !== member.quotaBytes) patch.quotaBytes = bytes;
+    }
+    await onSave(patch);
   }
 
   return (
@@ -907,132 +1343,10 @@ function DriveMembership({
         animation: "pop .12s ease-out both",
       }}
     >
-      <div style={{ ...LABEL, marginBottom: 14 }}>Who runs it</div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 14,
-        }}
-      >
-        <div className="field">
-          <label htmlFor={id("owner-name")}>Owner</label>
-          <input
-            id={id("owner-name")}
-            className="input"
-            value={form.ownerName}
-            onChange={(e) => set("ownerName", e.target.value)}
-            placeholder="Who you handed the drive to"
-            disabled={locked}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor={id("owner-email")}>Owner email</label>
-          <input
-            id={id("owner-email")}
-            className="input"
-            type="email"
-            value={form.ownerEmail}
-            onChange={(e) => set("ownerEmail", e.target.value)}
-            placeholder="Where to send the passcode"
-            disabled={locked}
-          />
-        </div>
-      </div>
-
-      <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.65, maxWidth: "62ch" }}>
-        These two are a record for you, not a login. What actually lets somebody run the drive is
-        the owner passcode below.
-      </p>
-
-      <div className="hr" style={{ margin: "22px 0 18px" }} />
-
-      <div style={{ ...LABEL, marginBottom: 6 }}>Owner passcode</div>
-      <p style={{ margin: "0 0 12px", fontSize: 13, opacity: 0.75, maxWidth: "62ch" }}>
-        {brand.hasOwner
-          ? "This drive has an owner passcode. It is stored hashed and cannot be read back, only replaced or removed — and replacing it signs the current owner out of the drive's controls straight away."
-          : "This drive has no owner passcode, so nobody can add folders to it or change what it is called. Set one and send it to whoever is to run the drive."}
-      </p>
-
-      <div
-        role="radiogroup"
-        aria-label="Owner passcode"
-        style={{ display: "flex", flexDirection: "column", gap: 9 }}
-      >
-        <label className="radio">
-          <input
-            type="radio"
-            name={id("owner-mode")}
-            checked={mode === "keep"}
-            onChange={() => setMode("keep")}
-            disabled={locked}
-          />
-          <span className="dot" />
-          <span>Leave the owner passcode as it is</span>
-        </label>
-
-        <label className="radio">
-          <input
-            type="radio"
-            name={id("owner-mode")}
-            checked={mode === "set"}
-            onChange={() => setMode("set")}
-            disabled={locked}
-          />
-          <span className="dot" />
-          <span>{brand.hasOwner ? "Hand the drive over with a new one" : "Set an owner passcode"}</span>
-        </label>
-
-        {mode === "set" && (
-          <div className="field" style={{ maxWidth: 320, marginLeft: 24 }}>
-            <label htmlFor={id("owner-passcode")}>New owner passcode</label>
-            <input
-              id={id("owner-passcode")}
-              className="input"
-              type="text"
-              autoComplete="off"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              placeholder="What you will send the owner"
-              disabled={locked}
-            />
-          </div>
-        )}
-
-        <label className="radio" style={{ opacity: brand.hasOwner ? 1 : 0.5 }}>
-          <input
-            type="radio"
-            name={id("owner-mode")}
-            checked={mode === "clear"}
-            onChange={() => setMode("clear")}
-            disabled={locked || !brand.hasOwner}
-          />
-          <span className="dot" />
-          <span>Take the drive back — remove its owner passcode</span>
-        </label>
-      </div>
-
-      {mode === "clear" && (
-        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
-          The drive and everything in it stay exactly as they are. Nobody will be able to add or
-          rename anything in it until you name the next owner.
-        </div>
-      )}
-
-      {blank && (
-        <div style={{ marginTop: 10, fontSize: 13, color: DANGER }}>
-          Type the new owner passcode, or choose to leave the current one alone.
-        </div>
-      )}
-
-      <div className="hr" style={{ margin: "22px 0 18px" }} />
-
       <div style={{ ...LABEL, marginBottom: 14 }}>How much it may store</div>
 
       <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <div className="field" style={{ maxWidth: 200 }}>
+        <div className="field" style={{ maxWidth: 220 }}>
           <label htmlFor={id("quota")}>Quota</label>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input
@@ -1042,8 +1356,8 @@ function DriveMembership({
               min="1"
               step="1"
               inputMode="decimal"
-              value={form.quotaGb}
-              onChange={(e) => set("quotaGb", e.target.value)}
+              value={quotaGb}
+              onChange={(e) => setQuotaGb(e.target.value)}
               disabled={locked}
               style={{ width: 120 }}
             />
@@ -1059,9 +1373,9 @@ function DriveMembership({
           <legend style={GROUP_LABEL}>On the dashboard</legend>
           <Choice
             name={id("listed")}
-            value={form.listed ? "listed" : "unlisted"}
+            value={listed ? "listed" : "unlisted"}
             disabled={locked}
-            onChange={(next) => set("listed", next === "listed")}
+            onChange={(next) => setListed(next === "listed")}
             options={[
               { value: "listed", label: "Listed" },
               { value: "unlisted", label: "Unlisted" },
@@ -1080,11 +1394,16 @@ function DriveMembership({
         <div style={{ marginTop: 10, fontSize: 13, color: DANGER }}>
           {brand.name} already stores {humanSizeTrim(member.usedBytes)}. A quota under that would
           refuse every upload while the drive sat over a limit it was under a moment ago — raise
-          the number, or have its owner clear some files first.
+          the number, or have its users clear some files first.
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 9, marginTop: 24, flexWrap: "wrap", alignItems: "center" }}>
+      <p style={{ margin: "18px 0 0", fontSize: 12, opacity: 0.65, maxWidth: "62ch" }}>
+        The drive&rsquo;s name, tagline, address, numbering and the passcode a visitor is given
+        are its users&rsquo;, and are changed from inside the drive.
+      </p>
+
+      <div style={{ display: "flex", gap: 9, marginTop: 22, flexWrap: "wrap" }}>
         <button className="btn btn-primary" type="submit" disabled={locked || stopped}>
           <Icon name="edit" size={14} />
           {saving ? "Saving…" : "Save changes"}
@@ -1092,19 +1411,6 @@ function DriveMembership({
         <button className="btn btn-secondary" type="button" onClick={onCancel} disabled={locked}>
           Cancel
         </button>
-        {/* No seat to borrow. An admin who has to work inside a drive sets its
-            owner passcode above and signs in with it, which is visible here
-            rather than silent — and which is the same thing the drive's own
-            owner does. */}
-        <a
-          className="btn btn-secondary"
-          href={brand.basePath}
-          style={{ marginLeft: "auto", textDecoration: "none" }}
-          title="Open the drive"
-        >
-          <Icon name="open" size={14} />
-          Open {brand.name}
-        </a>
       </div>
     </form>
   );
@@ -1112,13 +1418,8 @@ function DriveMembership({
 
 /**
  * A new drive asks for as little as it can: a name, the address it will answer
- * at, whether it is open, and who is to run it. Everything else — the tagline,
- * the tab title, the numbering — has a sensible default and is the owner's to
- * judge once the drive exists and can be looked at.
- *
- * The owner is asked for here rather than left for later because a drive
- * without one is a drive nobody can put a folder in, and the admin who has
- * just made it is the only person who can fix that.
+ * at, and whether it is open. Everything else has a sensible default and is
+ * easier to judge once the drive exists and its user can look at it.
  */
 function CreateDrive({
   locked,
@@ -1133,10 +1434,6 @@ function CreateDrive({
     slug: string;
     visibility: DriveVisibility;
     passcode?: string;
-    ownerName?: string;
-    ownerEmail?: string;
-    ownerPasscode?: string;
-    quotaBytes?: number;
   }) => Promise<boolean>;
   onCancel: () => void;
 }) {
@@ -1144,36 +1441,19 @@ function CreateDrive({
   const [slug, setSlug] = useState("");
   const [visibility, setVisibility] = useState<DriveVisibility>("public");
   const [passcode, setPasscode] = useState("");
-  const [ownerName, setOwnerName] = useState("");
-  const [ownerEmail, setOwnerEmail] = useState("");
-  const [ownerPasscode, setOwnerPasscode] = useState("");
-  const [quotaGb, setQuotaGb] = useState("200");
   // The address follows the name until the admin writes one themselves, after
   // which typing the name no longer rewrites what they chose.
   const [slugTouched, setSlugTouched] = useState(false);
 
   // slugifyDrive answers "drive" for an empty string, which on an untouched
   // form would put an address nobody chose in the field and promise /drive
-  // underneath it. Nothing is slugified until there is something to slugify, so
-  // the field's placeholder stands until the drive is actually named.
+  // underneath it. Nothing is slugified until there is something to slugify.
   const typed = (slugTouched ? slug : name).trim();
   const preview = typed ? slugifyDrive(typed) : "";
 
-  /**
-   * Nothing is cleared on success because the panel closes this form when the
-   * drive is created, and opening it again mounts an empty one. A failed
-   * attempt keeps every field, so a rejected address can be corrected rather
-   * than retyped.
-   */
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
-    // What the visitor types is trimmed before it is checked, so the passcode
-    // is trimmed before it is stored. It also decides emptiness here: a
-    // passcode of nothing but spaces would otherwise pass for one and open a
-    // private drive that not even the person sent it could unlock.
     const secret = passcode.trim();
-    const ownerSecret = ownerPasscode.trim();
-    const gb = Number(quotaGb);
     await onCreate({
       name: name.trim(),
       slug: preview,
@@ -1181,12 +1461,6 @@ function CreateDrive({
       // An empty passcode is left out entirely: the API reads its absence as
       // "no passcode", and refuses that on a private drive.
       ...(visibility === "private" && secret ? { passcode: secret } : {}),
-      ...(ownerName.trim() ? { ownerName: ownerName.trim() } : {}),
-      ...(ownerEmail.trim() ? { ownerEmail: ownerEmail.trim() } : {}),
-      ...(ownerSecret ? { ownerPasscode: ownerSecret } : {}),
-      // Left out when the field is empty or nonsense, so the drive takes the
-      // default rather than being created with a quota nobody meant.
-      ...(Number.isFinite(gb) && gb > 0 ? { quotaBytes: Math.round(gb * GIB) } : {}),
     });
   }
 
@@ -1250,7 +1524,8 @@ function CreateDrive({
         />
         <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
           The drive will answer at <strong>/{preview || "…"}</strong>, and its key will be the
-          same word — permanently, since every folder and file will carry it.
+          same word — permanently, since every folder and file will carry it. Its user can move
+          the address later; the key never changes.
         </div>
       </div>
 
@@ -1270,7 +1545,7 @@ function CreateDrive({
 
       {visibility === "private" && (
         <div className="field" style={{ marginTop: 16, maxWidth: 320 }}>
-          <label htmlFor="new-drive-passcode">Reader passcode</label>
+          <label htmlFor="new-drive-passcode">Viewing passcode</label>
           <input
             id="new-drive-passcode"
             className="input"
@@ -1282,99 +1557,16 @@ function CreateDrive({
             disabled={locked}
           />
           <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-            What a reader is given. The owner can change it later from inside the drive.
+            What a visitor is given to <em>look</em> at the drive. Not a login — its own user
+            gets a password of their own, above.
           </div>
         </div>
       )}
 
-      <div className="hr" style={{ margin: "22px 0 18px" }} />
-
-      <div style={{ ...LABEL, marginBottom: 14 }}>Who will run it</div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: 14,
-        }}
-      >
-        <div className="field">
-          <label htmlFor="new-drive-owner-name">Owner</label>
-          <input
-            id="new-drive-owner-name"
-            className="input"
-            value={ownerName}
-            onChange={(e) => setOwnerName(e.target.value)}
-            placeholder="Who the drive is for"
-            disabled={locked}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="new-drive-owner-email">Owner email</label>
-          <input
-            id="new-drive-owner-email"
-            className="input"
-            type="email"
-            value={ownerEmail}
-            onChange={(e) => setOwnerEmail(e.target.value)}
-            placeholder="Where to send the passcode"
-            disabled={locked}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="new-drive-owner-passcode">Owner passcode</label>
-          <input
-            id="new-drive-owner-passcode"
-            className="input"
-            type="text"
-            autoComplete="off"
-            value={ownerPasscode}
-            onChange={(e) => setOwnerPasscode(e.target.value)}
-            placeholder="What its owner will sign in with"
-            disabled={locked}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="new-drive-quota">Quota</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              id="new-drive-quota"
-              className="input"
-              type="number"
-              min="1"
-              step="1"
-              inputMode="decimal"
-              value={quotaGb}
-              onChange={(e) => setQuotaGb(e.target.value)}
-              disabled={locked}
-              style={{ width: 110 }}
-            />
-            <span style={{ fontSize: 13, opacity: 0.7 }}>GB</span>
-          </div>
-        </div>
-      </div>
-
-      {/*
-        A drive with no owner passcode is a drive nobody can put a folder in,
-        which is not a state worth reaching by leaving a field blank. It is
-        still allowed — an admin may genuinely not know yet who a drive is for
-        — but it is called out as the exception rather than described as an
-        ordinary choice.
-      */}
-      {ownerPasscode.trim() ? (
-        <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.7, maxWidth: "62ch" }}>
-          Send this to {ownerName.trim() || "its owner"}. They open the drive, click the padlock
-          in its header, and from then on add their own folders — you never have to.
-        </p>
-      ) : (
-        <p style={{ margin: "12px 0 0", fontSize: 12, color: DANGER, maxWidth: "62ch" }}>
-          Without an owner passcode the drive exists but nobody can add a folder to it —
-          including you, until you take its seat. Set one unless you mean to decide later.
-        </p>
-      )}
+      <p style={{ margin: "18px 0 0", fontSize: 12, opacity: 0.7, maxWidth: "62ch" }}>
+        A new drive has nobody running it. Create a user against it next, or nothing can be put
+        in it.
+      </p>
 
       <div style={{ display: "flex", gap: 9, marginTop: 22, flexWrap: "wrap" }}>
         <button className="btn btn-primary" type="submit" disabled={locked || !name.trim()}>
@@ -1388,7 +1580,6 @@ function CreateDrive({
     </form>
   );
 }
-
 /* ── requests ────────────────────────────────────────────────────────────── */
 
 /**

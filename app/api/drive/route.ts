@@ -15,16 +15,16 @@ export const dynamic = "force-dynamic";
  * a private drive is kept private — without the check here the tree was
  * readable by anyone who knew the key, whatever the page in front of it did.
  *
- * Two roles travel with the payload, and they do different jobs. `isOwner`
- * decides whether the drive shows its management controls at all; `isAdmin`
- * only lights the way through to the admin panel. Sending one flag for both
- * is what used to put a folder-adding button in front of the person who
- * minds the quotas.
+ * The viewer's role travels with the payload. `isUser` — are you signed in as
+ * one of this drive's own users? — decides whether the drive shows its
+ * management controls at all, and `userName` lets the header say who you are.
+ * `isAdmin` only lights the way through to the admin panel; it unlocks
+ * nothing in the drive, which is the whole point of the split.
  */
 export async function GET(req: Request) {
   try {
     const brand = await parseDriveKey(new URL(req.url).searchParams.get("drive"));
-    const { isAdmin: admin, isOwner: owner } = await driveRoles(brand);
+    const { isAdmin: admin, isUser, userName } = await driveRoles(brand);
 
     // Before Cloudflare credentials are set the app should still render the
     // design rather than an error page.
@@ -34,7 +34,8 @@ export async function GET(req: Request) {
         rootFiles: [],
         usedBytes: 0,
         quotaBytes: 214748364800,
-        isOwner: owner,
+        isUser,
+        userName,
         isAdmin: admin,
       };
       return ok({ ...payload, unconfigured: true });
@@ -55,7 +56,8 @@ export async function GET(req: Request) {
       rootFiles,
       usedBytes: usage.usedBytes,
       quotaBytes: usage.quotaBytes,
-      isOwner: owner,
+      isUser,
+      userName,
       isAdmin: admin,
     };
 
