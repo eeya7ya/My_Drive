@@ -113,7 +113,7 @@ const EMPTY: DrivePayload = {
   rootFiles: [],
   usedBytes: 0,
   quotaBytes: 214748364800,
-  isOwner: false,
+  canManage: false,
   isAdmin: false,
 };
 
@@ -164,11 +164,7 @@ export default function Drive({
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  /**
-   * Whether the drive's own settings panel is open. It doubles as the owner's
-   * sign-in, so it is offered to every viewer rather than only to somebody who
-   * can already manage the drive — that is the only way in.
-   */
+  /** Whether the drive's own settings panel is open. */
   const [managing, setManaging] = useState(false);
 
   // The file open in the viewer, with the revision being shown.
@@ -1061,14 +1057,14 @@ export default function Drive({
   /**
    * What decides whether this drive shows its management controls.
    *
-   * The drive's owner, not the admin. Adding a folder, renaming, deleting and
-   * restoring a revision are the job of whoever runs this drive; the admin
-   * panel is the level above — which drives exist, who owns them, how much
-   * each may store — and holding the admin password lights nothing up in here.
-   * An admin who needs these controls takes the drive's owner seat, which the
-   * panel behind the header's lock offers them.
+   * Whoever is in the drive, not the admin. Adding a folder, renaming,
+   * deleting and restoring a revision are the job of the person whose drive it
+   * is, and being in the drive is what makes it theirs — so this is true for
+   * anyone who can open it, and the admin decides who that is by setting the
+   * drive's passcode. The admin panel is the level above: which drives exist,
+   * who may enter each one, how much each may store.
    */
-  const canManage = data.isOwner;
+  const canManage = data.canManage;
 
   const folderMenu = useCallback(
     (ev: React.MouseEvent, p: string[]) => {
@@ -1968,23 +1964,20 @@ export default function Drive({
               <Icon name="moon" size={15} />
             )}
           </button>
-          {/* The way in and out of running this drive. Same button grammar as
-              the theme toggle beside it, so the header keeps the design's
-              shape. It is the owner's door, not the admin's: the panel behind
-              it asks for the drive's owner passcode, and offers an admin the
-              drive's seat without one. */}
-          <button
-            className="btn btn-secondary btn-icon"
-            onClick={() => setManaging(true)}
-            title={
-              canManage
-                ? `Settings for ${brand.name}`
-                : `Sign in to manage ${brand.name}`
-            }
-            aria-label={canManage ? "Drive settings" : "Sign in to manage this drive"}
-          >
-            <Icon name={canManage ? "drive" : "lock"} size={15} />
-          </button>
+          {/* This drive's own settings — its name, address, numbering. Shown
+              only to somebody who is in the drive, because that is who they
+              belong to. Same button grammar as the theme toggle beside it, so
+              the header keeps the design's shape. */}
+          {canManage && (
+            <button
+              className="btn btn-secondary btn-icon"
+              onClick={() => setManaging(true)}
+              title={`Settings for ${brand.name}`}
+              aria-label="Drive settings"
+            >
+              <Icon name="drive" size={15} />
+            </button>
+          )}
 
           {/* Only shown to an admin, and only ever a way through to the panel
               above the drives. It unlocks nothing here — see `canManage`. */}
@@ -2039,15 +2032,15 @@ export default function Drive({
         {/*
           Why the management controls are not here.
 
-          A viewer who cannot manage the drive used to be shown nothing at all:
-          the "New folder" button and the menu entry simply were not rendered,
-          which reads as a broken page rather than as a permission. It says so
-          now, and says what to do about it — which differs by whether the
-          drive has an owner to sign in as yet.
+          Only ever reached on a drive this viewer is looking at without being
+          in it, which the drive page itself does not normally allow — a
+          private drive shows its passcode wall instead. It is kept because the
+          alternative, silently not rendering "New folder", reads as a broken
+          page rather than as a permission, and that is how this went wrong
+          once already.
 
-          Only while the drive is otherwise quiet: a real error or a migration
-          notice is more urgent than an explanation of a missing button, and
-          stacking three bars above the listing helps nobody.
+          Stands down for a real error or a migration notice, which are more
+          urgent than an explanation of a missing button.
         */}
         {!canManage && !notice && !error && (
           <div style={{ padding: "12px 27px 0" }}>
@@ -2063,33 +2056,11 @@ export default function Drive({
                 fontSize: 13,
               }}
             >
-              <Icon
-                name="lock"
-                size={15}
-                style={{ flex: "none", opacity: 0.6 }}
-              />
+              <Icon name="lock" size={15} style={{ flex: "none", opacity: 0.6 }} />
               <span style={{ flex: 1, minWidth: 220, opacity: 0.85 }}>
-                {brand.hasOwner
-                  ? `Adding and renaming folders belongs to this drive's owner. Sign in with its owner passcode to manage ${brand.name}.`
-                  : `${brand.name} has no owner yet, so its folders cannot be added or renamed. An admin assigns one at /admin — after that, whoever holds the owner passcode manages the drive themselves.`}
+                Adding and renaming folders belongs to whoever is in {brand.name}. Enter its
+                passcode to open it, and it is yours to manage.
               </span>
-              {brand.hasOwner ? (
-                <button className="btn btn-secondary" onClick={() => setManaging(true)}>
-                  <Icon name="lock" size={14} />
-                  Owner sign in
-                </button>
-              ) : (
-                data.isAdmin && (
-                  <a
-                    className="btn btn-secondary"
-                    href="/admin"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <Icon name="shield" size={14} />
-                    Assign an owner
-                  </a>
-                )
-              )}
             </div>
           </div>
         )}
@@ -2968,12 +2939,7 @@ export default function Drive({
       )}
 
       {managing && (
-        <DriveSettings
-          brand={brand}
-          isOwner={canManage}
-          isAdmin={data.isAdmin}
-          onClose={() => setManaging(false)}
-        />
+        <DriveSettings brand={brand} onClose={() => setManaging(false)} />
       )}
 
       {viewing && (

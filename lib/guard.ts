@@ -1,20 +1,20 @@
 /**
  * A speed bump in front of the passcodes.
  *
- * Two doors take a typed secret — the reader's passcode that opens a private
- * drive, and the owner's passcode that lets somebody run one — and the work
- * behind either is one indexed read and one HMAC. That is cheap enough to
+ * A drive's passcode is the one typed secret in this app, and the work behind
+ * checking it is a single indexed read and one HMAC. That is cheap enough to
  * guess against at network speed if nothing at all slows it down, so wrong
- * guesses are counted per door and per caller.
+ * guesses are counted per drive and per caller.
  *
  * The deployment is serverless, so this is a speed bump rather than a
  * guarantee: a second instance counts from zero and a cold start forgets what
  * this one saw. It is still worth having, because the passcode is the only
- * thing in front of a private drive.
+ * thing in front of a private drive — and, since being in a drive is what
+ * lets somebody run it, the only thing in front of its folders too.
  *
- * Counts are kept per door on purpose. The owner's passcode and the reader's
- * are different secrets, and a reader mistyping the code they were given
- * should not use up the owner's attempts at their own drive.
+ * The counter is keyed by "door" rather than by drive so that a second kind of
+ * typed secret, if one is ever added, cannot spend the attempts belonging to
+ * this one.
  */
 
 /** How many wrong guesses one caller may make at one door, and over how long. */

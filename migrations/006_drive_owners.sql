@@ -1,35 +1,35 @@
--- 006: a drive has an owner, and the admin sits above them.
+-- 006: a drive is somebody's to run, and the admin sits above them.
 --
 -- Until now one admin password did everything: it created the drives, and it
 -- also added every folder and renamed every file inside them. Those are two
--- different jobs held by two different people, so they are two roles now.
+-- different jobs held by two different people, so the line is drawn
+-- differently now.
 --
---   - The drive's OWNER runs the drive: its folders, its files and revisions,
---     and the identity it wears (name, tagline, address, numbering, and the
---     passcode readers are given). One owner per drive, signing in with the
---     passcode stored below as owner_hash.
---   - The ADMIN sits above the drives: which of them exist, who owns each one,
---     and how much each may store. The admin does not add folders.
+--   - Whoever is IN a drive runs it: its folders, its files and revisions, and
+--     the identity it wears (name, tagline, address, numbering). No second
+--     credential — being in the drive is what makes it theirs, so the person
+--     the drive is for adds their own folders the moment they can open it.
+--   - The ADMIN sits above the drives: which of them exist, WHO IS IN each one
+--     (its visibility and its passcode — that is the membership), and how much
+--     each may store. The admin does not add folders.
 --
--- owner_name / owner_email are bookkeeping — who the admin handed the drive
--- to, so a registry of drives is also a registry of the people running them.
--- owner_hash is the credential: an HMAC of the owner's passcode under
--- SESSION_SECRET, exactly as passcode_hash already is, so the database never
--- holds either passcode itself. The two hashes are keyed differently, so the
--- same word used for both does not produce the same row.
+-- So this migration adds no credential. What it adds is the admin's record of
+-- who each drive was given to, so a registry of drives is also a registry of
+-- the people using them. The credential that lets that person in is the
+-- passcode_hash the drives table already had, and the admin panel sets it.
 --
--- Quotas need no column: they already live in `settings` as quota_bytes and
--- <drive>/quota_bytes, and the admin panel writes them there.
+-- Quotas need no column either: they already live in `settings` as quota_bytes
+-- and <drive>/quota_bytes, and the admin panel writes them there.
 --
 -- Run in the D1 console (use the .console.sql copy) before deploying the code
 -- that reads these columns — though the registry tolerates their absence and
--- reads a drive as "no owner yet" until the migration lands, so a deploy that
--- arrives first serves the site rather than an error page. Safe to run once; a
--- second run fails on the ALTER TABLE, which is harmless.
+-- reads a drive as one with nobody recorded against it until the migration
+-- lands, so a deploy that arrives first serves the site rather than an error
+-- page. Safe to run once; a second run fails on the ALTER TABLE, which is
+-- harmless.
 
 ALTER TABLE drives ADD COLUMN owner_name  TEXT NOT NULL DEFAULT '';
 ALTER TABLE drives ADD COLUMN owner_email TEXT NOT NULL DEFAULT '';
-ALTER TABLE drives ADD COLUMN owner_hash  TEXT;
 
 -- Every drive that already exists gets its quota row, so the admin panel has
 -- a number to show and edit rather than an implicit default it cannot see.
