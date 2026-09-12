@@ -10,7 +10,9 @@
  *   - a per-drive OWNER session. Each drive has an owner passcode, set by the
  *     admin, and whoever holds it runs that drive: its folders, its files and
  *     revisions, and the identity it wears. One drive's owner is nobody in
- *     another drive.
+ *     another drive. It lasts thirty days, because the owner is whoever uses
+ *     the drive daily, and is retired the moment the admin sets a new owner
+ *     passcode.
  *   - a per-drive ACCESS session. A private drive carries a reader's passcode;
  *     entering it mints a cookie that opens that drive and no other, so
  *     sharing one drive never discloses the rest. It grants reading, never
@@ -43,10 +45,21 @@ const MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
 const DRIVE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 /**
- * An owner's seat is as short-lived as the admin's session, because it is the
- * same kind of thing: the right to change something, not merely to look at it.
+ * An owner's seat lasts as long as a reading pass.
+ *
+ * It was twelve hours, on the reasoning that the right to change something
+ * should be shorter-lived than the right to look. That reasoning is wrong for
+ * whose seat this is: the owner is the person who uses the drive every day, and
+ * making them re-enter a passcode twice a day to add a folder is how a drive
+ * ends up with the admin doing its owner's work again — the exact thing this
+ * split exists to stop. The admin session stays at twelve hours, because it is
+ * used occasionally and reaches every drive.
+ *
+ * What makes the longer life defensible is that this pass is revocable in a
+ * way the admin session is not: it signs the owner hash it was issued against,
+ * so setting a new owner passcode retires it the moment the admin saves.
  */
-const OWNER_MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
+const OWNER_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 function secret(): string {
   const s = process.env.SESSION_SECRET;
