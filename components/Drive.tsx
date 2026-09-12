@@ -113,7 +113,8 @@ const EMPTY: DrivePayload = {
   rootFiles: [],
   usedBytes: 0,
   quotaBytes: 214748364800,
-  isOwner: false,
+  isUser: false,
+  userName: null,
   isAdmin: false,
 };
 
@@ -1061,14 +1062,13 @@ export default function Drive({
   /**
    * What decides whether this drive shows its management controls.
    *
-   * The drive's owner, not the admin. Adding a folder, renaming, deleting and
-   * restoring a revision are the job of whoever runs this drive; the admin
-   * panel is the level above — which drives exist, who owns them, how much
-   * each may store — and holding the admin password lights nothing up in here.
-   * An admin who needs these controls takes the drive's owner seat, which the
-   * panel behind the header's lock offers them.
+   * One of this drive's own users, not the admin. Adding a folder, renaming,
+   * deleting and restoring a revision are the job of the person whose drive it
+   * is; the admin's job is creating that person and handing them a password.
+   * Holding the admin password lights nothing up in here, and there is no
+   * shortcut that lends these controls to it.
    */
-  const canManage = data.isOwner;
+  const canManage = data.isUser;
 
   const folderMenu = useCallback(
     (ev: React.MouseEvent, p: string[]) => {
@@ -1978,7 +1978,7 @@ export default function Drive({
             onClick={() => setManaging(true)}
             title={
               canManage
-                ? `Settings for ${brand.name}`
+                ? `Signed in as ${data.userName ?? "a user"} — settings for ${brand.name}`
                 : `Sign in to manage ${brand.name}`
             }
             aria-label={canManage ? "Drive settings" : "Sign in to manage this drive"}
@@ -2069,27 +2069,14 @@ export default function Drive({
                 style={{ flex: "none", opacity: 0.6 }}
               />
               <span style={{ flex: 1, minWidth: 220, opacity: 0.85 }}>
-                {brand.hasOwner
-                  ? `Adding and renaming folders belongs to this drive's owner. Sign in with its owner passcode to manage ${brand.name}.`
-                  : `${brand.name} has no owner yet, so its folders cannot be added or renamed. An admin sets its owner passcode at /admin and sends it on; from then on whoever holds it runs the drive.`}
+                Adding and renaming folders belongs to {brand.name}&rsquo;s own users. Sign in
+                with your password to manage it — the admin creates the users and hands out the
+                passwords.
               </span>
-              {brand.hasOwner ? (
-                <button className="btn btn-secondary" onClick={() => setManaging(true)}>
-                  <Icon name="lock" size={14} />
-                  Owner sign in
-                </button>
-              ) : (
-                data.isAdmin && (
-                  <a
-                    className="btn btn-secondary"
-                    href="/admin"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <Icon name="shield" size={14} />
-                    Assign an owner
-                  </a>
-                )
-              )}
+              <button className="btn btn-secondary" onClick={() => setManaging(true)}>
+                <Icon name="lock" size={14} />
+                Sign in
+              </button>
             </div>
           </div>
         )}
@@ -2970,7 +2957,8 @@ export default function Drive({
       {managing && (
         <DriveSettings
           brand={brand}
-          isOwner={canManage}
+          isUser={canManage}
+          userName={data.userName}
           isAdmin={data.isAdmin}
           onClose={() => setManaging(false)}
         />

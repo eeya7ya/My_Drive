@@ -85,12 +85,6 @@ INSERT OR IGNORE INTO settings (key, value) VALUES ('advec/used_bytes', '0');
 -- the drive is reached (/yahya, /advec) and may be edited, with every previous
 -- address kept in drive_slugs so old links still resolve. A private drive asks
 -- for a passcode, stored here as an HMAC under SESSION_SECRET.
---
--- Two credentials, two roles. passcode_hash is what a reader is given, and
--- opens the drive read-only. owner_hash is the drive's owner: the person who
--- adds its folders, manages its files, and edits the identity above. The admin
--- password in the environment sits above both and assigns the owner; it does
--- not add folders. owner_name / owner_email record who that owner is.
 CREATE TABLE IF NOT EXISTS drives (
   key           TEXT PRIMARY KEY,
   slug          TEXT NOT NULL UNIQUE,
@@ -104,9 +98,6 @@ CREATE TABLE IF NOT EXISTS drives (
   visibility    TEXT NOT NULL DEFAULT 'public',
   listed        INTEGER NOT NULL DEFAULT 1,
   passcode_hash TEXT,
-  owner_name    TEXT NOT NULL DEFAULT '',
-  owner_email   TEXT NOT NULL DEFAULT '',
-  owner_hash    TEXT,
   legacy_root   INTEGER NOT NULL DEFAULT 0,
   position      INTEGER NOT NULL DEFAULT 0,
   created_at    INTEGER NOT NULL,
@@ -120,6 +111,28 @@ CREATE TABLE IF NOT EXISTS drive_slugs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_drive_slugs_drive ON drive_slugs(drive_key);
+
+-- The people who run the drives. The admin panel creates them and gives each
+-- one a password; that password signs them in to their own drive and lets them
+-- do everything in it. One row per person, several allowed per drive, and a
+-- deleted drive takes its users with it.
+--
+-- password_hash is an HMAC under SESSION_SECRET, so the database never holds a
+-- password. Signing in looks a hash up against one drive's users, which is what
+-- the second index is for; the session signs that hash alongside the user id,
+-- so changing a password or deleting the row signs the person out at once.
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  email         TEXT NOT NULL DEFAULT '',
+  drive_key     TEXT NOT NULL REFERENCES drives(key) ON DELETE CASCADE,
+  password_hash TEXT NOT NULL,
+  created_at    INTEGER NOT NULL,
+  modified_at   INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_drive ON users(drive_key);
+CREATE INDEX IF NOT EXISTS idx_users_signin ON users(drive_key, password_hash);
 
 -- Access requests raised from the dashboard, answered in the admin panel.
 CREATE TABLE IF NOT EXISTS drive_requests (
@@ -135,20 +148,17 @@ CREATE TABLE IF NOT EXISTS drive_requests (
 
 CREATE INDEX IF NOT EXISTS idx_drive_requests_status ON drive_requests(status, created_at DESC);
 
--- Seeded without an owner: the admin assigns one in the admin panel, and a
--- drive with no owner yet is read-only to everybody until they do.
 INSERT OR IGNORE INTO drives
   (key, slug, name, tagline, title, short_name, description, numbered, powered_by,
-   visibility, listed, passcode_hash, owner_name, owner_email, owner_hash,
-   legacy_root, position, created_at, modified_at)
+   visibility, listed, passcode_hash, legacy_root, position, created_at, modified_at)
 VALUES
   ('main', 'yahya', 'YAHYA KHALED', 'Power Systems Drive',
    'Yahya Khaled — Power Systems Drive', 'PS Drive',
-   'Power systems study drive: folders, files, and owner management.',
-   0, NULL, 'public', 1, NULL, '', '', NULL, 1, 0, 1756000000000, 1756000000000),
+   'Power systems study drive: folders, files, and admin management.',
+   0, NULL, 'public', 1, NULL, 1, 0, 1756000000000, 1756000000000),
   ('advec', 'advec', 'eSpark', 'Drive', 'eSpark Drive', 'eSpark',
    'eSpark drive: numbered folders, files, and revisions.',
-   1, 'eSpark', 'public', 1, NULL, '', '', NULL, 0, 1, 1756000000000, 1756000000000);
+   1, 'eSpark', 'public', 1, NULL, 0, 1, 1756000000000, 1756000000000);
 
 INSERT OR IGNORE INTO drive_slugs (slug, drive_key, created_at)
 VALUES ('espark', 'advec', 1756000000000);

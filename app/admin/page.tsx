@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import AdminPanel from "@/components/AdminPanel";
 import { SITE } from "@/lib/brand";
 import { isAdmin } from "@/lib/auth";
-import { listDriveOwners, listDrives, listRequests } from "@/lib/drives";
+import { listDrives, listRequests } from "@/lib/drives";
+import { listUsers } from "@/lib/users";
 import { usageForDrives } from "@/lib/store";
 import { isD1Configured } from "@/lib/d1";
 import type { DriveMember } from "@/lib/types";
@@ -32,18 +33,16 @@ export const metadata: Metadata = {
  * render is the only copy of the truth, so the panel can never show a list
  * that disagrees with the database.
  *
- * `members` is the second half of what this panel is for — who runs each drive
- * and what it may store. It is assembled here rather than folded into the
- * Brand because a Brand is serialised into every visitor's page and an owner's
- * email address is not a visitor's business.
+ * Three reads, and they are the three things this panel is for: the drives,
+ * the people who run them, and how full each drive is against its quota.
  */
 export default async function AdminPage() {
   if (!(await isAdmin())) redirect("/admin/login?next=%2Fadmin");
 
-  const [drives, requests, owners] = await Promise.all([
+  const [drives, requests, users] = await Promise.all([
     listDrives(),
     listRequests(),
-    listDriveOwners(),
+    listUsers(),
   ]);
 
   // A deployment without D1 credentials still renders the panel, with the
@@ -53,19 +52,18 @@ export default async function AdminPage() {
     : null;
 
   const members: DriveMember[] = drives.map((brand) => {
-    const owner = owners.get(brand.key);
     const counted = usage?.get(brand.key);
     return {
       key: brand.key,
       name: brand.name,
       slug: brand.slug,
-      ownerName: owner?.ownerName ?? "",
-      ownerEmail: owner?.ownerEmail ?? "",
-      hasOwner: owner?.hasOwner ?? brand.hasOwner,
+      users: users.filter((u) => u.driveKey === brand.key).length,
       usedBytes: counted?.usedBytes ?? 0,
       quotaBytes: counted?.quotaBytes ?? 214748364800,
     };
   });
 
-  return <AdminPanel drives={drives} members={members} requests={requests} />;
+  return (
+    <AdminPanel drives={drives} members={members} users={users} requests={requests} />
+  );
 }

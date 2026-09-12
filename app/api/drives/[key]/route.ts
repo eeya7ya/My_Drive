@@ -8,39 +8,26 @@
  * One route, two callers, and the interesting part is which fields each of
  * them may send:
  *
- *   - the drive's OWNER may change the drive itself — what it is called, where
- *     it answers, whether its folders are numbered, and the passcode its
- *     readers are given. That is the drive they run.
- *   - the ADMIN may change the drive's place among the others — who owns it,
- *     whether the dashboard lists it, where it sits in the order — and, via
- *     `quotaBytes`, how much it may store.
+ *   - the drive's own USERS may change the drive itself — what it is called,
+ *     where it answers, whether its folders are numbered, and the passcode a
+ *     visitor is given to look at it. That is the drive they run.
+ *   - the ADMIN may change whether the dashboard lists it, where it sits in
+ *     the order, and how much it may store.
  *
- * The lists live in lib/drives.ts (OWNER_FIELDS / ADMIN_FIELDS) so there is
- * one answer to "whose field is that?", and a body that reaches for the other
- * role's fields is refused by name rather than quietly ignored: a panel that
- * sent a field it was not allowed to send should hear about it, not watch the
- * save succeed and the value stay as it was.
+ * The two lists are below, so there is one answer to "whose field is that?",
+ * and a body that reaches for the other level's fields is refused by name
+ * rather than quietly ignored: a panel that sent a field it was not allowed to
+ * send should hear about it, not watch the save succeed and the value stay as
+ * it was.
  *
- * Both passcodes follow the three-way convention the panels depend on: a field
+ * The passcode follows the three-way convention the panel depends on: a field
  * left out leaves it as it was, null clears it, and a string sets it. Without
  * that, a form that sends everything on every save would wipe the passcode of
  * any drive whose form did not repeat it.
  */
 
-import {
-  ADMIN_FIELDS,
-  OWNER_FIELDS,
-  deleteDrive,
-  getDrive,
-  updateDrive,
-} from "@/lib/drives";
-import {
-  hashOwnerPasscode,
-  hashPasscode,
-  isAdmin,
-  isDriveOwner,
-  requireAdmin,
-} from "@/lib/auth";
+import { deleteDrive, getDrive, updateDrive } from "@/lib/drives";
+import { hashPasscode, requireAdmin, requireDriveUser } from "@/lib/auth";
 import { setQuota } from "@/lib/store";
 import { ok, fail, readJson, badRequest } from "@/lib/api";
 import type { DriveInput } from "@/lib/drives";
@@ -94,43 +81,61 @@ function driveFieldsFrom(body: Record<string, unknown>): DriveInput {
     }
     out.position = body.position;
   }
-  if (body.ownerName !== undefined) out.ownerName = asText(body.ownerName, "ownerName");
-  if (body.ownerEmail !== undefined) out.ownerEmail = asText(body.ownerEmail, "ownerEmail");
-
   return out;
 }
 
-/** Refuse a body that reaches past the caller's role, naming what it reached for. */
+/**
+ * Which fields belong to which level, in one place, so adding a field means
+ * choosing a side for it here rather than in three handlers.
+ *
+ * The drive's users get the drive itself — what it is called, where it
+ * answers, how it looks, and the passcode a visitor is given to look at it.
+ * The admin gets the two things that are about the drive's place among the
+ * others rather than about the drive: whether the dashboard lists it and in
+ * what order, and — via `quotaBytes` — how much it may store.
+ */
+const USER_FIELDS = [
+  "name",
+  "tagline",
+  "title",
+  "shortName",
+  "description",
+  "slug",
+  "numbered",
+  "poweredBy",
+  "visibility",
+  "passcode",
+] as const;
+
+const ADMIN_FIELDS = ["listed", "position", "quotaBytes"] as const;
+
+/** Refuse a body that reaches past the caller's level, naming what it reached for. */
 function assertFieldsAllowed(
   body: Record<string, unknown>,
   allowed: readonly string[],
-  role: "owner" | "admin"
+  level: "user" | "admin"
 ): void {
-  const forbidden: string[] = [...ADMIN_FIELDS, ...OWNER_FIELDS].filter(
+  const forbidden: string[] = [...ADMIN_FIELDS, ...USER_FIELDS].filter(
     (field) => body[field] !== undefined && !allowed.includes(field)
   );
-  if (body.passcode !== undefined && !allowed.includes("passcode")) forbidden.push("passcode");
-  if (body.ownerPasscode !== undefined && !allowed.includes("ownerPasscode")) {
-    forbidden.push("ownerPasscode");
-  }
-  if (body.quotaBytes !== undefined && !allowed.includes("quotaBytes")) {
-    forbidden.push("quotaBytes");
-  }
   if (!forbidden.length) return;
 
   badRequest(
-    role === "owner"
-      ? `${forbidden.join(", ")} ${forbidden.length === 1 ? "is" : "are"} the admin's to set, not the drive owner's.`
-      : `${forbidden.join(", ")} ${forbidden.length === 1 ? "belongs" : "belong"} to the drive's owner, and ${forbidden.length === 1 ? "is" : "are"} changed from inside the drive by whoever holds its owner passcode.`
+    level === "user"
+      ? `${forbidden.join(", ")} ${forbidden.length === 1 ? "is" : "are"} the admin's to set — the dashboard listing and the drive's storage limit are theirs.`
+      : `${forbidden.join(", ")} ${forbidden.length === 1 ? "belongs" : "belong"} to the drive's own users, and ${forbidden.length === 1 ? "is" : "are"} changed from inside the drive.`
   );
 }
 
 /**
- * Change any subset of a drive's fields — the subset this caller's role owns.
+ * Change any subset of a drive's fields — the subset this caller's level owns.
  *
- * The owner is asked about first, so an admin who has signed in with a drive's
- * owner passcode is treated as its owner here rather than being told the name
- * of the drive they are standing in is somebody else's to set.
+ * Which set the body touches decides which question is asked, so the admin
+ * sets a quota without signing in to the drive, and the drive's own user
+ * renames it without being an admin. Neither check is satisfied by the other
+ * role's session. Sending both sets in one request is a 400: they are two
+ * different people's decisions, and merging them would mean whichever check
+ * ran first silently granted the other.
  */
 export async function PATCH(req: Request, { params }: Ctx) {
   try {
@@ -148,43 +153,29 @@ export async function PATCH(req: Request, { params }: Ctx) {
       badRequest("Expected a JSON object.");
     }
 
-    const owner = await isDriveOwner(brand);
-    const admin = owner ? false : await isAdmin();
-    if (!owner && !admin) {
-      const err = new Error(
-        `Only ${brand.name}'s owner can change it. Sign in with the drive's owner passcode.`
-      );
-      (err as Error & { status?: number }).status = 403;
-      throw err;
+    const wantsAdminField = ADMIN_FIELDS.some((field) => body[field] !== undefined);
+
+    if (wantsAdminField) {
+      await requireAdmin();
+      assertFieldsAllowed(body, ADMIN_FIELDS, "admin");
+    } else {
+      // Not satisfied by the admin session. Renaming a drive is its users'
+      // business, the same as adding a folder is, and an admin who genuinely
+      // has to do it makes themselves a user of that drive — which is visible
+      // in the panel rather than silent.
+      await requireDriveUser(brand);
+      assertFieldsAllowed(body, USER_FIELDS, "user");
     }
 
-    // An owner also holds the reader's passcode, since deciding who may look
-    // at the drive they run is part of running it.
-    const allowed: readonly string[] = owner
-      ? [...OWNER_FIELDS, "passcode"]
-      : [...ADMIN_FIELDS, "ownerPasscode", "quotaBytes"];
-    assertFieldsAllowed(body, allowed, owner ? "owner" : "admin");
-
-    // undefined leaves a passcode alone; null and the empty string both mean
-    // "there is no passcode now", since a form that has been emptied is asking
-    // for exactly that.
+    // undefined leaves the viewing passcode alone; null and the empty string
+    // both mean "there is no passcode now", since a form that has been emptied
+    // is asking for exactly that.
     let hash: string | null | undefined;
     if (body.passcode !== undefined) {
       hash =
         body.passcode === null || body.passcode === ""
           ? null
           : await hashPasscode(asText(body.passcode, "passcode"));
-    }
-
-    // The admin handing the drive to somebody — or taking it back. Clearing it
-    // leaves a drive nobody can manage until the next owner is named, which is
-    // the right state for a drive between owners.
-    let ownerHash: string | null | undefined;
-    if (body.ownerPasscode !== undefined) {
-      ownerHash =
-        body.ownerPasscode === null || body.ownerPasscode === ""
-          ? null
-          : await hashOwnerPasscode(asText(body.ownerPasscode, "ownerPasscode"));
     }
 
     // The quota is not a drives column — it is a settings row, maintained
@@ -200,8 +191,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
     // `key` is the address, not a field — a body that repeats it is ignored
     // rather than obeyed, since renaming it would orphan every row.
-    const fields = driveFieldsFrom(body);
-    const drive = await updateDrive(key, fields, hash, ownerHash);
+    const drive = await updateDrive(key, driveFieldsFrom(body), hash);
     return ok({ drive });
   } catch (err) {
     return fail(err);
@@ -210,7 +200,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
 /**
  * Remove a drive from the registry. Admin only — which drives exist is the
- * level above the drives, and an owner deleting their own drive out from under
+ * level above the drives, and a user deleting their own drive out from under
  * the dashboard is not a thing running a drive should include. Refused by
  * lib/drives.ts while the drive still holds folders or files: losing a registry
  * row is a mistake that can be undone, losing a tree is not.
