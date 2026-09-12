@@ -4,7 +4,6 @@ import AdminPanel from "@/components/AdminPanel";
 import { SITE } from "@/lib/brand";
 import { isAdmin } from "@/lib/auth";
 import { listDrives, listRequests } from "@/lib/drives";
-import { listUsers } from "@/lib/users";
 import { usageForDrives } from "@/lib/store";
 import { isD1Configured } from "@/lib/d1";
 import type { DriveMember } from "@/lib/types";
@@ -33,17 +32,14 @@ export const metadata: Metadata = {
  * render is the only copy of the truth, so the panel can never show a list
  * that disagrees with the database.
  *
- * Three reads, and they are the three things this panel is for: the drives,
- * the people who run them, and how full each drive is against its quota.
+ * Two reads, and they are what this panel is for: the drives, and how full
+ * each one is against its quota. Whether a drive has a password is already on
+ * its Brand, since the page it is served from has to know too.
  */
 export default async function AdminPage() {
   if (!(await isAdmin())) redirect("/admin/login?next=%2Fadmin");
 
-  const [drives, requests, users] = await Promise.all([
-    listDrives(),
-    listRequests(),
-    listUsers(),
-  ]);
+  const [drives, requests] = await Promise.all([listDrives(), listRequests()]);
 
   // A deployment without D1 credentials still renders the panel, with the
   // fallback drives and no numbers, rather than an error page.
@@ -57,13 +53,10 @@ export default async function AdminPage() {
       key: brand.key,
       name: brand.name,
       slug: brand.slug,
-      users: users.filter((u) => u.driveKey === brand.key).length,
       usedBytes: counted?.usedBytes ?? 0,
       quotaBytes: counted?.quotaBytes ?? 214748364800,
     };
   });
 
-  return (
-    <AdminPanel drives={drives} members={members} users={users} requests={requests} />
-  );
+  return <AdminPanel drives={drives} members={members} requests={requests} />;
 }

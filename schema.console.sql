@@ -70,17 +70,6 @@ CREATE TABLE IF NOT EXISTS drive_slugs (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_drive_slugs_drive ON drive_slugs(drive_key);
-CREATE TABLE IF NOT EXISTS users (
-  id            TEXT PRIMARY KEY,
-  name          TEXT NOT NULL,
-  email         TEXT NOT NULL DEFAULT '',
-  drive_key     TEXT NOT NULL REFERENCES drives(key) ON DELETE CASCADE,
-  password_hash TEXT NOT NULL,
-  created_at    INTEGER NOT NULL,
-  modified_at   INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_users_drive ON users(drive_key);
-CREATE INDEX IF NOT EXISTS idx_users_signin ON users(drive_key, password_hash);
 CREATE TABLE IF NOT EXISTS drive_requests (
   id         TEXT PRIMARY KEY,
   drive_key  TEXT,

@@ -9,7 +9,7 @@ real hosting and storage.
 | Hosting | Next.js 16 (App Router) on Vercel |
 | File storage | Cloudflare R2, via its S3-compatible API |
 | Metadata | Cloudflare D1, via its HTTP query API |
-| Auth | One password per user, one drive each; a single admin password above them |
+| Auth | One password per drive, set in the admin panel; a single admin password above them |
 
 ## How the pieces fit
 
@@ -193,78 +193,45 @@ sidebar, the tab title, the home-screen name, whether folders are numbered, and
 the "powered by" mark. That is why the heading changes as you move between
 `/yahya` and `/advec` — the page is the same code wearing a different row.
 
-### Users, and what the admin panel is for
+### One password per drive
 
-Running a drive and overseeing the drives are two jobs, usually two people.
-They used to be one password, which meant the person minding storage was also
-the only one who could add a folder. They are separate now, and the split is
-short enough to state in two lines:
+**Each drive has one password.** The admin sets it in the admin panel and gives
+it to whoever the drive is for. They open the drive's link, get a sign-in page,
+enter the password, and everything in the drive is theirs: add folders, upload,
+rename, reorder, delete, manage revisions, and edit the drive's own name,
+tagline, address and numbering.
 
-**The admin creates users, gives them passwords, and sets how much each drive
-may store. A user signs in on their own drive and does everything in it.**
+That is the whole model. There is no separate account to create, no second
+weaker credential, and no drive that opens to anybody with the link. Getting in
+and being able to change everything are the same act, because that is what
+somebody means when they say a drive is theirs.
 
 | | Signs in with | What they do |
 | --- | --- | --- |
-| **A user** | their own password, on their own drive | Everything in that drive: adds, renames, reorders and deletes folders and files, restores and deletes revisions, and edits the drive's own identity — name, tagline, tab title, address, numbering, powered-by mark |
-| **The admin** | `ADMIN_PASSWORD`, at `/admin/login` | Creates the users and hands out their passwords; adds and removes drives; sets each drive's storage quota and whether the dashboard lists it; answers the access requests. Cannot open a drive, add a folder, or rename one |
+| **Whoever holds a drive's password** | that password, at the drive's own link | Everything in that drive |
+| **The admin** | `ADMIN_PASSWORD`, at `/admin/login` | Sets each drive's password, adds and removes drives, sets storage quotas and dashboard listing, answers access requests. Cannot open a drive, add a folder, or rename one |
 
-`/admin` is therefore a short page: **Users**, **Drives** (quota and listing
-only), and **Requests**. There is nothing on it that adds a folder or renames a
-drive, because those are not the admin's.
+`/admin` is therefore a short page: the drives, each with **Set password** and
+**Storage**, plus **Requests**. Nothing on it adds a folder.
 
-A user is a row in `users` — a name, an optional email, one `drive_key`, and a
-password stored as an HMAC under `SESSION_SECRET`. Several users may share a
-drive. A password is never stored and never readable: a forgotten one is
-replaced, not looked up. Signing in is "this password, on this drive", matched
-by the `(drive_key, password_hash)` index, so one person's password does
-nothing on anybody else's drive and there is no username to type.
+A drive's password lives in `drives.passcode_hash` as an HMAC under
+`SESSION_SECRET`, so the database never holds the password and nobody — the
+admin included — can read one back. It can only be replaced, and replacing it
+signs out everybody currently in that drive, immediately: the session cookie
+signs the hash it was issued against. A drive with no password set is shut to
+everyone, which the panel says in red on its row.
 
 Concretely, **the admin does not add folders**. `/api/folders`, the per-file and
-per-revision routes and the drive's identity fields all check that the caller is
-signed in as one of that drive's users (`requireDriveUser` in `lib/auth.ts`,
-`lib/owner.ts` for the routes addressed by row id). `/api/users`, `/api/drives`
-and `/api/drives/[key]`'s `DELETE`, the quota, `/api/requests` and
-`/api/admin/recalc` check the admin session. `PATCH /api/drives/[key]` serves
-both and splits the body by level — the two lists are at the top of that file —
-and neither check is satisfied by the other role's session. A body mixing the
-two sets is a 400.
+per-revision routes, the drive page and `/api/drive` all check for a session on
+that drive (`requireDriveUser` in `lib/auth.ts`, `lib/owner.ts` for the routes
+addressed by row id). `/api/drives`, `DELETE /api/drives/[key]`, the password,
+the quota, `/api/requests` and `/api/admin/recalc` check the admin session.
+`PATCH /api/drives/[key]` serves both and splits the body by level — the two
+lists are at the top of that file — and neither check is satisfied by the
+other's session. A body mixing the two sets is a 400.
 
-There is deliberately **no shortcut that lends a drive's controls to the admin**.
-An admin who genuinely has to work inside a drive makes themselves one of its
-users, which shows up in the panel rather than happening silently.
-
-A user session lasts thirty days, because it is held by the person using the
-drive every day; the admin session lasts twelve hours, being occasional and
-reaching everything. The session signs the user's own password hash, so changing
-somebody's password — or deleting them — signs them out immediately.
-
-### One door, one password
-
-**Every drive sits behind a sign-in page.** Open its link and you get a card
-asking for a password — not the drive. Enter the password you were given and you
-are inside, and everything in there is yours: add folders, upload, rename,
-reorder, delete, manage revisions, and edit the drive's own name, tagline,
-address and numbering.
-
-There is no second, weaker credential. There is no drive that opens to anybody
-with the link. Getting in and being able to change everything are the same act,
-because that is what somebody means when they say a drive is theirs.
-
-The admin does not get in either. They create the users and hand out the
-passwords; looking inside a drive means being one of its users, which shows up
-in the panel rather than happening quietly. `/admin` is reached from its own
-sign-in at `/admin/login`, which is a different door with a different password.
-
-Gated all the way down: the drive page, `/api/drive`, the folder and upload
-routes, and every per-file route — including the ones that hand back a signed R2
-URL — check for a user session before answering, so a drive's contents cannot be
-read by calling the API directly.
-
-A drive can be **unlisted**, which only decides whether the dashboard names it.
-That is the admin's, since the dashboard belongs to the site rather than to any
-one drive. Every card on the dashboard leads to that drive's sign-in, and none
-of them says whether you are already signed in — which keeps the page from
-telling somebody looking over your shoulder more than it needs to.
+A drive session lasts thirty days, because it is held by the person using the
+drive every day; the admin session lasts twelve hours, being occasional.
 
 ### Asking for access
 
@@ -301,17 +268,15 @@ the site keeps serving if the deploy lands ahead of the migration; what does not
 work until then is adding or editing a drive, which says so rather than failing
 obscurely.
 
-Finally `migrations/006_users.console.sql`, which adds the `users` table — the
-people who run the drives — and writes each drive's quota row so the admin panel
-has a number to show rather than an implicit default. The app tolerates its
-absence and reads every drive as one with no users yet, so a deploy ahead of the
-migration serves the site; a write that needs the table says which migration is
-owed. **Both existing drives come out of it with no users**, which means nobody
-can add a folder until the admin creates one against each and sends out the
-password. That is the state to expect on the first deploy after this change,
-not a fault, and the admin panel says so at the top.
+Finally `migrations/006_drive_storage.console.sql`, which writes each drive's
+quota row so the admin panel shows a real number rather than an implicit
+default. The access model needs no migration at all: a drive's password lives in
+the `passcode_hash` column the schema has always had. **Existing drives come out
+of this with no password**, so nobody can open them until the admin sets one on
+each row — that is the state to expect after this change, not a fault, and the
+panel says so in red.
 
-On the eSpark drive:
+On the eSpark drive:On the eSpark drive:
 
 - **Folders are numbered in outline style** — `1`, `1.1`, `1.2`, `2` — from
   their place in the tree, and the number shows wherever a folder is named:
@@ -712,19 +677,19 @@ showing a drive the visitor did not ask for.
 `/` lists the drives and nothing else. Every card leads to that drive's sign-in;
 there is no drive you can enter without a password.
 
-**Running your drive.** Open its link. A sign-in card asks for your password;
-enter it and you are in. Everything is then there — the **New folder** button,
+**Using a drive.** Open its link. A sign-in card asks for the password; enter
+it and you are in. Everything is then there — the **New folder** button,
 and the right-click menus on folders, files and empty space (open, new folder,
 upload, rename, delete, restore a revision) — plus a **settings** button in the
 header for the drive's own name, tagline, tab title, address, numbering and
 powered-by mark. You stay signed in for thirty days, and **Sign out** in that
 same panel ends it.
 
-**Overseeing.** Go to `/admin/login`, enter `ADMIN_PASSWORD`. `/admin` creates
-users — a name, a password, and the drive that is theirs — and sets each
-drive's quota and whether the dashboard lists it. Send the password on and you
-are done; that person runs their drive without you. What the panel cannot do is
-add a folder or rename a drive, and there is no shortcut that lends you those.
+**Overseeing.** Go to `/admin/login`, enter `ADMIN_PASSWORD`. Each drive's row
+has **Set password** — type one, save, and send it to whoever the drive is for.
+The same row sets the drive's storage quota and whether the dashboard lists it.
+What the panel cannot do is add a folder or rename a drive, and there is no
+shortcut that lends you those.
 
 ## Layout
 
@@ -734,7 +699,7 @@ app/
   [drive]/[[...path]]/page.tsx a drive by its slug, and deep links into it
   [drive]/manifest.webmanifest that drive's PWA manifest
   not-found.tsx                an address that matches nothing
-  admin/page.tsx               users, quotas, requests (admin)
+  admin/page.tsx               drives, passwords, quotas, requests (admin)
   admin/login/page.tsx         admin sign-in
   globals.css                  design system + the canvas's own styles
   design-system.css            Industry tokens, copied byte-for-byte
@@ -742,12 +707,10 @@ app/
     drive/                     GET the whole drive in one call
     drives/                    list; create and delete a drive (admin)
     drives/[key]/              edit a drive — split by level, user and admin
-    drives/[key]/signin/       a user signing in to their own drive, or out
-    users/                     create and list users (admin)
-    users/[id]/                rename, repassword, move, remove (admin)
+    drives/[key]/signin/       enter a drive's password, or sign out of it
     requests/                  ask for access; answer the asking (admin)
     auth/login|logout/         session in, session out
-    folders/[id]/              create, rename, delete (the drive's users)
+    folders/[id]/              create, rename, delete (whoever is in the drive)
     files/[id]/                reserve, confirm, rename, delete, download
     files/[id]/versions/       history, restore, delete a revision
     files/[id]/view            signed inline URL, for media previews
@@ -761,7 +724,7 @@ components/
   Dashboard.tsx                the front door
   DriveSignIn.tsx              the page every drive shows until you sign in
   DriveSettings.tsx            a user's sign-in, and the drive's own settings
-  AdminPanel.tsx               users, quotas and requests (admin)
+  AdminPanel.tsx               drives, passwords, quotas, requests (admin)
   Choice.tsx                   the segmented radio both panels use
   FileViewer.tsx               the in-app viewer
   LoginForm.tsx                sign-in, built from the design system
@@ -771,8 +734,7 @@ lib/
   dwg.ts                       DWG to SVG, server-side only (GPL-3, see above)
   brand.ts                     the shape of a drive's identity, and the fallback
   drives.ts                    the drive registry — rows, slugs, requests
-  users.ts                     the people who run the drives
-  owner.ts                     "whose drive is this row in, and are you its user?"
+  owner.ts                     "whose drive is this row in, and are you in it?"
   guard.ts                     the throttle in front of the typed secrets
   paths.ts                     URL <-> folder/file resolution
   longpress.ts                 touch-and-hold as right-click

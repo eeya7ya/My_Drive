@@ -114,7 +114,6 @@ const EMPTY: DrivePayload = {
   usedBytes: 0,
   quotaBytes: 214748364800,
   isUser: false,
-  userName: null,
   isAdmin: false,
 };
 
@@ -1969,22 +1968,18 @@ export default function Drive({
               <Icon name="moon" size={15} />
             )}
           </button>
-          {/* The way in and out of running this drive. Same button grammar as
-              the theme toggle beside it, so the header keeps the design's
-              shape. It is the owner's door, not the admin's: the panel behind
-              it asks for the drive's owner passcode, and offers an admin the
-              drive's seat without one. */}
+          {/* This drive's own settings — its name, address, numbering — and the
+              way out of it. The drive sits behind a sign-in page of its own, so
+              anybody looking at this header is through its password and these
+              are theirs. Same button grammar as the theme toggle beside it, so
+              the header keeps the design's shape. */}
           <button
             className="btn btn-secondary btn-icon"
             onClick={() => setManaging(true)}
-            title={
-              canManage
-                ? `Signed in as ${data.userName ?? "a user"} — settings for ${brand.name}`
-                : `Sign in to manage ${brand.name}`
-            }
-            aria-label={canManage ? "Drive settings" : "Sign in to manage this drive"}
+            title={`Settings for ${brand.name}`}
+            aria-label="Drive settings"
           >
-            <Icon name={canManage ? "drive" : "lock"} size={15} />
+            <Icon name="drive" size={15} />
           </button>
 
           {/* Only shown to an admin, and only ever a way through to the panel
@@ -2911,11 +2906,7 @@ export default function Drive({
       )}
 
       {managing && (
-        <DriveSettings
-          brand={brand}
-          userName={data.userName}
-          onClose={() => setManaging(false)}
-        />
+        <DriveSettings brand={brand} onClose={() => setManaging(false)} />
       )}
 
       {viewing && (

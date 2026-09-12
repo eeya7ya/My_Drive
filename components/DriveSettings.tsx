@@ -96,12 +96,9 @@ function patchFor(brand: Brand, form: Form): Patch {
 
 export default function DriveSettings({
   brand,
-  userName,
   onClose,
 }: {
   brand: Brand;
-  /** Who the viewer is signed in as, shown so they can tell which account is open. */
-  userName: string | null;
   onClose: () => void;
 }) {
   const [form, setForm] = useState<Form>(() => formOf(brand));
@@ -234,9 +231,7 @@ export default function DriveSettings({
             >
               {brand.name}
             </div>
-            <div style={TAGLINE}>
-              {userName ? `Signed in as ${userName}` : "Drive settings"}
-            </div>
+            <div style={TAGLINE}>Drive settings</div>
           </div>
           <button
             className="btn btn-secondary btn-icon"
@@ -392,8 +387,8 @@ export default function DriveSettings({
               storage limit is the admin's for the same reason quotas usually
               are. Everything about the drive itself is above. */}
           <p style={{ margin: "18px 0 0", fontSize: 12, opacity: 0.65, maxWidth: "62ch" }}>
-            Passwords, and how much this drive may store, are set by the admin. Everything above
-            is yours.
+            This drive&rsquo;s password, and how much it may store, are set by the admin.
+            Everything above is yours.
           </p>
 
           <div className="hr" style={{ margin: "22px 0 18px" }} />
