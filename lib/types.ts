@@ -3,13 +3,11 @@
 import type { Brand } from "./brand";
 
 /**
- * A drive as the dashboard shows it: its public identity plus whether this
- * visitor can already open it. `unlocked` is true for every public drive, and
- * for a private one the viewer holds a pass to.
+ * A drive as the dashboard shows it. Nothing beyond its public identity: every
+ * drive is behind its users' passwords, so a card's only job is to say the
+ * drive exists and lead to its sign-in.
  */
-export interface DriveCard extends Brand {
-  unlocked: boolean;
-}
+export type DriveCard = Brand;
 
 /**
  * One drive's numbers as the admin panel shows them: how full it is against

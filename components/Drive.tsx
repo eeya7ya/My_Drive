@@ -1060,13 +1060,14 @@ export default function Drive({
   const closeMenu = useCallback(() => setMenu(null), []);
 
   /**
-   * What decides whether this drive shows its management controls.
+   * Whether this viewer may change the drive.
    *
-   * One of this drive's own users, not the admin. Adding a folder, renaming,
-   * deleting and restoring a revision are the job of the person whose drive it
-   * is; the admin's job is creating that person and handing them a password.
-   * Holding the admin password lights nothing up in here, and there is no
-   * shortcut that lends these controls to it.
+   * Always true in practice: the drive page is behind a sign-in of its own, so
+   * reaching this component at all means being one of the drive's users, and a
+   * user runs their drive entirely. It is still read from the payload rather
+   * than assumed, because the payload is the server's answer and the one place
+   * this question is really settled — and because the first render happens
+   * before the payload lands.
    */
   const canManage = data.isUser;
 
@@ -2036,51 +2037,6 @@ export default function Drive({
           ))}
         </div>
 
-        {/*
-          Why the management controls are not here.
-
-          A viewer who cannot manage the drive used to be shown nothing at all:
-          the "New folder" button and the menu entry simply were not rendered,
-          which reads as a broken page rather than as a permission. It says so
-          now, and says what to do about it — which differs by whether the
-          drive has an owner to sign in as yet.
-
-          Only while the drive is otherwise quiet: a real error or a migration
-          notice is more urgent than an explanation of a missing button, and
-          stacking three bars above the listing helps nobody.
-        */}
-        {!canManage && !notice && !error && (
-          <div style={{ padding: "12px 27px 0" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                flexWrap: "wrap",
-                padding: "10px 13px",
-                border: "1px solid var(--color-divider)",
-                background: "color-mix(in srgb, var(--color-text) 4%, transparent)",
-                fontSize: 13,
-              }}
-            >
-              <Icon
-                name="lock"
-                size={15}
-                style={{ flex: "none", opacity: 0.6 }}
-              />
-              <span style={{ flex: 1, minWidth: 220, opacity: 0.85 }}>
-                Adding and renaming folders belongs to {brand.name}&rsquo;s own users. Sign in
-                with your password to manage it — the admin creates the users and hands out the
-                passwords.
-              </span>
-              <button className="btn btn-secondary" onClick={() => setManaging(true)}>
-                <Icon name="lock" size={14} />
-                Sign in
-              </button>
-            </div>
-          </div>
-        )}
-
         {notice && (
           <div style={{ padding: "12px 27px 0" }}>
             <div
@@ -2957,9 +2913,7 @@ export default function Drive({
       {managing && (
         <DriveSettings
           brand={brand}
-          isUser={canManage}
           userName={data.userName}
-          isAdmin={data.isAdmin}
           onClose={() => setManaging(false)}
         />
       )}
