@@ -55,15 +55,13 @@ const GIB = 1024 * 1024 * 1024;
 /**
  * The body of a PATCH the admin is allowed to send. The drive's identity is
  * absent on purpose — the API refuses those fields from an admin, because they
- * belong to whoever is in the drive, and a form that cannot send them cannot
- * accidentally try.
+ * are the owner's, and a form that could not send them cannot accidentally try.
  */
 interface DrivePatch {
-  visibility?: DriveVisibility;
   listed?: boolean;
   ownerName?: string;
   ownerEmail?: string;
-  passcode?: string | null;
+  ownerPasscode?: string | null;
   quotaBytes?: number;
 }
 
@@ -71,20 +69,18 @@ interface DrivePatch {
 interface MemberForm {
   ownerName: string;
   ownerEmail: string;
-  visibility: DriveVisibility;
   listed: boolean;
   /** Typed in GB, because bytes are not a number anybody chooses in. */
   quotaGb: string;
 }
 
-/** The three things an admin can mean by touching a drive's passcode. */
+/** The three things an admin can mean by touching an owner passcode. */
 type PasscodeMode = "keep" | "set" | "clear";
 
 function formOf(member: DriveMember, brand: Brand): MemberForm {
   return {
     ownerName: member.ownerName,
     ownerEmail: member.ownerEmail,
-    visibility: brand.visibility,
     listed: brand.listed,
     // Trailing zeros are trimmed so a round 200 GB reads as "200" rather than
     // "200.00", and a quota that is not a whole number of GB still round-trips.
@@ -113,7 +109,6 @@ function patchFor(
   const ownerEmail = form.ownerEmail.trim();
   if (ownerEmail !== member.ownerEmail) patch.ownerEmail = ownerEmail;
 
-  if (form.visibility !== brand.visibility) patch.visibility = form.visibility;
   if (form.listed !== brand.listed) patch.listed = form.listed;
 
   // Compared in bytes rather than in the typed text, so re-saving a form that
@@ -124,11 +119,11 @@ function patchFor(
     if (bytes !== member.quotaBytes) patch.quotaBytes = bytes;
   }
 
-  // The unlock form trims what the visitor types and the server compares the
-  // hashes exactly, so a passcode saved with a space around it could never be
-  // entered again. It is trimmed on the way in as well, and the two ends agree.
-  if (mode === "set") patch.passcode = passcode.trim();
-  if (mode === "clear") patch.passcode = null;
+  // The sign-in forms trim what is typed and the server compares the hashes
+  // exactly, so a passcode saved with a space around it could never be entered
+  // again. It is trimmed on the way in as well, and the two ends agree.
+  if (mode === "set") patch.ownerPasscode = passcode.trim();
+  if (mode === "clear") patch.ownerPasscode = null;
 
   return patch;
 }
@@ -215,10 +210,7 @@ export default function AdminPanel({
   const locked = busy !== null;
   const waiting = requests.filter((r) => r.status === "new").length;
   const byKey = new Map(members.map((m) => [m.key, m]));
-  // A private drive with no passcode is shut to everybody but the admin, which
-  // means nobody is in it and nobody can run it. That is the state worth
-  // counting here, the way an unowned drive used to be.
-  const shut = drives.filter((d) => d.visibility === "private" && !d.hasPasscode).length;
+  const unowned = drives.filter((d) => !d.hasOwner).length;
 
   async function signOut() {
     setBusy("sign-out");
@@ -316,7 +308,7 @@ export default function AdminPanel({
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 30 }}>
           <h1 className="dc-title" style={{ margin: 0, fontSize: 42 }}>
-            Drives, access &amp; storage
+            Drives, owners &amp; storage
           </h1>
           <div
             style={{
@@ -329,9 +321,8 @@ export default function AdminPanel({
           <p style={{ margin: 0, fontSize: 15, opacity: 0.75, maxWidth: "64ch" }}>
             A drive added here appears on the dashboard straight away — no deploy. Its key is
             fixed at creation because every folder and file row carries it. What this panel sets
-            is <strong>who may get into each drive</strong> and <strong>how much it may
-            hold</strong>. Whoever is in a drive runs it: its name, its address and its folders
-            are theirs, changed from inside the drive, without asking you.
+            is who runs each drive and how much it may hold; the drive&rsquo;s own name, address
+            and folders are its owner&rsquo;s, and are changed from inside the drive.
           </p>
         </div>
 
@@ -402,8 +393,8 @@ export default function AdminPanel({
             </h2>
             <span style={LABEL}>
               {drives.length === 1 ? "One drive" : `${drives.length} drives`}
-              {shut > 0 &&
-                ` · ${shut === 1 ? "one is" : `${shut} are`} shut — private with no passcode`}
+              {unowned > 0 &&
+                ` · ${unowned === 1 ? "one has" : `${unowned} have`} no owner`}
             </span>
             <div style={{ marginLeft: "auto" }}>
               <button
@@ -451,8 +442,7 @@ export default function AdminPanel({
                     slug: brand.slug,
                     ownerName: "",
                     ownerEmail: "",
-                    hasPasscode: brand.hasPasscode,
-                    isPrivate: brand.visibility === "private",
+                    hasOwner: brand.hasOwner,
                     usedBytes: 0,
                     quotaBytes: 200 * GIB,
                   }
@@ -467,10 +457,10 @@ export default function AdminPanel({
                     return true;
                   }
                   const handed =
-                    patch.passcode === null
-                      ? ` Its passcode is cleared, so anyone who held it is out.`
-                      : patch.passcode
-                        ? ` Send the new passcode to ${patch.ownerName ?? byKey.get(brand.key)?.ownerName ?? "whoever the drive is for"} — the previous one no longer opens it.`
+                    patch.ownerPasscode === null
+                      ? ` Its owner passcode is cleared, so nobody can manage it until you set a new one.`
+                      : patch.ownerPasscode
+                        ? ` Send the new owner passcode to ${patch.ownerName ?? byKey.get(brand.key)?.ownerName ?? "its owner"} — the previous one no longer works.`
                         : "";
                   const done = await call(
                     `save:${brand.key}`,
@@ -535,9 +525,9 @@ export default function AdminPanel({
 
           <p style={{ margin: "0 0 20px", fontSize: 13, opacity: 0.75, maxWidth: "68ch" }}>
             Approving is bookkeeping — it marks the request as dealt with and grants nothing on
-            its own. The grant is sending the person a drive&rsquo;s passcode, which you set on
-            its row above. That one passcode is the whole thing: it opens the drive, and whoever
-            is in a drive adds their own folders to it.
+            its own. What opens a private drive is its reader passcode, which its owner sets from
+            inside the drive; what lets somebody run a drive is the owner passcode you set here.
+            Send whichever one you meant, and only that one.
           </p>
 
           {requests.length === 0 ? (
@@ -681,21 +671,17 @@ function DriveRow({
           >
             <a href={brand.basePath}>{brand.basePath}</a>
             <span style={{ opacity: 0.5 }}>key {brand.key}</span>
-            {/* Who the drive is for, in the same breath as the address,
-                because "whose drive is that?" is the question this panel
-                exists to answer. */}
+            {/* The owner in the same breath as the address, because "whose
+                drive is that?" is the question this panel exists to answer. */}
             <span style={{ opacity: 0.75 }}>
               {member.ownerName || member.ownerEmail ? (
                 <>
-                  for{" "}
-                  <strong style={{ opacity: 0.9 }}>
-                    {member.ownerName || member.ownerEmail}
-                  </strong>
+                  run by <strong style={{ opacity: 0.9 }}>{member.ownerName || member.ownerEmail}</strong>
                 </>
-              ) : brand.visibility === "private" ? (
-                "nobody recorded"
+              ) : brand.hasOwner ? (
+                "owner unnamed"
               ) : (
-                "open to anyone with the link"
+                <span style={{ color: DANGER }}>no owner</span>
               )}
             </span>
           </div>
@@ -771,7 +757,7 @@ function DriveRow({
         </div>
       </div>
 
-      {brand.visibility === "private" && !brand.hasPasscode && (
+      {!brand.hasOwner && (
         <div
           style={{
             display: "flex",
@@ -785,10 +771,24 @@ function DriveRow({
           }}
         >
           <span style={{ flex: 1, minWidth: 260 }}>
-            This drive is private with no passcode, so nobody can get into it — and nobody can
-            add a folder to it. Set one below and send it to whoever the drive is for, or make
-            the drive public.
+            Nobody can add a folder to this drive until it has an owner. Set an owner passcode
+            below and send it to whoever the drive is for — they sign in with it, in the drive
+            itself, and from then on run it without you.
           </span>
+        </div>
+      )}
+
+      {brand.visibility === "private" && !brand.hasPasscode && (
+        <div
+          style={{
+            padding: "10px 16px",
+            borderTop: "1px solid var(--color-divider)",
+            fontSize: 13,
+            opacity: 0.85,
+          }}
+        >
+          This drive is private with no reader passcode, so only its owner and you can open it.
+          Setting one is the owner&rsquo;s to do, from inside the drive.
         </div>
       )}
 
@@ -846,19 +846,13 @@ function DriveRow({
 }
 
 /**
- * Everything the admin decides about one drive, in one form: who may get into
- * it, how much it may store, and whether the dashboard names it.
+ * Everything the admin decides about one drive, in one form: who runs it, how
+ * much it may store, and whether the dashboard names it.
  *
  * What is conspicuously not here is the drive's identity — its name, tagline,
  * address and numbering. Those used to live in this form, and moving them into
- * the drive is the whole point: the person who uses a drive should not have to
+ * the drive is the whole point: the person who runs a drive should not have to
  * ask the person who minds the quotas to rename a folder.
- *
- * The passcode is here rather than there, though, and that is the other half
- * of the same idea. It is the credential that lets somebody into the drive,
- * and being in the drive is what makes it theirs to run — so handing it out is
- * how the admin decides who runs which drive. Nobody inside a drive can change
- * the lock on it.
  */
 function DriveMembership({
   brand,
@@ -913,7 +907,7 @@ function DriveMembership({
         animation: "pop .12s ease-out both",
       }}
     >
-      <div style={{ ...LABEL, marginBottom: 14 }}>Who it is for</div>
+      <div style={{ ...LABEL, marginBottom: 14 }}>Who runs it</div>
 
       <div
         style={{
@@ -923,13 +917,13 @@ function DriveMembership({
         }}
       >
         <div className="field">
-          <label htmlFor={id("owner-name")}>Name</label>
+          <label htmlFor={id("owner-name")}>Owner</label>
           <input
             id={id("owner-name")}
             className="input"
             value={form.ownerName}
             onChange={(e) => set("ownerName", e.target.value)}
-            placeholder="Who will use the drive"
+            placeholder="Who you handed the drive to"
             disabled={locked}
           />
         </div>
@@ -949,20 +943,17 @@ function DriveMembership({
       </div>
 
       <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.65, maxWidth: "62ch" }}>
-        These two are a record for you, not a login. What actually lets that person into the
-        drive — and so lets them run it, add their own folders and rename it — is the passcode
-        below.
+        These two are a record for you, not a login. What actually lets somebody run the drive is
+        the owner passcode below.
       </p>
 
       <div className="hr" style={{ margin: "22px 0 18px" }} />
 
-      <div style={{ ...LABEL, marginBottom: 6 }}>Passcode</div>
+      <div style={{ ...LABEL, marginBottom: 6 }}>Owner passcode</div>
       <p style={{ margin: "0 0 12px", fontSize: 13, opacity: 0.75, maxWidth: "62ch" }}>
-        {brand.hasPasscode
-          ? "This drive has a passcode. It is stored hashed and cannot be read back, only replaced or removed — and replacing it turns out everybody currently in the drive, straight away."
-          : brand.visibility === "private"
-            ? "This drive is private with no passcode, so nobody can get in. Set one and send it to whoever the drive is for."
-            : "This drive is public, so its passcode gates nothing — anyone with the address is in it, and can add folders to it. Make it private if it belongs to one person."}
+        {brand.hasOwner
+          ? "This drive has an owner passcode. It is stored hashed and cannot be read back, only replaced or removed — and replacing it signs the current owner out of the drive's controls straight away."
+          : "This drive has no owner passcode, so nobody can add folders to it or change what it is called. Set one and send it to whoever is to run the drive."}
       </p>
 
       <div
@@ -973,30 +964,30 @@ function DriveMembership({
         <label className="radio">
           <input
             type="radio"
-            name={id("passcode-mode")}
+            name={id("owner-mode")}
             checked={mode === "keep"}
             onChange={() => setMode("keep")}
             disabled={locked}
           />
           <span className="dot" />
-          <span>Leave the passcode as it is</span>
+          <span>Leave the owner passcode as it is</span>
         </label>
 
         <label className="radio">
           <input
             type="radio"
-            name={id("passcode-mode")}
+            name={id("owner-mode")}
             checked={mode === "set"}
             onChange={() => setMode("set")}
             disabled={locked}
           />
           <span className="dot" />
-          <span>{brand.hasPasscode ? "Replace it with a new one" : "Set a passcode"}</span>
+          <span>{brand.hasOwner ? "Hand the drive over with a new one" : "Set an owner passcode"}</span>
         </label>
 
         {mode === "set" && (
           <div className="field" style={{ maxWidth: 320, marginLeft: 24 }}>
-            <label htmlFor={id("owner-passcode")}>New passcode</label>
+            <label htmlFor={id("owner-passcode")}>New owner passcode</label>
             <input
               id={id("owner-passcode")}
               className="input"
@@ -1004,58 +995,43 @@ function DriveMembership({
               autoComplete="off"
               value={passcode}
               onChange={(e) => setPasscode(e.target.value)}
-              placeholder="What you will send them"
+              placeholder="What you will send the owner"
               disabled={locked}
             />
           </div>
         )}
 
-        <label className="radio" style={{ opacity: brand.hasPasscode ? 1 : 0.5 }}>
+        <label className="radio" style={{ opacity: brand.hasOwner ? 1 : 0.5 }}>
           <input
             type="radio"
-            name={id("passcode-mode")}
+            name={id("owner-mode")}
             checked={mode === "clear"}
             onChange={() => setMode("clear")}
-            disabled={locked || !brand.hasPasscode}
+            disabled={locked || !brand.hasOwner}
           />
           <span className="dot" />
-          <span>Remove the passcode</span>
+          <span>Take the drive back — remove its owner passcode</span>
         </label>
       </div>
 
-      {mode === "clear" && form.visibility === "private" && (
-        <div style={{ marginTop: 10, fontSize: 13, color: DANGER }}>
-          The drive and everything in it stay exactly as they are, but a private drive with no
-          passcode is shut to everybody: nobody will be able to open it, or add anything to it,
-          until you set a new one. Make it public in the same save if that is what you meant.
+      {mode === "clear" && (
+        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
+          The drive and everything in it stay exactly as they are. Nobody will be able to add or
+          rename anything in it until you name the next owner.
         </div>
       )}
 
       {blank && (
         <div style={{ marginTop: 10, fontSize: 13, color: DANGER }}>
-          Type the new passcode, or choose to leave the current one alone.
+          Type the new owner passcode, or choose to leave the current one alone.
         </div>
       )}
 
       <div className="hr" style={{ margin: "22px 0 18px" }} />
 
-      <div style={{ ...LABEL, marginBottom: 14 }}>Who may see it, and how much it holds</div>
+      <div style={{ ...LABEL, marginBottom: 14 }}>How much it may store</div>
 
       <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <fieldset style={GROUP}>
-          <legend style={GROUP_LABEL}>Visibility</legend>
-          <Choice
-            name={id("visibility")}
-            value={form.visibility}
-            disabled={locked}
-            onChange={(next) => set("visibility", next)}
-            options={[
-              { value: "public", label: "Public" },
-              { value: "private", label: "Private" },
-            ]}
-          />
-        </fieldset>
-
         <div className="field" style={{ maxWidth: 200 }}>
           <label htmlFor={id("quota")}>Quota</label>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1116,8 +1092,10 @@ function DriveMembership({
         <button className="btn btn-secondary" type="button" onClick={onCancel} disabled={locked}>
           Cancel
         </button>
-        {/* No seat to take: the admin session opens every drive, so an admin
-            who needs to fix something inside one just opens it. */}
+        {/* No seat to borrow. An admin who has to work inside a drive sets its
+            owner passcode above and signs in with it, which is visible here
+            rather than silent — and which is the same thing the drive's own
+            owner does. */}
         <a
           className="btn btn-secondary"
           href={brand.basePath}
@@ -1134,15 +1112,13 @@ function DriveMembership({
 
 /**
  * A new drive asks for as little as it can: a name, the address it will answer
- * at, who it is for, and — if it is theirs alone — the passcode that lets them
- * in. Everything else (the tagline, the tab title, the numbering) has a
- * sensible default and is theirs to judge once the drive exists and they can
- * look at it.
+ * at, whether it is open, and who is to run it. Everything else — the tagline,
+ * the tab title, the numbering — has a sensible default and is the owner's to
+ * judge once the drive exists and can be looked at.
  *
- * The passcode matters here because it is the whole grant: whoever holds it
- * opens the drive and therefore runs it. A private drive without one is a
- * drive nobody can get into, and the admin who has just made it is the only
- * person who can fix that.
+ * The owner is asked for here rather than left for later because a drive
+ * without one is a drive nobody can put a folder in, and the admin who has
+ * just made it is the only person who can fix that.
  */
 function CreateDrive({
   locked,
@@ -1159,6 +1135,7 @@ function CreateDrive({
     passcode?: string;
     ownerName?: string;
     ownerEmail?: string;
+    ownerPasscode?: string;
     quotaBytes?: number;
   }) => Promise<boolean>;
   onCancel: () => void;
@@ -1169,6 +1146,7 @@ function CreateDrive({
   const [passcode, setPasscode] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerPasscode, setOwnerPasscode] = useState("");
   const [quotaGb, setQuotaGb] = useState("200");
   // The address follows the name until the admin writes one themselves, after
   // which typing the name no longer rewrites what they chose.
@@ -1194,6 +1172,7 @@ function CreateDrive({
     // passcode of nothing but spaces would otherwise pass for one and open a
     // private drive that not even the person sent it could unlock.
     const secret = passcode.trim();
+    const ownerSecret = ownerPasscode.trim();
     const gb = Number(quotaGb);
     await onCreate({
       name: name.trim(),
@@ -1204,6 +1183,7 @@ function CreateDrive({
       ...(visibility === "private" && secret ? { passcode: secret } : {}),
       ...(ownerName.trim() ? { ownerName: ownerName.trim() } : {}),
       ...(ownerEmail.trim() ? { ownerEmail: ownerEmail.trim() } : {}),
+      ...(ownerSecret ? { ownerPasscode: ownerSecret } : {}),
       // Left out when the field is empty or nonsense, so the drive takes the
       // default rather than being created with a quota nobody meant.
       ...(Number.isFinite(gb) && gb > 0 ? { quotaBytes: Math.round(gb * GIB) } : {}),
@@ -1309,7 +1289,7 @@ function CreateDrive({
 
       <div className="hr" style={{ margin: "22px 0 18px" }} />
 
-      <div style={{ ...LABEL, marginBottom: 14 }}>Who it is for</div>
+      <div style={{ ...LABEL, marginBottom: 14 }}>Who will run it</div>
 
       <div
         style={{
@@ -1325,7 +1305,7 @@ function CreateDrive({
             className="input"
             value={ownerName}
             onChange={(e) => setOwnerName(e.target.value)}
-            placeholder="Who will use the drive"
+            placeholder="Who the drive is for"
             disabled={locked}
           />
         </div>
@@ -1339,6 +1319,20 @@ function CreateDrive({
             value={ownerEmail}
             onChange={(e) => setOwnerEmail(e.target.value)}
             placeholder="Where to send the passcode"
+            disabled={locked}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="new-drive-owner-passcode">Owner passcode</label>
+          <input
+            id="new-drive-owner-passcode"
+            className="input"
+            type="text"
+            autoComplete="off"
+            value={ownerPasscode}
+            onChange={(e) => setOwnerPasscode(e.target.value)}
+            placeholder="What its owner will sign in with"
             disabled={locked}
           />
         </div>
@@ -1370,23 +1364,15 @@ function CreateDrive({
         — but it is called out as the exception rather than described as an
         ordinary choice.
       */}
-      {visibility === "private" ? (
-        passcode.trim() ? (
-          <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.7, maxWidth: "62ch" }}>
-            Send that passcode to {ownerName.trim() || "them"}. They open the drive with it and
-            from then on add their own folders, rename them and edit the drive — you never have
-            to.
-          </p>
-        ) : (
-          <p style={{ margin: "12px 0 0", fontSize: 12, color: DANGER, maxWidth: "62ch" }}>
-            A private drive needs a passcode, or nobody can get into it and nobody can add a
-            folder to it.
-          </p>
-        )
-      ) : (
+      {ownerPasscode.trim() ? (
         <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.7, maxWidth: "62ch" }}>
-          A public drive is open to anyone with the address, and anyone who can open a drive can
-          add folders to it. Make it private if it belongs to one person.
+          Send this to {ownerName.trim() || "its owner"}. They open the drive, click the padlock
+          in its header, and from then on add their own folders — you never have to.
+        </p>
+      ) : (
+        <p style={{ margin: "12px 0 0", fontSize: 12, color: DANGER, maxWidth: "62ch" }}>
+          Without an owner passcode the drive exists but nobody can add a folder to it —
+          including you, until you take its seat. Set one unless you mean to decide later.
         </p>
       )}
 
