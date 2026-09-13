@@ -548,6 +548,16 @@ class Sheet {
       color: ACCENT,
     });
 
+    // A rule over the folio, to close the page. Without it the text block has
+    // an edge at the top and nothing at the bottom, and the last line of a
+    // short page falls off into white.
+    page.drawLine({
+      start: { x: MARGIN.left, y: MARGIN.bottom - 12 },
+      end: { x: PAGE.w - MARGIN.right, y: MARGIN.bottom - 12 },
+      thickness: 0.5,
+      color: RULE,
+    });
+
     // "3" is the number a reader is looking for and "of 24" is the reassurance
     // that there is more; they are not the same message and are not set alike.
     const here = String(this.offset + this.count);
@@ -828,7 +838,9 @@ async function renderBody(
       sheet.newPage();
       measured.set(i, sheet.count - 1);
       if (entry.kind === "folder") {
-        drawSectionOpener(sheet, entry);
+        // Everything under this section, up to where the next one starts.
+        const until = entries.findIndex((e, j) => j > i && e.depth === 0);
+        drawSectionOpener(sheet, entry, entries.slice(i + 1, until < 0 ? undefined : until));
         continue;
       }
       drawNoteHeading(sheet, entry);
@@ -861,26 +873,97 @@ async function renderBody(
   }
 }
 
-function drawSectionOpener(sheet: Sheet, entry: ReportFolderEntry): void {
+/**
+ * The page a section opens on.
+ *
+ * It used to be a number, a title and a rule on an otherwise empty sheet,
+ * which spent a whole page saying what the running head says on every page
+ * after it. It now says what is in the section: the notes it holds, in the
+ * order they are about to be read. That is the one thing a divider is for —
+ * a reader arriving at section 3 wants to know whether what they are looking
+ * for is in it before turning eleven more pages — and it is what makes a
+ * page-per-section worth the paper.
+ *
+ * Without page numbers beside them, deliberately. They are known only after
+ * the body has been laid out, and the layout cannot depend on a measurement
+ * taken from the layout without the two passes disagreeing about where the
+ * pages fall. The contents at the front carries the numbers; this carries the
+ * shape.
+ */
+function drawSectionOpener(
+  sheet: Sheet,
+  entry: ReportFolderEntry,
+  within: ReportEntry[]
+): void {
   const f = sheet.fonts;
   // The same eyebrow the cover wears, so the top of a section and the top of
   // the report are plainly the same document rather than two designs.
   sheet.tracked("SECTION", MARGIN.left, { font: f.bold, size: 7.4, colour: ACCENT }, 7.4, 2.4);
   sheet.down(16);
   if (entry.number) {
-    sheet.text(entry.number, MARGIN.left, { font: f.bold, size: 30, colour: ACCENT_DEEP }, 30);
-    sheet.down(38);
+    sheet.text(entry.number, MARGIN.left, { font: f.bold, size: 44, colour: ACCENT }, 44);
+    sheet.down(54);
   }
   const lines = wrapText(toWinAnsi(entry.title), COLUMN, (t) =>
-    f.bold.widthOfTextAtSize(t, 21)
+    f.bold.widthOfTextAtSize(t, 25)
   );
   for (const line of lines) {
-    sheet.text(line, MARGIN.left, { font: f.bold, size: 21, colour: INK }, 21);
-    sheet.down(26);
+    sheet.text(line, MARGIN.left, { font: f.bold, size: 25, colour: INK }, 25);
+    sheet.down(31);
   }
-  sheet.down(6);
+  sheet.down(8);
   sheet.line(MARGIN.left, PAGE.w - MARGIN.right, sheet.y, 1.4, ACCENT);
-  sheet.down(20);
+  sheet.down(30);
+
+  const notes = within.filter((e): e is ReportNoteEntry => e.kind === "note");
+  if (!notes.length) {
+    sheet.down(4);
+    return;
+  }
+
+  sheet.tracked(
+    notes.length === 1 ? "IN THIS SECTION" : `IN THIS SECTION  ${notes.length} NOTES`,
+    MARGIN.left,
+    { font: f.bold, size: 7.2, colour: MUTED },
+    7.2,
+    1.8
+  );
+  sheet.down(18);
+
+  for (const note of notes) {
+    // A section with more notes than fit on its opener says so rather than
+    // running the list onto a second divider, which would be a page spent
+    // listing a page.
+    if (sheet.room < 40) {
+      sheet.text(
+        `... and more, listed in the contents`,
+        MARGIN.left,
+        { font: f.italic, size: 9, colour: MUTED },
+        9
+      );
+      sheet.down(16);
+      break;
+    }
+    const number = toWinAnsi(note.number);
+    const gutter = number ? Math.max(34, f.bold.widthOfTextAtSize(number, 9.6) + 12) : 0;
+    sheet.rectAt(MARGIN.left, sheet.y - 3, 2, 16, TINT);
+    if (number) {
+      sheet.text(
+        number,
+        MARGIN.left + 12,
+        { font: f.bold, size: 9.6, colour: ACCENT_MID },
+        9.6
+      );
+    }
+    sheet.text(
+      sheet.fit(note.title, f.regular, 10.5, COLUMN - gutter - 12),
+      MARGIN.left + gutter + 12,
+      { font: f.regular, size: 10.5, colour: INK },
+      10.5
+    );
+    sheet.down(19);
+  }
+  sheet.down(10);
 }
 
 function drawSubHeading(sheet: Sheet, entry: ReportFolderEntry): void {
@@ -1507,6 +1590,13 @@ function drawContents(
       color: ACCENT,
     });
 
+    page.drawLine({
+      start: { x: MARGIN.left, y: MARGIN.bottom - 12 },
+      end: { x: right, y: MARGIN.bottom - 12 },
+      thickness: 0.5,
+      color: RULE,
+    });
+
     // Set exactly as the body sets it, because a reader who notices the folio
     // at all notices when it changes shape halfway through the document.
     const here = String(p + 2);
@@ -1662,39 +1752,80 @@ function drawCover(
   const page = doc.addPage([PAGE.w, PAGE.h]);
   const right = PAGE.w - MARGIN.right;
 
-  // The accent edge every card and dialog in the app is topped with, here at
-  // the top of the document itself. It is the one piece of colour a reader
-  // sees before any words, and it is the app's, not a print convention.
+  /**
+   * The field.
+   *
+   * The cover used to be words on white with a hairline over them, which is
+   * not a cover — it is the first page of the report with a gap above it. The
+   * top of the page is a block of the drive's deepest accent now, with the
+   * title reversed out of it, and the paper below carries what the report is
+   * of. That division is the whole design: a reader knows before reading a
+   * word that this is the front of something.
+   *
+   * The grid ruled faintly across it is the drawing board the rest of the app
+   * is built on — the registration marks at the corners of every card come
+   * from the same place — and at six per cent white it is texture rather than
+   * pattern: it reads as paper under raking light, and it disappears entirely
+   * on a printer that cannot hold the tone.
+   */
+  const fieldH = 372;
+  const fieldBottom = PAGE.h - fieldH;
   page.drawRectangle({
     x: 0,
-    y: PAGE.h - 6,
+    y: fieldBottom,
     width: PAGE.w,
-    height: 6,
-    color: ACCENT,
+    height: fieldH,
+    color: ACCENT_DEEP,
   });
+  const pitch = 26;
+  for (let gx = pitch; gx < PAGE.w; gx += pitch) {
+    page.drawLine({
+      start: { x: gx, y: fieldBottom },
+      end: { x: gx, y: PAGE.h },
+      thickness: 0.4,
+      color: WHITE,
+      opacity: 0.06,
+    });
+  }
+  for (let gy = fieldBottom + pitch; gy < PAGE.h; gy += pitch) {
+    page.drawLine({
+      start: { x: 0, y: gy },
+      end: { x: PAGE.w, y: gy },
+      thickness: 0.4,
+      color: WHITE,
+      opacity: 0.06,
+    });
+  }
+  // The edge the app puts on everything, here where the field meets the paper.
+  page.drawRectangle({ x: 0, y: fieldBottom - 3, width: PAGE.w, height: 3, color: ACCENT });
 
-  // The registration marks the rest of the app draws around its cards. A cover
-  // is where a drive's identity belongs, so it wears the same frame.
+  // The registration marks the rest of the app draws around its cards. The two
+  // in the field are white, the two on the paper are accent: the same mark in
+  // whichever ink the surface under it leaves room for.
   const inset = 34;
   const arm = 13;
-  const corners: [number, number, number, number][] = [
-    [inset, PAGE.h - inset, 1, -1],
-    [PAGE.w - inset, PAGE.h - inset, -1, -1],
-    [inset, inset, 1, 1],
-    [PAGE.w - inset, inset, -1, 1],
+  const corners: [number, number, number, number, boolean][] = [
+    [inset, PAGE.h - inset, 1, -1, true],
+    [PAGE.w - inset, PAGE.h - inset, -1, -1, true],
+    [inset, inset, 1, 1, false],
+    [PAGE.w - inset, inset, -1, 1, false],
   ];
-  for (const [cx, cy, dx, dy] of corners) {
+  for (const [cx, cy, dx, dy, onField] of corners) {
+    const ink = onField ? WHITE : ACCENT_SOFT;
+    const opacity = onField ? 0.5 : 1;
     page.drawLine({
       start: { x: cx, y: cy },
       end: { x: cx + arm * dx, y: cy },
       thickness: 0.6,
-      color: ACCENT_SOFT,
+      color: ink,
+      opacity,
     });
     page.drawLine({
       start: { x: cx, y: cy },
       end: { x: cx, y: cy + arm * dy },
       thickness: 0.6,
-      color: ACCENT_SOFT,
+      color: ink,
+      opacity,
     });
   }
 
@@ -1705,47 +1836,39 @@ function drawCover(
       ? input.entries[0]
       : null;
 
-  // The block sits on the lower of the two optical thirds. Higher and the page
-  // is bottom-heavy with nothing under it; centred and it reads as having been
-  // dropped there rather than placed.
-  let y = PAGE.h - 300;
-  tracked(page, single ? "NOTE" : "NOTES REPORT", MARGIN.left, y, 9, f.bold, ACCENT, 2.6);
-  y -= 20;
-  page.drawLine({
-    start: { x: MARGIN.left, y },
-    end: { x: MARGIN.left + 38, y },
-    thickness: 2,
-    color: ACCENT,
-  });
-  y -= 34;
+  // Set from the foot of the field upwards, so a title that takes two lines
+  // grows into the empty top of the field rather than through its bottom edge.
+  const titleLines = wrapText(toWinAnsi(input.title), COLUMN, (t) =>
+    f.bold.widthOfTextAtSize(t, 32)
+  );
+  const TITLE_LEAD = 38;
+  let y =
+    fieldBottom +
+    58 +
+    (input.subtitle ? 30 : 0) +
+    (titleLines.length - 1) * TITLE_LEAD +
+    48;
 
-  for (const line of wrapText(toWinAnsi(input.title), COLUMN, (t) =>
-    f.bold.widthOfTextAtSize(t, 30)
-  )) {
-    page.drawText(line, { x: MARGIN.left, y, size: 30, font: f.bold, color: INK });
-    y -= 36;
+  tracked(page, single ? "NOTE" : "NOTES REPORT", MARGIN.left, y, 9, f.bold, ACCENT_SOFT, 2.8);
+  y -= 17;
+  page.drawRectangle({ x: MARGIN.left, y, width: 44, height: 2, color: WHITE, opacity: 0.85 });
+  y -= 31;
+
+  for (const line of titleLines) {
+    page.drawText(line, { x: MARGIN.left, y, size: 32, font: f.bold, color: WHITE });
+    y -= TITLE_LEAD;
   }
 
   if (input.subtitle) {
-    y -= 2;
-    page.drawText(clip(toWinAnsi(input.subtitle), f.regular, 12.5, COLUMN), {
+    y += TITLE_LEAD - 30;
+    page.drawText(clip(toWinAnsi(input.subtitle), f.regular, 13, COLUMN), {
       x: MARGIN.left,
       y,
-      size: 12.5,
+      size: 13,
       font: f.regular,
-      color: MUTED,
+      color: ACCENT_SOFT,
     });
-    y -= 22;
   }
-
-  y -= 12;
-  page.drawLine({
-    start: { x: MARGIN.left, y },
-    end: { x: right, y },
-    thickness: 1.4,
-    color: ACCENT,
-  });
-  y -= 30;
 
   const generated =
     new Date(input.generatedAt).toISOString().replace("T", " ").slice(0, 16) + " UTC";
@@ -1765,7 +1888,23 @@ function drawCover(
         ["Generated", generated],
       ];
 
+  const figures: [string, string][] = single
+    ? [[String(stats.pages), stats.pages === 1 ? "Page" : "Pages"]]
+    : [
+        [String(stats.sections), stats.sections === 1 ? "Section" : "Sections"],
+        [String(stats.notes), stats.notes === 1 ? "Note" : "Notes"],
+        [String(stats.pages), stats.pages === 1 ? "Page" : "Pages"],
+      ];
+
+  // Hung from the field rather than from the footer. The white below a cover
+  // is the cover breathing; the white between the field and the first thing
+  // under it is just a gap, and a gap that changed size with the number of
+  // rows read as a mistake on every report that had a different number.
   const ROW = 26;
+  const chipH = 58;
+  const foot = MARGIN.bottom + 26;
+  y = fieldBottom - 62;
+
   for (const [label, value] of rows) {
     tracked(page, label.toUpperCase(), MARGIN.left, y, 7.4, f.bold, ACCENT, 1.4);
     page.drawText(clip(toWinAnsi(value), f.regular, 11, COLUMN - 118), {
@@ -1784,26 +1923,17 @@ function drawCover(
     y -= ROW;
   }
 
-  const figures: [string, string][] = single
-    ? [[String(stats.pages), stats.pages === 1 ? "Page" : "Pages"]]
-    : [
-        [String(stats.sections), stats.sections === 1 ? "Section" : "Sections"],
-        [String(stats.notes), stats.notes === 1 ? "Note" : "Notes"],
-        [String(stats.pages), stats.pages === 1 ? "Page" : "Pages"],
-      ];
-
-  y -= 8;
+  y -= 18;
   const gap = 12;
   // Always measured against a row of three, so the single figure a one-note
   // cover has is a chip like any other rather than a banner across the page.
   const across = Math.max(figures.length, 3);
   const chip = (COLUMN - gap * (across - 1)) / across;
-  const chipH = 54;
   figures.forEach(([figure, label], i) => {
     const cx = MARGIN.left + i * (chip + gap);
     page.drawRectangle({
       x: cx,
-      y: y - chipH + 14,
+      y: y - chipH + 16,
       width: chip,
       height: chipH,
       color: TINT_PALE,
@@ -1812,22 +1942,21 @@ function drawCover(
     // left of a selected row.
     page.drawRectangle({
       x: cx,
-      y: y - chipH + 14,
-      width: 2,
+      y: y - chipH + 16,
+      width: 2.4,
       height: chipH,
       color: ACCENT,
     });
     page.drawText(figure, {
-      x: cx + 14,
+      x: cx + 15,
       y: y - 12,
-      size: 21,
+      size: 23,
       font: f.bold,
       color: ACCENT_DEEP,
     });
-    tracked(page, label.toUpperCase(), cx + 14, y - 30, 7.2, f.regular, MUTED, 1.3);
+    tracked(page, label.toUpperCase(), cx + 15, y - 31, 7.2, f.regular, MUTED, 1.3);
   });
 
-  const foot = MARGIN.bottom + 26;
   page.drawLine({
     start: { x: MARGIN.left, y: foot + 16 },
     end: { x: right, y: foot + 16 },
@@ -1845,12 +1974,12 @@ function drawCover(
   }
   if (input.poweredBy) {
     const mark = toWinAnsi(input.poweredBy);
-    const w = f.regular.widthOfTextAtSize(mark, 8.4);
+    const w = f.bold.widthOfTextAtSize(mark, 8.4);
     page.drawText(mark, {
       x: right - w,
       y: foot,
       size: 8.4,
-      font: f.regular,
+      font: f.bold,
       color: ACCENT,
     });
   }
