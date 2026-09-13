@@ -161,17 +161,31 @@ export function notesOf(entries: ReportEntry[]): ReportNoteEntry[] {
  * winding temperature rise" against "notes-3.md". The heading is dropped from
  * the body in exchange, so the title is not printed twice.
  */
-export function noteTitle(markdown: string, fileName: string): string {
+function leadingHeading(markdown: string): string {
   const m = /^\uFEFF?\s*#\s+(.+?)\s*#*\s*$/m.exec(markdown.slice(0, 2000));
   const heading = m && markdown.slice(0, m.index).trim() === "" ? m[1].trim() : "";
   // Markdown emphasis around a title is markup, not part of the words.
-  const clean = heading.replace(/[*_`]/g, "").trim();
-  return clean || baseName(fileName);
+  return heading.replace(/[*_`]/g, "").trim();
 }
 
-/** Whether `noteTitle` took the title from the note's own opening heading. */
-export function usesLeadingHeading(markdown: string, fileName: string): boolean {
-  return noteTitle(markdown, fileName) !== baseName(fileName);
+export function noteTitle(markdown: string, fileName: string): string {
+  return leadingHeading(markdown) || baseName(fileName);
+}
+
+/**
+ * Whether the note opens with a heading the report is about to print for it.
+ *
+ * This used to ask whether the title had ended up different from the file
+ * name, which is not the same question and got the commonest case wrong: a
+ * note called "Site survey.md" that opens with "# Site survey" produced a
+ * title identical to its file name, so the opening heading was kept — and the
+ * words printed twice, once as the report's numbered heading and again as the
+ * note's own, one line below it. What matters is only whether the note opens
+ * with a heading at all: when it does, `noteTitle` takes the title from it, so
+ * the report's heading is already saying those words.
+ */
+export function usesLeadingHeading(markdown: string): boolean {
+  return leadingHeading(markdown) !== "";
 }
 
 /* ── text ────────────────────────────────────────────────────────────────── */
@@ -225,7 +239,16 @@ export function toWinAnsi(text: string): string {
       continue;
     }
     const code = ch.codePointAt(0)!;
-    if (ch === " ") {
+    // Whitespace is whitespace. A newline inside a paragraph is the source
+    // file wrapping, not a character to draw, and a tab is an indent — but
+    // both sit below WinAnsi's printable range, so without this they fell past
+    // every branch to the "?" at the bottom and printed one in the middle of
+    // the sentence, wherever the writer's line happened to end. Collapsing
+    // them to a space is what the line breaker does with them anyway, and it
+    // is what the non-breaking space was already being folded to. Code never
+    // arrives here holding either: wrapCode has expanded its tabs and split it
+    // into lines before a character of it is encoded.
+    if (/\s/.test(ch)) {
       out += " ";
     } else if ((code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff)) {
       out += ch;
@@ -360,14 +383,29 @@ const PAGE = { w: 595.28, h: 841.89 };
 const MARGIN = { top: 66, bottom: 62, left: 62, right: 62 };
 const COLUMN = PAGE.w - MARGIN.left - MARGIN.right;
 
-/** The drive's own palette, in the form pdf-lib wants. */
-const INK = rgb(0.106, 0.118, 0.125); // #1B1E20
+/**
+ * The drive's own palette, in the form pdf-lib wants.
+ *
+ * Every value here is a token from app/design-system.css rather than a colour
+ * picked to suit a page, so a printed report and the screen it came from are
+ * recognisably the same document. The accent ramp is used at its ends as well
+ * as its middle — DEEP for a field a reader looks at once, ACCENT for the
+ * headings they read all the way through, SOFT and the two tints for the
+ * surfaces underneath them — because a report that says everything in one
+ * blue reads as decorated rather than organised.
+ */
+const INK = rgb(0.106, 0.118, 0.125); // #1B1E20  --color-text
 const MUTED = rgb(0.373, 0.365, 0.357); // #5F5D5B
 const FAINT = rgb(0.604, 0.596, 0.588); // #9A9896
 const RULE = rgb(0.843, 0.831, 0.824); // #D7D4D2
-const ACCENT = rgb(0.282, 0.384, 0.427); // #48626D
-const TINT = rgb(0.843, 0.922, 0.957); // #D7EBF4
+const ACCENT = rgb(0.282, 0.384, 0.427); // #48626D  --color-accent-700
+const ACCENT_DEEP = rgb(0.188, 0.275, 0.31); // #30464F  --color-accent-800
+const ACCENT_MID = rgb(0.357, 0.471, 0.518); // #5B7884  --brand-primary
+const ACCENT_SOFT = rgb(0.643, 0.737, 0.776); // #A4BCC6  --color-accent-400
+const TINT = rgb(0.843, 0.922, 0.957); // #D7EBF4  --color-accent-200
+const TINT_PALE = rgb(0.902, 0.976, 1.0); // #E6F9FF  --color-accent-100
 const PANEL = rgb(0.957, 0.949, 0.941); // #F4F2F0
+const WHITE = rgb(1, 1, 1);
 
 const BODY_SIZE = 10.5;
 const BODY_LEAD = 15.4;
@@ -473,23 +511,26 @@ class Sheet {
   /** Everything on a body page that is not the notes: head, rule, folio. */
   private chrome(): void {
     const page = this.page!;
+    const f = this.fonts;
     const top = PAGE.h - MARGIN.top + 22;
     page.drawText(toWinAnsi(this.title), {
       x: MARGIN.left,
       y: top,
       size: 7.6,
-      font: this.fonts.regular,
-      color: FAINT,
+      font: f.regular,
+      color: MUTED,
     });
     if (this.section) {
-      const label = this.fit(this.section, this.fonts.regular, 7.6, COLUMN * 0.6);
-      const w = this.fonts.regular.widthOfTextAtSize(label, 7.6);
+      // The section, not the drive, is what a reader flicking through pages is
+      // looking for, so it is the half of the head that carries the colour.
+      const label = this.fit(this.section, f.bold, 7.6, COLUMN * 0.6);
+      const w = f.bold.widthOfTextAtSize(label, 7.6);
       page.drawText(label, {
         x: PAGE.w - MARGIN.right - w,
         y: top,
         size: 7.6,
-        font: this.fonts.regular,
-        color: FAINT,
+        font: f.bold,
+        color: ACCENT,
       });
     }
     page.drawLine({
@@ -498,14 +539,34 @@ class Sheet {
       thickness: 0.5,
       color: RULE,
     });
+    // The app's accent edge, kept to a stub so the head stays a head.
+    page.drawRectangle({
+      x: MARGIN.left,
+      y: top - 7.8,
+      width: 26,
+      height: 1.6,
+      color: ACCENT,
+    });
 
-    const folio = `${this.offset + this.count} of ${this.total}`;
-    const fw = this.fonts.regular.widthOfTextAtSize(folio, 8);
-    page.drawText(folio, {
-      x: (PAGE.w - fw) / 2,
+    // "3" is the number a reader is looking for and "of 24" is the reassurance
+    // that there is more; they are not the same message and are not set alike.
+    const here = String(this.offset + this.count);
+    const rest = ` of ${this.total}`;
+    const hereW = f.bold.widthOfTextAtSize(here, 8.6);
+    const restW = f.regular.widthOfTextAtSize(rest, 8);
+    const fx = (PAGE.w - hereW - restW) / 2;
+    page.drawText(here, {
+      x: fx,
+      y: MARGIN.bottom - 26,
+      size: 8.6,
+      font: f.bold,
+      color: ACCENT,
+    });
+    page.drawText(rest, {
+      x: fx + hereW,
       y: MARGIN.bottom - 26,
       size: 8,
-      font: this.fonts.regular,
+      font: f.regular,
       color: FAINT,
     });
   }
@@ -545,6 +606,34 @@ class Sheet {
     }
   }
 
+  /**
+   * Letterspaced small type at the cursor.
+   *
+   * PDF has no setting for tracking, so an eyebrow is drawn a character at a
+   * time. Worth the loop: it is what makes a seven-point label read as a label
+   * rather than as small print.
+   */
+  tracked(
+    value: string,
+    x: number,
+    style: Style,
+    baseline: number,
+    spacing: number
+  ): void {
+    if (!this.draw || !this.page) return;
+    let cx = x;
+    for (const ch of toWinAnsi(value)) {
+      this.page.drawText(ch, {
+        x: cx,
+        y: PAGE.h - this.y - baseline,
+        size: style.size,
+        font: style.font,
+        color: style.colour,
+      });
+      cx += style.font.widthOfTextAtSize(ch, style.size) + spacing;
+    }
+  }
+
   /** Same as `text`, but at a distance from the page top the caller chooses. */
   textAt(
     value: string,
@@ -577,17 +666,6 @@ class Sheet {
       width,
       height,
       color: colour,
-    });
-  }
-
-  /** A hairline down the page, for a table's column rules. */
-  vline(x: number, fromY: number, toY: number): void {
-    if (!this.draw || !this.page) return;
-    this.page.drawLine({
-      start: { x, y: PAGE.h - fromY },
-      end: { x, y: PAGE.h - toY },
-      thickness: 0.5,
-      color: RULE,
     });
   }
 
@@ -663,7 +741,7 @@ export async function buildReport(input: ReportInput): Promise<Uint8Array> {
     if (entry.kind !== "note") return;
     const tokens = marked.lexer(entry.markdown ?? "");
     // The heading the title was taken from would otherwise print twice.
-    if (usesLeadingHeading(entry.markdown ?? "", entry.fileName)) {
+    if (usesLeadingHeading(entry.markdown ?? "")) {
       const first = tokens.findIndex((t) => t.type !== "space");
       if (first >= 0 && tokens[first].type === "heading") tokens.splice(first, 1);
     }
@@ -785,8 +863,12 @@ async function renderBody(
 
 function drawSectionOpener(sheet: Sheet, entry: ReportFolderEntry): void {
   const f = sheet.fonts;
+  // The same eyebrow the cover wears, so the top of a section and the top of
+  // the report are plainly the same document rather than two designs.
+  sheet.tracked("SECTION", MARGIN.left, { font: f.bold, size: 7.4, colour: ACCENT }, 7.4, 2.4);
+  sheet.down(16);
   if (entry.number) {
-    sheet.text(entry.number, MARGIN.left, { font: f.bold, size: 30, colour: ACCENT }, 30);
+    sheet.text(entry.number, MARGIN.left, { font: f.bold, size: 30, colour: ACCENT_DEEP }, 30);
     sheet.down(38);
   }
   const lines = wrapText(toWinAnsi(entry.title), COLUMN, (t) =>
@@ -797,21 +879,21 @@ function drawSectionOpener(sheet: Sheet, entry: ReportFolderEntry): void {
     sheet.down(26);
   }
   sheet.down(6);
-  sheet.line(MARGIN.left, PAGE.w - MARGIN.right, sheet.y, 1, ACCENT);
+  sheet.line(MARGIN.left, PAGE.w - MARGIN.right, sheet.y, 1.4, ACCENT);
   sheet.down(20);
 }
 
 function drawSubHeading(sheet: Sheet, entry: ReportFolderEntry): void {
   const f = sheet.fonts;
   sheet.down(14);
-  sheet.line(MARGIN.left, MARGIN.left + 30, sheet.y, 0.8, ACCENT);
+  sheet.rectAt(MARGIN.left, sheet.y - 2, 30, 2.4, ACCENT);
   sheet.down(11);
   const label = `${entry.number} ${entry.title}`.trim();
   const lines = wrapText(toWinAnsi(label), COLUMN, (t) =>
     f.bold.widthOfTextAtSize(t, 13.5)
   );
   for (const line of lines) {
-    sheet.text(line, MARGIN.left, { font: f.bold, size: 13.5, colour: ACCENT }, 13.5);
+    sheet.text(line, MARGIN.left, { font: f.bold, size: 13.5, colour: ACCENT_DEEP }, 13.5);
     sheet.down(17);
   }
   sheet.down(5);
@@ -820,19 +902,27 @@ function drawSubHeading(sheet: Sheet, entry: ReportFolderEntry): void {
 function drawNoteHeading(sheet: Sheet, entry: ReportNoteEntry): void {
   const f = sheet.fonts;
   sheet.down(12);
-  const label = `${entry.number} ${entry.title}`.trim();
-  const lines = wrapText(toWinAnsi(label), COLUMN, (t) =>
+  // The number is set apart from the title, in its own colour and its own
+  // column, so a run of notes reads down the page as a numbered list — the
+  // same shape the contents page gives them — instead of as a paragraph of
+  // headings each beginning with a digit.
+  const number = toWinAnsi(entry.number);
+  const gutter = number ? f.bold.widthOfTextAtSize(number, 12.5) + 9 : 0;
+  if (number) {
+    sheet.text(number, MARGIN.left, { font: f.bold, size: 12.5, colour: ACCENT }, 12.5);
+  }
+  const lines = wrapText(toWinAnsi(entry.title), COLUMN - gutter, (t) =>
     f.bold.widthOfTextAtSize(t, 12.5)
   );
   for (const line of lines) {
-    sheet.text(line, MARGIN.left, { font: f.bold, size: 12.5, colour: INK }, 12.5);
+    sheet.text(line, MARGIN.left + gutter, { font: f.bold, size: 12.5, colour: INK }, 12.5);
     sheet.down(16);
   }
   // Where the section came from, so a reader can find and correct the source.
   const meta = [entry.fileName, entry.updated].filter(Boolean).join("  ·  ");
   sheet.text(
-    sheet.fit(meta, f.regular, 8.2, COLUMN),
-    MARGIN.left,
+    sheet.fit(meta, f.regular, 8.2, COLUMN - gutter),
+    MARGIN.left + gutter,
     { font: f.regular, size: 8.2, colour: MUTED },
     8.2
   );
@@ -949,7 +1039,7 @@ async function renderTokens(
 function drawQuoteBar(sheet: Sheet, x: number, from: number, to: number): void {
   const top = Math.max(from, MARGIN.top);
   if (to <= top) return;
-  sheet.rectAt(x, top, 2, to - top, RULE);
+  sheet.rectAt(x, top, 2.4, to - top, ACCENT_SOFT);
 }
 
 /** A paragraph that is one picture and nothing else. */
@@ -1043,7 +1133,10 @@ async function drawList(
     // Reserved before the marker is drawn so the marker cannot be stranded on
     // the page above the item it belongs to.
     sheet.need(base.size * 2.4);
-    sheet.text(marker, x, { ...base, colour: list.ordered ? MUTED : ACCENT }, base.size);
+    // Numbers and bullets are the same piece of furniture and take the same
+    // colour; the numbers used to be grey, which made a numbered list read as
+    // less structured than a bulleted one when it is more.
+    sheet.text(marker, x, { ...base, colour: ACCENT }, base.size);
     await renderTokens(sheet, item.tokens ?? [], x + indent, width - indent, embed, base);
   }
   sheet.down(6);
@@ -1066,7 +1159,11 @@ function drawCode(sheet: Sheet, code: string, x: number, width: number): void {
     // match, so a long listing breaks into panels instead of overflowing.
     const fit = Math.max(1, Math.floor((sheet.room - pad * 2) / lead));
     const chunk = lines.slice(i, i + fit);
-    sheet.rect(x, width, chunk.length * lead + pad * 2, PANEL);
+    const panel = chunk.length * lead + pad * 2;
+    sheet.rect(x, width, panel, PANEL);
+    // The accent edge down the left, the same one the app draws on a listing.
+    // It also marks where a listing broken across pages picks up again.
+    sheet.rect(x, 2.4, panel, ACCENT_SOFT);
     sheet.down(pad);
     for (const line of chunk) {
       sheet.text(toWinAnsi(line), x + pad, { font: f.mono, size, colour: INK }, size + 1);
@@ -1118,47 +1215,56 @@ function drawTable(sheet: Sheet, table: Tokens.Table, x: number, width: number):
   const heightOf = (lines: string[][]) =>
     Math.max(...lines.map((l) => l.length)) * lead + pad * 2;
 
-  const drawRow = (lines: string[][], font: PDFFont, tint: boolean) => {
+  /**
+   * A row, in one of the three roles a row can have.
+   *
+   * The grid of rules this used to draw — a line under every row and down
+   * every column — is the spreadsheet's way of telling cells apart, and it
+   * costs a printed table more than it gives: forty hairlines compete with the
+   * numbers they are supposed to be separating. Colour does the same work more
+   * quietly. The header is a solid accent band with the names reversed out of
+   * it, so it reads as a header from across a desk and repeats legibly when
+   * the table runs on; the body alternates plain paper with the palest tint in
+   * the ramp, which is enough to carry the eye along a row of figures without
+   * drawing a single line; and the columns are left to the white space between
+   * them, which is what separates columns in a book.
+   */
+  const drawRow = (lines: string[][], font: PDFFont, role: "head" | "odd" | "even") => {
     const height = heightOf(lines);
     sheet.need(height);
-    if (tint) sheet.rect(x, width, height, TINT);
+    if (role === "head") sheet.rect(x, width, height, ACCENT);
+    else if (role === "odd") sheet.rect(x, width, height, TINT_PALE);
+    const colour = role === "head" ? WHITE : INK;
     let cx = x;
     lines.forEach((cellLines, i) => {
       let cy = sheet.y + pad;
       for (const line of cellLines) {
-        sheet.textAt(line, cx + pad, cy, {
-          font,
-          size,
-          colour: INK,
-        }, size + 1);
+        sheet.textAt(line, cx + pad, cy, { font, size, colour }, size + 1);
         cy += lead;
       }
       cx += widths[i];
     });
-    // Verticals first, then the rule under the row, so the grid closes.
-    let gx = x;
-    for (let i = 0; i <= columns; i++) {
-      sheet.vline(gx, sheet.y, sheet.y + height);
-      gx += widths[i] ?? 0;
-    }
-    sheet.line(x, x + width, sheet.y, 0.5, RULE);
     sheet.down(height);
-    sheet.line(x, x + width, sheet.y, 0.5, RULE);
   };
 
   sheet.down(8);
   const head = cells(header, f.bold);
   sheet.need(heightOf(head) * 2);
-  drawRow(head, f.bold, true);
+  drawRow(head, f.bold, "head");
+  let striped = false;
   for (const row of rows) {
     const lines = cells(row, f.regular);
     // A table that runs on repeats its header, or the columns lose their names.
     if (sheet.room < heightOf(lines)) {
       sheet.newPage();
-      drawRow(head, f.bold, true);
+      drawRow(head, f.bold, "head");
+      striped = false;
     }
-    drawRow(lines, f.regular, false);
+    drawRow(lines, f.regular, striped ? "odd" : "even");
+    striped = !striped;
   }
+  // One rule, under the whole table, to say where it ends.
+  sheet.line(x, x + width, sheet.y, 1, ACCENT_SOFT);
   sheet.down(9);
 }
 
@@ -1397,13 +1503,26 @@ function drawContents(
     page.drawLine({
       start: { x: MARGIN.left, y: PAGE.h - MARGIN.top - 20 },
       end: { x: right, y: PAGE.h - MARGIN.top - 20 },
-      thickness: 1,
+      thickness: 1.4,
       color: ACCENT,
     });
 
-    const folio = `${p + 2} of ${total}`;
-    page.drawText(folio, {
-      x: (PAGE.w - f.regular.widthOfTextAtSize(folio, 8)) / 2,
+    // Set exactly as the body sets it, because a reader who notices the folio
+    // at all notices when it changes shape halfway through the document.
+    const here = String(p + 2);
+    const rest = ` of ${total}`;
+    const hereW = f.bold.widthOfTextAtSize(here, 8.6);
+    const restW = f.regular.widthOfTextAtSize(rest, 8);
+    const fx = (PAGE.w - hereW - restW) / 2;
+    page.drawText(here, {
+      x: fx,
+      y: MARGIN.bottom - 26,
+      size: 8.6,
+      font: f.bold,
+      color: ACCENT,
+    });
+    page.drawText(rest, {
+      x: fx + hereW,
       y: MARGIN.bottom - 26,
       size: 8,
       font: f.regular,
@@ -1416,18 +1535,37 @@ function drawContents(
       const folder = entry.kind === "folder";
       if (folder && entry.depth === 0 && i > 0) y += 9;
 
-      const size = folder && entry.depth === 0 ? 10.5 : 9.6;
+      const top = folder && entry.depth === 0;
+      const size = top ? 10.5 : 9.6;
       const font = folder ? f.bold : f.regular;
-      const colour = folder ? (entry.depth === 0 ? INK : ACCENT) : MUTED;
+      // The note titles used to be set in the muted grey, which made the list
+      // of things the report actually contains the faintest thing on the page.
+      // They are ink now; the numbers beside them carry the accent instead, so
+      // the hierarchy is in the colour of the numbering rather than in how
+      // hard the titles are to read.
+      const colour = folder ? (top ? INK : ACCENT_DEEP) : INK;
+      const numberColour = folder ? (top ? ACCENT : ACCENT_DEEP) : ACCENT_MID;
       const indent = entry.depth * 11;
       const baseline = PAGE.h - y - size;
+
+      // A band behind each top-level section, so the contents break into parts
+      // at a glance instead of reading as one long column of titles.
+      if (top) {
+        page.drawRectangle({
+          x: MARGIN.left - 6,
+          y: baseline - 5,
+          width: right - MARGIN.left + 12,
+          height: size + 11,
+          color: TINT,
+        });
+      }
 
       page.drawText(toWinAnsi(entry.number), {
         x: MARGIN.left + indent,
         y: baseline,
         size,
         font,
-        color: colour,
+        color: numberColour,
       });
 
       const titleX = MARGIN.left + TOC_NUMBER_COLUMN + indent;
@@ -1441,7 +1579,9 @@ function drawContents(
       const titleW = font.widthOfTextAtSize(title, size);
       const from = titleX + titleW + 5;
       const to = right - numberW - 5;
-      if (to > from) {
+      // A banded section heading needs no leader: the band already carries the
+      // eye, and dots across it only make the band look ruled.
+      if (to > from && !top) {
         const dot = f.regular.widthOfTextAtSize(".", 9);
         const count = Math.floor((to - from) / (dot * 2));
         if (count > 0) {
@@ -1459,8 +1599,8 @@ function drawContents(
         x: right - numberW,
         y: baseline,
         size: 9.4,
-        font: f.regular,
-        color: folder ? INK : MUTED,
+        font: top ? f.bold : f.regular,
+        color: top ? ACCENT : MUTED,
       });
 
       // The whole row is the link, which is how a reader expects a contents
@@ -1522,6 +1662,17 @@ function drawCover(
   const page = doc.addPage([PAGE.w, PAGE.h]);
   const right = PAGE.w - MARGIN.right;
 
+  // The accent edge every card and dialog in the app is topped with, here at
+  // the top of the document itself. It is the one piece of colour a reader
+  // sees before any words, and it is the app's, not a print convention.
+  page.drawRectangle({
+    x: 0,
+    y: PAGE.h - 6,
+    width: PAGE.w,
+    height: 6,
+    color: ACCENT,
+  });
+
   // The registration marks the rest of the app draws around its cards. A cover
   // is where a drive's identity belongs, so it wears the same frame.
   const inset = 34;
@@ -1537,13 +1688,13 @@ function drawCover(
       start: { x: cx, y: cy },
       end: { x: cx + arm * dx, y: cy },
       thickness: 0.6,
-      color: RULE,
+      color: ACCENT_SOFT,
     });
     page.drawLine({
       start: { x: cx, y: cy },
       end: { x: cx, y: cy + arm * dy },
       thickness: 0.6,
-      color: RULE,
+      color: ACCENT_SOFT,
     });
   }
 
@@ -1554,9 +1705,19 @@ function drawCover(
       ? input.entries[0]
       : null;
 
-  let y = PAGE.h - 210;
-  tracked(page, single ? "NOTE" : "NOTES REPORT", MARGIN.left, y, 9, f.regular, ACCENT, 2.6);
-  y -= 40;
+  // The block sits on the lower of the two optical thirds. Higher and the page
+  // is bottom-heavy with nothing under it; centred and it reads as having been
+  // dropped there rather than placed.
+  let y = PAGE.h - 300;
+  tracked(page, single ? "NOTE" : "NOTES REPORT", MARGIN.left, y, 9, f.bold, ACCENT, 2.6);
+  y -= 20;
+  page.drawLine({
+    start: { x: MARGIN.left, y },
+    end: { x: MARGIN.left + 38, y },
+    thickness: 2,
+    color: ACCENT,
+  });
+  y -= 34;
 
   for (const line of wrapText(toWinAnsi(input.title), COLUMN, (t) =>
     f.bold.widthOfTextAtSize(t, 30)
@@ -1577,43 +1738,94 @@ function drawCover(
     y -= 22;
   }
 
-  y -= 10;
+  y -= 12;
   page.drawLine({
     start: { x: MARGIN.left, y },
     end: { x: right, y },
-    thickness: 1,
+    thickness: 1.4,
     color: ACCENT,
   });
-  y -= 34;
+  y -= 30;
 
   const generated =
     new Date(input.generatedAt).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+
+  // Facts are rows; counts are figures. Splitting them means the three numbers
+  // a reader actually wants off a cover — how much of the drive, how many
+  // notes, how long — can be read at a glance instead of out of a list.
   const rows: [string, string][] = single
     ? [
         ["Note", single.title],
         ["File", single.fileName],
         ["Folder", input.scope],
         ["Generated", generated],
-        ["Pages", String(stats.pages)],
       ]
     : [
         ["Scope", input.scope],
         ["Generated", generated],
-        ["Sections", String(stats.sections)],
-        ["Notes", String(stats.notes)],
-        ["Pages", String(stats.pages)],
       ];
+
+  const ROW = 26;
   for (const [label, value] of rows) {
-    tracked(page, label.toUpperCase(), MARGIN.left, y, 7.4, f.regular, FAINT, 1.4);
-    page.drawText(clip(toWinAnsi(value), f.regular, 11, COLUMN - 120), {
-      x: MARGIN.left + 120,
+    tracked(page, label.toUpperCase(), MARGIN.left, y, 7.4, f.bold, ACCENT, 1.4);
+    page.drawText(clip(toWinAnsi(value), f.regular, 11, COLUMN - 118), {
+      x: MARGIN.left + 118,
       y,
       size: 11,
       font: f.regular,
       color: INK,
     });
-    y -= 21;
+    page.drawLine({
+      start: { x: MARGIN.left, y: y - 9 },
+      end: { x: right, y: y - 9 },
+      thickness: 0.5,
+      color: RULE,
+    });
+    y -= ROW;
   }
+
+  const figures: [string, string][] = single
+    ? [[String(stats.pages), stats.pages === 1 ? "Page" : "Pages"]]
+    : [
+        [String(stats.sections), stats.sections === 1 ? "Section" : "Sections"],
+        [String(stats.notes), stats.notes === 1 ? "Note" : "Notes"],
+        [String(stats.pages), stats.pages === 1 ? "Page" : "Pages"],
+      ];
+
+  y -= 8;
+  const gap = 12;
+  // Always measured against a row of three, so the single figure a one-note
+  // cover has is a chip like any other rather than a banner across the page.
+  const across = Math.max(figures.length, 3);
+  const chip = (COLUMN - gap * (across - 1)) / across;
+  const chipH = 54;
+  figures.forEach(([figure, label], i) => {
+    const cx = MARGIN.left + i * (chip + gap);
+    page.drawRectangle({
+      x: cx,
+      y: y - chipH + 14,
+      width: chip,
+      height: chipH,
+      color: TINT_PALE,
+    });
+    // The chip's own accent edge, the same two points the app draws down the
+    // left of a selected row.
+    page.drawRectangle({
+      x: cx,
+      y: y - chipH + 14,
+      width: 2,
+      height: chipH,
+      color: ACCENT,
+    });
+    page.drawText(figure, {
+      x: cx + 14,
+      y: y - 12,
+      size: 21,
+      font: f.bold,
+      color: ACCENT_DEEP,
+    });
+    tracked(page, label.toUpperCase(), cx + 14, y - 30, 7.2, f.regular, MUTED, 1.3);
+  });
 
   const foot = MARGIN.bottom + 26;
   page.drawLine({
@@ -1639,7 +1851,7 @@ function drawCover(
       y: foot,
       size: 8.4,
       font: f.regular,
-      color: FAINT,
+      color: ACCENT,
     });
   }
 }
