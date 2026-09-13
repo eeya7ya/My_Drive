@@ -135,6 +135,10 @@ export default function ReportPicker({
         display: "grid",
         placeItems: "center",
         padding: 20,
+        // A last resort for a browser without dvh: if the card below somehow
+        // still outgrows the screen, the overlay itself scrolls rather than
+        // stranding the buttons off the bottom edge.
+        overflow: "auto",
         animation: "pop .12s ease-out both",
       }}
     >
@@ -152,7 +156,21 @@ export default function ReportPicker({
         aria-label="Choose what goes in the report"
         style={{
           width: "min(560px, 100%)",
-          maxHeight: "100%",
+          /**
+           * Viewport units, not a percentage.
+           *
+           * `maxHeight: "100%"` looks right and does nothing here: the card is
+           * a grid item, its row is auto-sized, and the row sizes itself to the
+           * card — so the card was measuring itself against itself and grew to
+           * whatever the list needed. With eighteen notes that ran off both
+           * ends of a phone, and since nothing above it scrolled, the list
+           * below the fold and the buttons under it could not be reached at all.
+           *
+           * `dvh` rather than `vh` because a phone's address bar slides away:
+           * `vh` is the tallest the viewport ever gets, which would put the
+           * buttons just under the bottom edge for as long as the bar is shown.
+           */
+          maxHeight: "calc(100dvh - 40px)",
           display: "flex",
           flexDirection: "column",
           background: "var(--color-surface)",
@@ -255,7 +273,10 @@ export default function ReportPicker({
 
         {/* The list scrolls and the buttons do not, so Create is reachable on a
             phone without scrolling past forty notes to find it. */}
-        <div style={{ overflow: "auto", flex: 1, minHeight: 120, padding: "8px 0" }}>
+        {/* `minHeight: 0` is what lets this shrink and scroll: a flex item's
+            automatic minimum is its content, so without it the list refuses to
+            be shorter than its notes and pushes the buttons out of the card. */}
+        <div style={{ overflow: "auto", flex: "1 1 auto", minHeight: 0, padding: "8px 0" }}>
           {rows.map((row) => {
             const ids = row.kind === "folder" ? row.notes : [row.id];
             const on = ids.every((id) => picked.has(id));

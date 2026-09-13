@@ -935,8 +935,6 @@ export default function Drive({
     );
   }, [nodeAt, path, data.tree, data.rootFiles]);
 
-  const reportLabel = `a report of ${notesHere} note${notesHere === 1 ? "" : "s"}`;
-
   /** Put a shareable absolute URL on the clipboard. */
   const copyLink = useCallback(
     async (folderPath: string[], fileName?: string | null) => {

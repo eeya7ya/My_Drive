@@ -188,7 +188,10 @@ export default function DriveSettings({
         aria-label={`Settings for ${brand.name}`}
         style={{
           width: "min(760px, 100%)",
-          maxHeight: "100%",
+          // Viewport units rather than a percentage: this card is a grid item
+          // in an auto-sized row, so "100%" would be measured against a row
+          // that sizes itself to the card. See components/ReportPicker.tsx.
+          maxHeight: "calc(100dvh - 48px)",
           overflow: "auto",
           background: "var(--color-surface)",
           border: "1px solid var(--color-divider)",
