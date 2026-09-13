@@ -74,17 +74,29 @@ export function baseName(name: string): string {
 /**
  * Walk the drive and lay out the report's sections.
  *
- * A folder is included only when it, or something under it, holds a note —
- * a report of the notes should not be mostly empty headings. Its number is
- * left as the drive assigned it, so pruning leaves gaps rather than
+ * A folder is included only when it, or something under it, holds a note that
+ * is going in — a report of the notes should not be mostly empty headings. Its
+ * number is left as the drive assigned it, so pruning leaves gaps rather than
  * renumbering the drive behind the reader's back.
+ *
+ * `chosen`, when given, narrows the report to exactly those notes: a report of
+ * four notes picked out of a folder of forty. Everything else about the layout
+ * is unchanged, so a selective report still reads as a section of the drive
+ * rather than as a pile of loose pages — the folders the chosen notes live in
+ * are still printed as headings, in tree order, and folders that contributed
+ * nothing drop out entirely.
  */
 export function planReport(
   tree: TreeNode[],
   rootFiles: DriveFile[],
-  isNote: (name: string) => boolean
+  isNote: (name: string) => boolean,
+  chosen?: ReadonlySet<string> | null
 ): ReportEntry[] {
   const entries: ReportEntry[] = [];
+
+  /** A note the report is taking: one of the drive's, and one that was picked. */
+  const wanted = (file: DriveFile): boolean =>
+    isNote(file.name) && (!chosen || chosen.has(file.id));
 
   const noteEntry = (
     file: DriveFile,
@@ -101,9 +113,9 @@ export function planReport(
     markdown: "",
   });
 
-  /** Does this subtree hold a single note? Decides whether it is printed. */
+  /** Does this subtree hold a single wanted note? Decides whether it is printed. */
   const holdsNote = (node: TreeNode): boolean =>
-    node.files.some((f) => isNote(f.name)) || node.children.some(holdsNote);
+    node.files.some(wanted) || node.children.some(holdsNote);
 
   const walk = (node: TreeNode, depth: number) => {
     entries.push({
@@ -118,11 +130,9 @@ export function planReport(
       if (holdsNote(child)) walk(child, depth + 1);
     }
     const after = node.children.length;
-    node.files
-      .filter((f) => isNote(f.name))
-      .forEach((f, i) => {
-        entries.push(noteEntry(f, `${node.number}.${after + i + 1}`, depth + 1));
-      });
+    node.files.filter(wanted).forEach((f, i) => {
+      entries.push(noteEntry(f, `${node.number}.${after + i + 1}`, depth + 1));
+    });
   };
 
   for (const node of tree) {
@@ -131,11 +141,9 @@ export function planReport(
 
   // Notes sitting loose at the drive root are numbered past the last folder,
   // whether or not that folder made it into the report.
-  rootFiles
-    .filter((f) => isNote(f.name))
-    .forEach((f, i) => {
-      entries.push(noteEntry(f, String(tree.length + i + 1), 0));
-    });
+  rootFiles.filter(wanted).forEach((f, i) => {
+    entries.push(noteEntry(f, String(tree.length + i + 1), 0));
+  });
 
   return entries;
 }

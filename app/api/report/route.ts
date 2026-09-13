@@ -26,15 +26,52 @@ const MAX_IMAGE_TOTAL = 48 * 1024 * 1024;
  * destination some browsers hide and some do not offer at all, and a report
  * nobody can find is not a feature. This downloads.
  *
- *   /api/report?drive=advec                  the whole drive
- *   /api/report?drive=advec&folder=<id>      one folder and everything under it
- *   /api/report?drive=advec&file=<id>        one note, laid out the same way
+ *   GET  /api/report?drive=advec                  the whole drive
+ *   GET  /api/report?drive=advec&folder=<id>      one folder and everything under it
+ *   GET  /api/report?drive=advec&file=<id>        one note, laid out the same way
+ *   POST /api/report?drive=advec  { notes: [...] } exactly these notes
+ *
+ * The POST is there because a chosen list can be hundreds of ids long, which
+ * is more than an address bar should be asked to carry; it is otherwise the
+ * same report, built by the same code, and the folders those notes live in are
+ * still printed as headings so a picked report reads as a section of the drive
+ * rather than as a pile of loose pages.
  *
  * The drive is checked before anything is read, and every picture a note asks
  * for is checked again — an address inside another drive is not fetched, so a
  * report can never carry across what its reader could not open directly.
  */
 export async function GET(req: Request) {
+  return build(req, null);
+}
+
+/**
+ * The same report, narrowed to the notes named in the body.
+ *
+ * An empty list is a 400 rather than "the whole drive": somebody who picked
+ * nothing meant to pick nothing, and quietly handing them four hundred pages
+ * instead is the worse answer.
+ */
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => null);
+    const notes =
+      body && Array.isArray(body.notes)
+        ? body.notes.filter((id: unknown): id is string => typeof id === "string" && !!id)
+        : null;
+    if (!notes || !notes.length) {
+      return NextResponse.json(
+        { error: "Pick at least one note to put in the report." },
+        { status: 400 }
+      );
+    }
+    return build(req, new Set<string>(notes));
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+async function build(req: Request, chosen: ReadonlySet<string> | null) {
   try {
     const url = new URL(req.url);
     const brand = await parseDriveKey(url.searchParams.get("drive"));
@@ -50,7 +87,15 @@ export async function GET(req: Request) {
     let entries: ReportEntry[];
     let scope: string;
 
-    if (fileId) {
+    if (chosen) {
+      // Picked notes. The whole tree is walked rather than just the folder the
+      // picker was opened in, so a selection that reaches outside it — or one
+      // made at the root — lays out the same way either way.
+      entries = planReport(tree, rootFiles, isNoteFile, chosen);
+      const where = folderId ? trailTo(tree, folderId).join(" / ") : "My Drive";
+      const picked = notesOf(entries).length;
+      scope = `${where} — ${picked} selected note${picked === 1 ? "" : "s"}`;
+    } else if (fileId) {
       const found = findFile(tree, rootFiles, fileId);
       if (!found || !isNoteFile(found.file.name)) {
         return NextResponse.json({ error: "Note not found" }, { status: 404 });

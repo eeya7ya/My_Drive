@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Icon } from "./icons";
 import AskDialog, { type AskRequest } from "./AskDialog";
 import DriveSettings from "./DriveSettings";
+import ReportPicker from "./ReportPicker";
 import FileViewer from "./FileViewer";
 import { isNoteFile, kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
@@ -169,6 +170,13 @@ export default function Drive({
   const [managing, setManaging] = useState(false);
   /** The question on screen, if any. See `ask` and `confirmAsk` below. */
   const [asking, setAsking] = useState<AskRequest | null>(null);
+  /**
+   * The folder the report picker was opened in, or null when it is shut.
+   * A path rather than a boolean, so the list it shows is fixed at the moment
+   * it opened and does not change underneath somebody who navigates the drive
+   * behind it.
+   */
+  const [picking, setPicking] = useState<string[] | null>(null);
 
   // The file open in the viewer, with the revision being shown.
   const [viewing, setViewing] = useState<{
@@ -849,7 +857,16 @@ export default function Drive({
    */
   const downloadReport = useCallback(
     async (
-      scope: { folder?: string | null; file?: string | null; version?: string | null },
+      scope: {
+        folder?: string | null;
+        file?: string | null;
+        version?: string | null;
+        /**
+         * Exactly these notes. Sent as a body rather than in the address,
+         * because a picked list runs to hundreds of ids.
+         */
+        notes?: string[] | null;
+      },
       label: string
     ) => {
       const params = new URLSearchParams({ drive: driveKey });
@@ -861,7 +878,16 @@ export default function Drive({
       setError(null);
       setBusy(`Building ${label}`);
       try {
-        const res = await fetch(`/api/report?${params}`, { cache: "no-store" });
+        const res = await fetch(`/api/report?${params}`, {
+          cache: "no-store",
+          ...(scope.notes
+            ? {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ notes: scope.notes }),
+              }
+            : {}),
+        });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error || `Could not build the report (${res.status})`);
@@ -880,11 +906,18 @@ export default function Drive({
     [driveKey]
   );
 
-  /** The report the button in this folder would build. */
-  const reportScope = useCallback(
-    (p: string[]) => ({ folder: p.length ? p[p.length - 1] : null }),
-    []
-  );
+  /**
+   * Open the picker for a folder, rather than building the report at once.
+   *
+   * Pressing straight through it takes everything, which is what the button
+   * did before; the picker exists so that taking four notes out of forty is
+   * possible at all.
+   */
+  const openReportPicker = useCallback((p: string[]) => {
+    setMenu(null);
+    setNavOpen(false);
+    setPicking(p);
+  }, []);
 
   /**
    * How many notes the report would gather from here down. Counted on the tree
@@ -1260,7 +1293,7 @@ export default function Drive({
         items.push({
           label: "Notes report (PDF)",
           icon: "book",
-          action: () => downloadReport(reportScope(path), reportLabel),
+          action: () => openReportPicker(path),
         });
       }
       if (canManage) {
@@ -1268,7 +1301,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
+    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, openReportPicker]
   );
 
   const rootMenu = useCallback(
@@ -1281,7 +1314,7 @@ export default function Drive({
         items.push({
           label: "Notes report (PDF)",
           icon: "book",
-          action: () => downloadReport(reportScope(path), reportLabel),
+          action: () => openReportPicker(path),
         });
       }
       if (canManage) {
@@ -1289,7 +1322,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
+    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, openReportPicker]
   );
 
   // Touch equivalents of right-click. Declared here so each has its menu
@@ -2240,7 +2273,7 @@ export default function Drive({
                 {showReport && (
                   <button
                     className="btn btn-secondary"
-                    onClick={() => downloadReport(reportScope(path), reportLabel)}
+                    onClick={() => openReportPicker(path)}
                     title={`Download all ${notesHere} note${
                       notesHere === 1 ? "" : "s"
                     } ${path.length ? "in this folder" : "in this drive"} as one sectioned PDF`}
@@ -2990,6 +3023,45 @@ export default function Drive({
       )}
 
       {asking && <AskDialog request={asking} onAnswer={settle} />}
+
+      {picking && (
+        <ReportPicker
+          // The subtree the button was pressed in: inside a folder that folder
+          // and what is under it, at the root the whole drive.
+          tree={
+            picking.length
+              ? (findNode(data.tree, picking[picking.length - 1])?.children ?? [])
+              : data.tree
+          }
+          rootFiles={
+            picking.length
+              ? (findNode(data.tree, picking[picking.length - 1])?.files ?? [])
+              : data.rootFiles
+          }
+          isNote={isNoteFile}
+          numbered={numbered}
+          where={
+            picking.length
+              ? picking
+                  .map((_, i) => {
+                    const node = nodeAt(picking.slice(0, i + 1));
+                    return node ? labelOf(node) : "";
+                  })
+                  .filter(Boolean)
+                  .join(" / ")
+              : "My Drive"
+          }
+          onCancel={() => setPicking(null)}
+          onBuild={(notes) => {
+            const folder = picking.length ? picking[picking.length - 1] : null;
+            setPicking(null);
+            downloadReport(
+              { folder, notes },
+              `a report of ${notes.length} note${notes.length === 1 ? "" : "s"}`
+            );
+          }}
+        />
+      )}
 
       {managing && (
         <DriveSettings brand={brand} onClose={() => setManaging(false)} />
