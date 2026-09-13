@@ -95,7 +95,10 @@ eq("no heading falls back to the file name",
    noteTitle("just text", "Alternator Notes.md"), "Alternator Notes");
 eq("a trailing-hash heading still reads", noteTitle("# Title #", "n.md"), "Title");
 eq("the leading heading is only dropped when it was used",
-   [usesLeadingHeading("# T\n\nx", "n.md"), usesLeadingHeading("x", "n.md")], [true, false]);
+   [usesLeadingHeading("# T\n\nx"), usesLeadingHeading("x"),
+    // A note named after its own heading still has a heading to drop; the
+    // report prints the words once as its own heading either way.
+    usesLeadingHeading("# n\n\nx")], [true, false, true]);
 eq("baseName drops one extension", baseName("IEC 61850.8.1 notes.md"), "IEC 61850.8.1 notes");
 eq("baseName leaves an extensionless name", baseName("README"), "README");
 
