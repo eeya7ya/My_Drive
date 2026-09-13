@@ -11,7 +11,9 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
+import AskDialog, { type AskRequest } from "./AskDialog";
 import DriveSettings from "./DriveSettings";
+import ReportPicker from "./ReportPicker";
 import FileViewer from "./FileViewer";
 import { isNoteFile, kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
@@ -164,12 +166,17 @@ export default function Drive({
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  /**
-   * Whether the drive's own settings panel is open. It doubles as the owner's
-   * sign-in, so it is offered to every viewer rather than only to somebody who
-   * can already manage the drive — that is the only way in.
-   */
+  /** Whether the drive's own settings panel is open. */
   const [managing, setManaging] = useState(false);
+  /** The question on screen, if any. See `ask` and `confirmAsk` below. */
+  const [asking, setAsking] = useState<AskRequest | null>(null);
+  /**
+   * The folder the report picker was opened in, or null when it is shut.
+   * A path rather than a boolean, so the list it shows is fixed at the moment
+   * it opened and does not change underneath somebody who navigates the drive
+   * behind it.
+   */
+  const [picking, setPicking] = useState<string[] | null>(null);
 
   // The file open in the viewer, with the revision being shown.
   const [viewing, setViewing] = useState<{
@@ -376,22 +383,49 @@ export default function Drive({
     if (!nodeAt(path)) setPath([]);
   }, [loaded, path, nodeAt]);
 
-  /* ── prompts, exactly as the canvas asks ──────────────────────────────── */
+  /* ── prompts, in the drive's own clothes ──────────────────────────────── */
 
-  const ask = (title: string, def: string) => {
-    try {
-      return window.prompt(title, def);
-    } catch {
-      return def;
-    }
-  };
-  const confirmAsk = (msg: string) => {
-    try {
-      return window.confirm(msg);
-    } catch {
-      return true;
-    }
-  };
+  /**
+   * `window.prompt` and `window.confirm` did this before. They worked, and on
+   * a phone they were a system sheet announcing the hostname on top of an
+   * otherwise finished design — for naming a folder, which is the commonest
+   * thing anybody does here.
+   *
+   * These read the same at the call site, with an await in front: a prompt
+   * resolves to the typed string or null, a confirm to true or false. The
+   * pending resolver lives in a ref because the dialog is rendered from state
+   * and has to hand its answer back to whichever callback asked.
+   */
+  const answer = useRef<((value: string | null) => void) | null>(null);
+
+  const settle = useCallback((value: string | null) => {
+    const resolve = answer.current;
+    answer.current = null;
+    setAsking(null);
+    resolve?.(value);
+  }, []);
+
+  const ask = useCallback(
+    (title: string, def: string): Promise<string | null> =>
+      new Promise((resolve) => {
+        // A second question while one is open would strand the first caller
+        // waiting forever, so the earlier one is answered as a cancel.
+        answer.current?.(null);
+        answer.current = resolve;
+        setAsking({ kind: "prompt", title, value: def });
+      }),
+    []
+  );
+
+  const confirmAsk = useCallback(
+    (title: string, opts?: { confirmLabel?: string; danger?: boolean }): Promise<boolean> =>
+      new Promise((resolve) => {
+        answer.current?.(null);
+        answer.current = (value) => resolve(value !== null);
+        setAsking({ kind: "confirm", title, ...opts });
+      }),
+    []
+  );
 
   /* ── mutations ────────────────────────────────────────────────────────── */
 
@@ -425,8 +459,8 @@ export default function Drive({
   );
 
   const addFolder = useCallback(
-    (p: string[]) => {
-      const name = ask("New folder name", "New Folder");
+    async (p: string[]) => {
+      const name = await ask("New folder name", "New Folder");
       if (name === null) return;
       const parentId = p.length ? p[p.length - 1] : null;
       run("Creating folder", async () => {
@@ -440,14 +474,14 @@ export default function Drive({
         });
       });
     },
-    [call, run, driveKey]
+    [ask, call, run, driveKey]
   );
 
   const renameNode = useCallback(
-    (p: string[]) => {
+    async (p: string[]) => {
       const node = nodeAt(p);
       if (!node) return;
-      const nn = ask("Rename folder", node.name);
+      const nn = await ask("Rename folder", node.name);
       if (nn === null || !nn.trim()) return;
       run("Renaming folder", async () => {
         await call(`/api/folders/${node.id}`, {
@@ -456,16 +490,19 @@ export default function Drive({
         });
       });
     },
-    [nodeAt, call, run]
+    [ask, nodeAt, call, run]
   );
 
   const deleteNode = useCallback(
-    (p: string[]) => {
+    async (p: string[]) => {
       const node = nodeAt(p);
       if (!node) return;
       if (
         (node.children.length || node.files.length) &&
-        !confirmAsk("Delete “" + node.name + "” and everything inside it?")
+        !(await confirmAsk("Delete “" + node.name + "” and everything inside it?", {
+          confirmLabel: "Delete",
+          danger: true,
+        }))
       ) {
         return;
       }
@@ -476,7 +513,7 @@ export default function Drive({
         if (cur === del || cur.startsWith(del + "/")) setPath(p.slice(0, -1));
       });
     },
-    [nodeAt, call, run, path]
+    [confirmAsk, nodeAt, call, run, path]
   );
 
   /** Step a folder up or down among its siblings — how a number changes. */
@@ -773,8 +810,8 @@ export default function Drive({
   );
 
   const renameFileAction = useCallback(
-    (file: DriveFile) => {
-      const nn = ask("Rename file", file.name);
+    async (file: DriveFile) => {
+      const nn = await ask("Rename file", file.name);
       if (nn === null || !nn.trim()) return;
       run("Renaming file", async () => {
         await call(`/api/files/${file.id}`, {
@@ -783,17 +820,24 @@ export default function Drive({
         });
       });
     },
-    [call, run]
+    [ask, call, run]
   );
 
   const deleteFileAction = useCallback(
-    (file: DriveFile) => {
-      if (!confirmAsk("Delete “" + file.name + "”?")) return;
+    async (file: DriveFile) => {
+      if (
+        !(await confirmAsk("Delete “" + file.name + "”?", {
+          confirmLabel: "Delete",
+          danger: true,
+        }))
+      ) {
+        return;
+      }
       run("Deleting file", async () => {
         await call(`/api/files/${file.id}`, { method: "DELETE" });
       });
     },
-    [call, run]
+    [confirmAsk, call, run]
   );
 
   const downloadFile = useCallback((file: DriveFile) => {
@@ -813,7 +857,16 @@ export default function Drive({
    */
   const downloadReport = useCallback(
     async (
-      scope: { folder?: string | null; file?: string | null; version?: string | null },
+      scope: {
+        folder?: string | null;
+        file?: string | null;
+        version?: string | null;
+        /**
+         * Exactly these notes. Sent as a body rather than in the address,
+         * because a picked list runs to hundreds of ids.
+         */
+        notes?: string[] | null;
+      },
       label: string
     ) => {
       const params = new URLSearchParams({ drive: driveKey });
@@ -825,7 +878,16 @@ export default function Drive({
       setError(null);
       setBusy(`Building ${label}`);
       try {
-        const res = await fetch(`/api/report?${params}`, { cache: "no-store" });
+        const res = await fetch(`/api/report?${params}`, {
+          cache: "no-store",
+          ...(scope.notes
+            ? {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ notes: scope.notes }),
+              }
+            : {}),
+        });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error || `Could not build the report (${res.status})`);
@@ -844,11 +906,18 @@ export default function Drive({
     [driveKey]
   );
 
-  /** The report the button in this folder would build. */
-  const reportScope = useCallback(
-    (p: string[]) => ({ folder: p.length ? p[p.length - 1] : null }),
-    []
-  );
+  /**
+   * Open the picker for a folder, rather than building the report at once.
+   *
+   * Pressing straight through it takes everything, which is what the button
+   * did before; the picker exists so that taking four notes out of forty is
+   * possible at all.
+   */
+  const openReportPicker = useCallback((p: string[]) => {
+    setMenu(null);
+    setNavOpen(false);
+    setPicking(p);
+  }, []);
 
   /**
    * How many notes the report would gather from here down. Counted on the tree
@@ -887,9 +956,35 @@ export default function Drive({
   );
 
   /** Open a file in the in-app viewer instead of downloading it. */
+  /**
+   * Whether the open viewer has a history entry of its own.
+   *
+   * Opening a file pushes one so that Back closes the viewer rather than
+   * leaving the drive — which is what Back means to somebody looking at a
+   * file, and on a phone it is the only way back they have. Without it, Back
+   * went wherever the browser had been before, and for a PDF or a drawing that
+   * was the signed storage URL the preview had loaded: expired by then, and
+   * answered with a page of XML.
+   */
+  const viewerEntry = useRef(false);
+
+  const closeViewer = useCallback(() => {
+    setViewing(null);
+    if (viewerEntry.current) {
+      viewerEntry.current = false;
+      // Pops the entry opening the file pushed, so pressing Back afterwards
+      // goes where it would have gone if the file had never been opened.
+      window.history.back();
+    }
+  }, []);
+
   const openFile = useCallback(
     (file: DriveFile, versionId: string | null = null, label: string | null = null) => {
       setViewing({ file, versionId, label });
+      if (typeof window !== "undefined" && !viewerEntry.current) {
+        viewerEntry.current = true;
+        window.history.pushState({ viewer: true }, "", window.location.href);
+      }
     },
     []
   );
@@ -949,8 +1044,10 @@ export default function Drive({
   );
 
   const restoreVersionAction = useCallback(
-    (fileId: string, v: DriveFileVersion) => {
-      if (!confirmAsk(`Make revision ${v.version} the current one?`)) return;
+    async (fileId: string, v: DriveFileVersion) => {
+      if (!(await confirmAsk(`Make revision ${v.version} the current one?`, { confirmLabel: "Restore" }))) {
+        return;
+      }
       run("Restoring revision", async () => {
         await call(`/api/files/${fileId}/versions/${v.id}/restore`, {
           method: "POST",
@@ -958,18 +1055,25 @@ export default function Drive({
         await refreshHistory(fileId);
       });
     },
-    [call, run, refreshHistory]
+    [confirmAsk, call, run, refreshHistory]
   );
 
   const deleteVersionAction = useCallback(
-    (fileId: string, v: DriveFileVersion) => {
-      if (!confirmAsk(`Delete revision ${v.version} permanently?`)) return;
+    async (fileId: string, v: DriveFileVersion) => {
+      if (
+        !(await confirmAsk(`Delete revision ${v.version} permanently?`, {
+          confirmLabel: "Delete",
+          danger: true,
+        }))
+      ) {
+        return;
+      }
       run("Deleting revision", async () => {
         await call(`/api/files/${fileId}/versions/${v.id}`, { method: "DELETE" });
         await refreshHistory(fileId);
       });
     },
-    [call, run, refreshHistory]
+    [confirmAsk, call, run, refreshHistory]
   );
 
   /** Point the view at whatever the current URL names. */
@@ -1031,9 +1135,22 @@ export default function Drive({
     applyUrl(window.location.pathname);
   }, [loaded, applyUrl]);
 
-  // Back and forward move through the drive without refetching anything.
+  /**
+   * Back and forward move through the drive without refetching anything — and,
+   * while a file is open, Back closes the file first.
+   *
+   * The viewer's own entry is consumed here rather than by navigating, so the
+   * address bar is already right and there is nothing to resolve.
+   */
   useEffect(() => {
-    const onPop = () => applyUrl(window.location.pathname);
+    const onPop = () => {
+      if (viewerEntry.current) {
+        viewerEntry.current = false;
+        setViewing(null);
+        return;
+      }
+      applyUrl(window.location.pathname);
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [applyUrl]);
@@ -1176,7 +1293,7 @@ export default function Drive({
         items.push({
           label: "Notes report (PDF)",
           icon: "book",
-          action: () => downloadReport(reportScope(path), reportLabel),
+          action: () => openReportPicker(path),
         });
       }
       if (canManage) {
@@ -1184,7 +1301,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
+    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, openReportPicker]
   );
 
   const rootMenu = useCallback(
@@ -1197,7 +1314,7 @@ export default function Drive({
         items.push({
           label: "Notes report (PDF)",
           icon: "book",
-          action: () => downloadReport(reportScope(path), reportLabel),
+          action: () => openReportPicker(path),
         });
       }
       if (canManage) {
@@ -1205,7 +1322,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, reportLabel, downloadReport, reportScope]
+    [canManage, openMenu, addFolder, triggerUpload, newNote, path, notesHere, openReportPicker]
   );
 
   // Touch equivalents of right-click. Declared here so each has its menu
@@ -2156,7 +2273,7 @@ export default function Drive({
                 {showReport && (
                   <button
                     className="btn btn-secondary"
-                    onClick={() => downloadReport(reportScope(path), reportLabel)}
+                    onClick={() => openReportPicker(path)}
                     title={`Download all ${notesHere} note${
                       notesHere === 1 ? "" : "s"
                     } ${path.length ? "in this folder" : "in this drive"} as one sectioned PDF`}
@@ -2905,6 +3022,47 @@ export default function Drive({
         />
       )}
 
+      {asking && <AskDialog request={asking} onAnswer={settle} />}
+
+      {picking && (
+        <ReportPicker
+          // The subtree the button was pressed in: inside a folder that folder
+          // and what is under it, at the root the whole drive.
+          tree={
+            picking.length
+              ? (findNode(data.tree, picking[picking.length - 1])?.children ?? [])
+              : data.tree
+          }
+          rootFiles={
+            picking.length
+              ? (findNode(data.tree, picking[picking.length - 1])?.files ?? [])
+              : data.rootFiles
+          }
+          isNote={isNoteFile}
+          numbered={numbered}
+          where={
+            picking.length
+              ? picking
+                  .map((_, i) => {
+                    const node = nodeAt(picking.slice(0, i + 1));
+                    return node ? labelOf(node) : "";
+                  })
+                  .filter(Boolean)
+                  .join(" / ")
+              : "My Drive"
+          }
+          onCancel={() => setPicking(null)}
+          onBuild={(notes) => {
+            const folder = picking.length ? picking[picking.length - 1] : null;
+            setPicking(null);
+            downloadReport(
+              { folder, notes },
+              `a report of ${notes.length} note${notes.length === 1 ? "" : "s"}`
+            );
+          }}
+        />
+      )}
+
       {managing && (
         <DriveSettings brand={brand} onClose={() => setManaging(false)} />
       )}
@@ -2914,7 +3072,7 @@ export default function Drive({
           file={viewing.file}
           versionId={viewing.versionId}
           versionLabel={viewing.label}
-          onClose={() => setViewing(null)}
+          onClose={closeViewer}
           onDownload={() =>
             viewing.versionId
               ? downloadVersion(viewing.file.id, viewing.versionId)
