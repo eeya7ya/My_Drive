@@ -52,6 +52,23 @@ export default function FileViewer({
   const qs = versionId ? `?version=${encodeURIComponent(versionId)}` : "";
   const viewUrl = `/api/files/${file.id}/view${qs}`;
   const rawUrl = `/api/files/${file.id}/raw${qs}`;
+
+  /**
+   * Which URL the PDF frame loads.
+   *
+   * `view` redirects to a signed storage URL, which is free and unlimited in
+   * size but has two costs in a frame: browsers record the frame's navigation
+   * in the back/forward list, and the signature expires. Going back into that
+   * entry later fetches an expired URL and gets storage's XML error document —
+   * a wall of markup where the drawing was, with no way out of it.
+   *
+   * `raw` streams the same bytes from this origin, so an entry left behind in
+   * the history simply loads the document again. It is capped, so anything
+   * over the cap still goes the signed route, where the risk is worth taking
+   * because the alternative is not previewing the file at all.
+   */
+  const PROXY_LIMIT = 25 * 1024 * 1024; // matches MAX_PROXY_BYTES in the raw route
+  const pdfUrl = file.sizeBytes > 0 && file.sizeBytes <= PROXY_LIMIT ? rawUrl : viewUrl;
   // A drawing is converted server-side rather than proxied as-is; see lib/dwg.ts.
   const drawingUrl = `/api/files/${file.id}/drawing${qs}`;
 
@@ -232,9 +249,11 @@ export default function FileViewer({
           />
         );
       case "pdf":
-        // The browser's own PDF viewer, from a different origin, so the
-        // document is sandboxed away from this app's cookies.
-        return <iframe src={viewUrl} style={frame} title={file.name} />;
+        // The browser's own PDF viewer. Served from this origin when the file
+        // is small enough to proxy — see `pdfUrl` — so that a history entry
+        // left behind by the frame reloads the document rather than an expired
+        // signature's error page.
+        return <iframe src={pdfUrl} style={frame} title={file.name} />;
       case "text":
         return (
           <pre
