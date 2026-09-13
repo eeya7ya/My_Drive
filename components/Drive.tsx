@@ -968,6 +968,23 @@ export default function Drive({
    */
   const viewerEntry = useRef(false);
 
+  /** A file anywhere in the drive, by id. Used to reopen one from history. */
+  const fileById = useCallback(
+    (id: string): DriveFile | null => {
+      const inTree = (nodes: TreeNode[]): DriveFile | null => {
+        for (const node of nodes) {
+          const hit = node.files.find((f) => f.id === id);
+          if (hit) return hit;
+          const deeper = inTree(node.children);
+          if (deeper) return deeper;
+        }
+        return null;
+      };
+      return data.rootFiles.find((f) => f.id === id) ?? inTree(data.tree);
+    },
+    [data.tree, data.rootFiles]
+  );
+
   const closeViewer = useCallback(() => {
     setViewing(null);
     if (viewerEntry.current) {
@@ -983,7 +1000,14 @@ export default function Drive({
       setViewing({ file, versionId, label });
       if (typeof window !== "undefined" && !viewerEntry.current) {
         viewerEntry.current = true;
-        window.history.pushState({ viewer: true }, "", window.location.href);
+        // Which file, not merely that one was open: the entry has to be enough
+        // to put the viewer back, because Forward returns to it and a marker
+        // saying "a file was here" would leave the press doing nothing.
+        window.history.pushState(
+          { viewer: { fileId: file.id, versionId, label } },
+          "",
+          window.location.href
+        );
       }
     },
     []
@@ -1137,13 +1161,34 @@ export default function Drive({
 
   /**
    * Back and forward move through the drive without refetching anything — and,
-   * while a file is open, Back closes the file first.
+   * while a file is open, Back closes the file first and Forward puts it back.
    *
-   * The viewer's own entry is consumed here rather than by navigating, so the
-   * address bar is already right and there is nothing to resolve.
+   * Three cases, in order. Landing on an entry that names a file reopens it,
+   * which is what Forward out of a closed viewer means. Landing anywhere else
+   * while the viewer is open closes it, and consumes its entry here rather than
+   * by navigating, so the address bar is already right and there is nothing to
+   * resolve. Everything else is ordinary movement through the folders.
+   *
+   * A file named by an entry but since deleted falls through to the last case,
+   * so a stale step in the history shows the drive rather than nothing at all.
    */
   useEffect(() => {
-    const onPop = () => {
+    const onPop = (event: PopStateEvent) => {
+      const state = event.state as {
+        viewer?: { fileId: string; versionId: string | null; label: string | null };
+      } | null;
+      const wanted = state?.viewer ?? null;
+
+      if (wanted) {
+        const file = fileById(wanted.fileId);
+        if (file) {
+          viewerEntry.current = true;
+          setViewing({ file, versionId: wanted.versionId, label: wanted.label });
+          return;
+        }
+        viewerEntry.current = false;
+      }
+
       if (viewerEntry.current) {
         viewerEntry.current = false;
         setViewing(null);
@@ -1153,7 +1198,7 @@ export default function Drive({
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [applyUrl]);
+  }, [applyUrl, fileById]);
 
   /* ── context menus ────────────────────────────────────────────────────── */
 
