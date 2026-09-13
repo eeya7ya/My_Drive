@@ -15,6 +15,14 @@ const nextConfig = {
     "/api/files/[id]/drawing": [
       "./node_modules/@mlightcad/libredwg-web/wasm/**",
     ],
+    /**
+     * The report is set in the app's own typeface, which means the PDF has to
+     * carry the font files themselves. They are read by path at request time
+     * rather than imported, so nothing in the module graph points at them and
+     * tracing would leave them out — giving a report that builds, deploys, and
+     * quietly comes back in Helvetica off the fallback.
+     */
+    "/api/report": ["./lib/fonts/*.ttf"],
   },
   /**
    * Left for Node to require at runtime rather than bundled: the glue is

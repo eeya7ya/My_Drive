@@ -12,12 +12,14 @@
  * tables, lists, code and pictures. It is deliberately plain. The report is a
  * record of what the notes say, not a redesign of them.
  *
- * Two limits worth knowing, both consequences of using the fourteen fonts every
- * PDF reader already has instead of shipping a megabyte of font with each
- * report:
- *   - Text is drawn in WinAnsi, which covers Latin and the punctuation notes
+ * The report is set in Geist, the app's own typeface, embedded from lib/fonts
+ * and subsetted to what each report uses. Two limits worth knowing:
+ *   - Text is folded to WinAnsi, which covers Latin and the punctuation notes
  *     actually use. Anything outside it is transliterated (see `toWinAnsi`);
- *     Arabic and CJK come through as "?" and belong in the browser print route.
+ *     Arabic and CJK come through as "?" and belong in the browser print
+ *     route. The fold is kept even though an embedded font could carry more,
+ *     because it is also what makes the built-in-font fallback safe, and
+ *     because "R <= 0.5 Ohm" beats a row of missing glyphs either way.
  *   - Pictures embed as PNG or JPEG. Anything else is named rather than drawn.
  *
  * Everything above the rendering marker is pure — no pdf-lib, no fonts, no
@@ -25,6 +27,9 @@
  * breaking without a browser or a bucket.
  */
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import fontkit from "@pdf-lib/fontkit";
 import { marked } from "marked";
 import { PDFDocument, PDFName, PDFString, StandardFonts, rgb } from "pdf-lib";
 import type { PDFFont, PDFImage, PDFPage } from "pdf-lib";
@@ -404,8 +409,21 @@ const ACCENT_MID = rgb(0.357, 0.471, 0.518); // #5B7884  --brand-primary
 const ACCENT_SOFT = rgb(0.643, 0.737, 0.776); // #A4BCC6  --color-accent-400
 const TINT = rgb(0.843, 0.922, 0.957); // #D7EBF4  --color-accent-200
 const TINT_PALE = rgb(0.902, 0.976, 1.0); // #E6F9FF  --color-accent-100
-const PANEL = rgb(0.957, 0.949, 0.941); // #F4F2F0
 const WHITE = rgb(1, 1, 1);
+
+/**
+ * The drive's second accent, which the report had never used.
+ *
+ * One colour used for everything says only "this is coloured". Two, given
+ * jobs, say what a thing is: the blue is the report's own apparatus — the
+ * numbering, the headings, the table heads, the rules that divide it — and the
+ * sage is what the note brought with it, the code it quotes and the passages
+ * it quotes from somewhere else. A reader never has to be told that; they
+ * only have to notice that the green things are all the same kind of thing.
+ */
+const SAGE = rgb(0.329, 0.38, 0.341); // #546157  --color-accent-2
+const SAGE_SOFT = rgb(0.682, 0.737, 0.671); // #AEBCAB  --color-accent-2-400
+const SAGE_PALE = rgb(0.925, 0.98, 0.933); // #ECFAEE  --color-accent-2-100
 
 const BODY_SIZE = 10.5;
 const BODY_LEAD = 15.4;
@@ -724,6 +742,72 @@ class Sheet {
   }
 }
 
+/* ── the typefaces ────────────────────────────────────────────────────────
+   The app is set in Geist; the report used to be set in Helvetica, because
+   Helvetica is one of the fourteen faces every PDF reader already owns and
+   costs nothing to use. It also looks like nothing in particular, which is the
+   wrong note for the one thing a drive sends to people who never see the
+   drive. The files live in lib/fonts — a PDF has to carry its own, since a
+   reader opening it has no stylesheet to follow — and they are the same files
+   the app's own stylesheet pulls from Google Fonts, so a heading on paper is
+   the same drawing of the same letter as the heading on screen.
+   ─────────────────────────────────────────────────────────────────────── */
+
+const FONT_DIR = join(process.cwd(), "lib", "fonts");
+
+/**
+ * Read once per process rather than once per report. A warm function builds
+ * many reports and the family is half a megabyte; reading it off disk for each
+ * one is half a megabyte of nothing.
+ */
+const faceCache = new Map<string, Uint8Array>();
+
+async function face(file: string): Promise<Uint8Array> {
+  const held = faceCache.get(file);
+  if (held) return held;
+  const bytes = new Uint8Array(await readFile(join(FONT_DIR, file)));
+  faceCache.set(file, bytes);
+  return bytes;
+}
+
+/**
+ * Embed the family, or fall back to the built-in faces.
+ *
+ * Subsetted, so a report carries only the glyphs it actually uses: tens of
+ * kilobytes rather than the 450 the whole family weighs.
+ *
+ * The fallback is the point of the try. Embedding reads six files off the
+ * deployed filesystem, and a file that did not make it into a serverless
+ * bundle is the classic way for that to fail in production having worked
+ * everywhere else. A report set in Helvetica is a small disappointment; a
+ * report that 500s because a font is missing is a broken feature, and the
+ * reader cannot tell which of the two they were owed.
+ */
+async function embedFaces(doc: PDFDocument): Promise<Fonts> {
+  try {
+    doc.registerFontkit(fontkit);
+    const load = async (file: string) =>
+      doc.embedFont(await face(file), { subset: true });
+    return {
+      regular: await load("Geist-Regular.ttf"),
+      bold: await load("Geist-Bold.ttf"),
+      italic: await load("Geist-Italic.ttf"),
+      boldItalic: await load("Geist-BoldItalic.ttf"),
+      mono: await load("GeistMono-Regular.ttf"),
+      monoBold: await load("GeistMono-Bold.ttf"),
+    };
+  } catch {
+    return {
+      regular: await doc.embedFont(StandardFonts.Helvetica),
+      bold: await doc.embedFont(StandardFonts.HelveticaBold),
+      italic: await doc.embedFont(StandardFonts.HelveticaOblique),
+      boldItalic: await doc.embedFont(StandardFonts.HelveticaBoldOblique),
+      mono: await doc.embedFont(StandardFonts.Courier),
+      monoBold: await doc.embedFont(StandardFonts.CourierBold),
+    };
+  }
+}
+
 /**
  * Build the report.
  *
@@ -735,14 +819,7 @@ class Sheet {
  */
 export async function buildReport(input: ReportInput): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  const fonts: Fonts = {
-    regular: await doc.embedFont(StandardFonts.Helvetica),
-    bold: await doc.embedFont(StandardFonts.HelveticaBold),
-    italic: await doc.embedFont(StandardFonts.HelveticaOblique),
-    boldItalic: await doc.embedFont(StandardFonts.HelveticaBoldOblique),
-    mono: await doc.embedFont(StandardFonts.Courier),
-    monoBold: await doc.embedFont(StandardFonts.CourierBold),
-  };
+  const fonts = await embedFaces(doc);
 
   // Parsed once and rendered twice. Both passes must agree on every line break,
   // so they must not re-parse and risk differing.
@@ -1042,7 +1119,19 @@ async function renderTokens(
         sheet.need(size * 4);
         drawFlow(
           sheet,
-          inline(h.tokens ?? [], { ...base, font: f.bold, size, colour: h.depth <= 2 ? ACCENT : INK }, f),
+          inline(
+            h.tokens ?? [],
+            {
+              ...base,
+              font: f.bold,
+              size,
+              // A note's own headings step down in colour as well as in size,
+              // so two levels of it are told apart at a glance rather than by
+              // measuring which line is bigger.
+              colour: h.depth === 1 ? ACCENT_DEEP : h.depth === 2 ? ACCENT : INK,
+            },
+            f
+          ),
           x,
           width
         );
@@ -1080,7 +1169,7 @@ async function renderTokens(
         await renderTokens(sheet, q.tokens ?? [], x + 16, width - 16, embed, {
           ...base,
           font: f.italic,
-          colour: MUTED,
+          colour: SAGE,
         });
         // Drawn after the contents so the bar spans exactly what it quotes;
         // a quote that broke across pages gets a bar on the last of them.
@@ -1122,7 +1211,7 @@ async function renderTokens(
 function drawQuoteBar(sheet: Sheet, x: number, from: number, to: number): void {
   const top = Math.max(from, MARGIN.top);
   if (to <= top) return;
-  sheet.rectAt(x, top, 2.4, to - top, ACCENT_SOFT);
+  sheet.rectAt(x, top, 2.4, to - top, SAGE_SOFT);
 }
 
 /** A paragraph that is one picture and nothing else. */
@@ -1243,10 +1332,11 @@ function drawCode(sheet: Sheet, code: string, x: number, width: number): void {
     const fit = Math.max(1, Math.floor((sheet.room - pad * 2) / lead));
     const chunk = lines.slice(i, i + fit);
     const panel = chunk.length * lead + pad * 2;
-    sheet.rect(x, width, panel, PANEL);
-    // The accent edge down the left, the same one the app draws on a listing.
-    // It also marks where a listing broken across pages picks up again.
-    sheet.rect(x, 2.4, panel, ACCENT_SOFT);
+    sheet.rect(x, width, panel, SAGE_PALE);
+    // The edge down the left, in the second accent, which is what marks code
+    // and quotation apart from the report's own furniture. It also shows where
+    // a listing broken across pages picks up again.
+    sheet.rect(x, 2.4, panel, SAGE_SOFT);
     sheet.down(pad);
     for (const line of chunk) {
       sheet.text(toWinAnsi(line), x + pad, { font: f.mono, size, colour: INK }, size + 1);
@@ -1386,7 +1476,7 @@ function inline(tokens: Token[], style: Style, f: Fonts, out: Atom[] = []): Atom
       case "codespan":
         out.push({
           text: toWinAnsi((token as Tokens.Codespan).text ?? ""),
-          style: { ...style, font: f.mono, size: style.size * 0.92, colour: ACCENT },
+          style: { ...style, font: f.mono, size: style.size * 0.92, colour: SAGE },
         });
         break;
       case "link": {
