@@ -1,0 +1,353 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   The minutes-of-meeting sheet, and the workbench around it.
+
+   This is a port of the ADVEC "Minutes of Meeting" letterhead, kept to the
+   values the design was drawn with rather than the app's own tokens: the page
+   is a document that leaves the screen on ADVEC's letterhead, so it is dark
+   ink on white paper whatever theme the drive was showing, and its palette,
+   rules and type sizes are the brand's, not the drive's.
+
+   The sheet is sized in millimetres and the type in pixels on purpose. A
+   printed px is exactly 1/96in, so the 15px body and 650px measure the design
+   was drawn at survive the trip to paper unchanged, while the page box itself
+   is stated in the units a printer thinks in and lands on A4 exactly.
+
+   Everything here is scoped under .mom-*, and the file is imported by the
+   /MOM page alone — including its @page rule, which sets the margins this
+   document needs and the app's own print route must not inherit.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* The four latin subsets the sheet actually sets. Plex Sans ships as one
+   variable file per subset — hence a single face carrying the whole 100–700
+   range rather than one per weight — while Plex Mono is static, so its two
+   weights are two files. The rest of Google's subsets (cyrillic, greek,
+   vietnamese) are left behind: a third of a megabyte for glyphs a letterhead
+   in English never asks for. */
+@font-face {
+  font-family: "IBM Plex Sans"; font-style: normal; font-weight: 100 700;
+  font-display: swap; src: url("/assets/fonts/ibm-plex-sans-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Sans"; font-style: normal; font-weight: 100 700;
+  font-display: swap; src: url("/assets/fonts/ibm-plex-sans-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400;
+  font-display: swap; src: url("/assets/fonts/ibm-plex-mono-400-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500;
+  font-display: swap; src: url("/assets/fonts/ibm-plex-mono-500-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+.mom {
+  /* The letterhead's palette, named once so the sheet and the workbench that
+     surrounds it cannot drift apart. */
+  --mom-ink: #16262E;        /* Body text that was actually typed. */
+  --mom-navy: #092F3D;       /* Headings, section rules, the letterhead bar. */
+  --mom-red: #B72025;        /* The accent: section numbers and the bar's tab. */
+  --mom-label: #5B6B75;      /* Field captions. */
+  --mom-muted: #6E7C85;      /* Placeholders standing in for unfilled fields. */
+  --mom-line: #C9D2D7;       /* Table and grid rules. */
+  --mom-head: #EEF2F4;       /* Table header fill. */
+  --mom-sans: "IBM Plex Sans", "Geist", system-ui, sans-serif;
+  --mom-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+/* ── The workbench ────────────────────────────────────────────────────────
+   Form on the left, the sheet on the right, each scrolling independently so
+   a long minute does not drag the field you are typing in off the screen.
+   Below 1100px they stack, form first: on a phone the sheet is a preview you
+   glance at, not a thing that can be read at full size anyway.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.mom-bar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 13px;
+}
+.mom-bar-title { font-weight: 600; }
+.mom-bar-note { color: color-mix(in srgb, var(--color-text) 62%, transparent); }
+.mom-bar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.mom-body {
+  display: grid;
+  grid-template-columns: minmax(360px, 460px) 1fr;
+  align-items: start;
+}
+.mom-form {
+  padding: 18px 18px 120px;
+  border-right: 1px solid var(--color-divider);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+.mom-preview {
+  padding: 24px 16px 80px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: color-mix(in srgb, var(--color-text) 6%, var(--color-bg));
+}
+@media (max-width: 1100px) {
+  .mom-body { grid-template-columns: 1fr; }
+  .mom-form, .mom-preview { max-height: none; overflow: visible; border-right: 0; }
+  .mom-form { border-bottom: 1px solid var(--color-divider); padding-bottom: 24px; }
+}
+
+.mom-group { margin-bottom: 20px; }
+.mom-group > summary {
+  cursor: pointer; list-style: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+}
+.mom-group > summary::-webkit-details-marker { display: none; }
+.mom-group > summary::after { content: "+"; font-family: var(--font-mono); opacity: .55; }
+.mom-group[open] > summary::after { content: "−"; }
+.mom-group-fields { padding-top: 12px; }
+
+.mom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mom-grid-1 { grid-template-columns: 1fr; }
+.mom-span { grid-column: 1 / -1; }
+
+.mom-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mom-field > label {
+  font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent);
+}
+.mom-field .input { width: 100%; }
+.mom-field textarea.input { resize: vertical; min-height: 66px; line-height: 1.5; }
+
+/* A repeating entry — one attendee, one action — as a small card, so it stays
+   obvious which fields belong together once there are eight of them. */
+.mom-row {
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  margin-bottom: 10px;
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+.mom-row-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+.mom-row-tools { display: flex; align-items: center; gap: 4px; }
+.mom-row-tools .btn { width: 28px; height: 28px; padding: 0; font-size: 14px; line-height: 1; }
+
+.mom-logo-pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mom-logo-pick img {
+  height: 34px; width: auto; display: block;
+  background: #fff; border: 1px solid var(--color-divider); padding: 3px 6px;
+}
+.mom-hint {
+  margin: 8px 0 0; font-size: 11px; line-height: 1.5;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.mom-error {
+  margin: 8px 0 0; font-size: 12px; line-height: 1.5;
+  color: var(--color-danger);
+}
+
+/* ── The sheet ────────────────────────────────────────────────────────────
+   210mm wide with the design's own margins, so what is on the screen is the
+   page that comes out of the printer at 100%.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.mom-sheet {
+  width: 210mm;
+  margin: 0 auto;
+  padding: 17mm 19mm 15mm;
+  box-sizing: border-box;
+  background: #fff;
+  color: var(--mom-ink);
+  font-family: var(--mom-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  box-shadow: var(--shadow-md);
+  -webkit-font-smoothing: antialiased;
+  display: flex; flex-direction: column; gap: 22px;
+}
+/* A narrow screen cannot show 210mm, and a sheet that overflows sideways is
+   worse than a small one: shrink it whole, since it prints at full size
+   regardless of what the preview is scaled to. */
+@media (max-width: 900px) {
+  .mom-preview { padding: 16px 8px 60px; }
+  .mom-sheet { zoom: .44; }
+}
+@media (min-width: 901px) and (max-width: 1320px) {
+  .mom-sheet { zoom: .72; }
+}
+
+/* Letterhead */
+.mom-head { display: flex; flex-direction: column; gap: 14px; }
+.mom-logos { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.mom-logos img { height: 42px; width: auto; display: block; }
+.mom-logo-slot { min-height: 42px; display: flex; align-items: center; }
+/* Standing in for a client logo that has not been chosen. It is furniture for
+   the person filling the form in, never part of the document, so it is gone on
+   paper: a letterhead with one logo reads as deliberate, one with a dashed
+   "choose a file" box reads as a mistake. */
+.mom-logo-empty {
+  height: 42px; min-width: 150px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px dashed var(--mom-line); border-radius: 2px;
+  font-size: 10px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: #93A3AB;
+}
+.mom-rule { height: 3px; background: var(--mom-navy); display: flex; }
+.mom-rule > span { width: 96px; background: var(--mom-red); }
+.mom-titles { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.mom-doctitle {
+  font-size: 25px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--mom-navy); line-height: 1.1;
+}
+.mom-ref { text-align: right; display: flex; flex-direction: column; gap: 3px; }
+
+/* Section heading: the red number, the navy words, the 2px rule under both. */
+.mom-section { display: flex; flex-direction: column; }
+.mom-section > h2 {
+  margin: 0 0 10px;
+  border-bottom: 2px solid var(--mom-navy);
+  padding-bottom: 5px;
+  font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--mom-navy);
+}
+.mom-section > h2 > span { color: var(--mom-red); margin-right: 9px; }
+
+/* Captions and values, shared by the details grid and the signature blocks. */
+.mom-label {
+  font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--mom-label);
+}
+.mom-value { font-size: 15px; margin-top: 3px; color: var(--mom-ink); }
+.mom-mono { font-family: var(--mom-mono); font-weight: 500; }
+/* What is printed where nothing was typed. The template draws every unfilled
+   field as a bracketed prompt in the lighter ink, which is also what makes an
+   empty sheet worth printing: it comes out as a form to fill in by hand. */
+.mom-ph { color: var(--mom-muted); }
+
+.mom-details {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--mom-line); border-left: 1px solid var(--mom-line);
+}
+.mom-details > div {
+  border-right: 1px solid var(--mom-line); border-bottom: 1px solid var(--mom-line);
+  padding: 7px 10px;
+}
+
+.mom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.mom-table th {
+  border: 1px solid var(--mom-line); background: var(--mom-head);
+  padding: 6px 9px; text-align: left;
+  font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--mom-navy);
+}
+.mom-table td {
+  border: 1px solid var(--mom-line);
+  padding: 8px 9px; vertical-align: top;
+  font-size: 15px; line-height: 1.5;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.mom-table td.mom-num {
+  font-family: var(--mom-mono); font-size: 14px; color: var(--mom-ink);
+}
+/* Newlines somebody typed into a cell are meaning, not accident. */
+.mom-table td.mom-para { white-space: pre-wrap; }
+/* A date is one thing and breaks as one — "24 / 09 /" on one line and "2026"
+   on the next is how a due date stops being read at a glance. The column is
+   sized to hold the full DD / MM / YYYY, and the slightly smaller mono keeps
+   it there when somebody writes the month out instead. */
+.mom-table td.mom-date { font-size: 13px; white-space: nowrap; }
+/* A second, quieter line under a cell's main value — the company under the
+   name of whoever owns an action. */
+.mom-sub { margin-top: 2px; font-size: 12px; color: var(--mom-label); }
+
+.mom-status {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--mom-line);
+  border-radius: 2px;
+  font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.mom-status-open { border-color: #E2B4B6; background: #FBEEEF; color: #8C161A; }
+.mom-status-progress { border-color: #C9D2D7; background: var(--mom-head); color: var(--mom-navy); }
+.mom-status-closed { border-color: #BFD3C4; background: #EEF5F0; color: #2F5D42; }
+
+/* Signature blocks: a ruled space to sign over, captioned underneath. */
+.mom-signs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.mom-sign {
+  border: 1px solid var(--mom-line);
+  padding: 10px 12px 12px;
+}
+.mom-sign-space {
+  height: 56px;
+  border-bottom: 1px solid var(--mom-navy);
+  margin: 10px 0 7px;
+}
+/* Stacked rather than set against each other across the block: two lines
+   competing for one row is how the ruled date came out broken across three. */
+.mom-sign-foot { margin-top: 2px; font-size: 11px; line-height: 1.5; color: var(--mom-label); }
+.mom-sign-date {
+  margin-top: 8px;
+  font-family: var(--mom-mono); font-size: 11px; white-space: nowrap;
+  color: var(--mom-label);
+}
+
+.mom-note {
+  border-top: 1px solid var(--mom-line);
+  padding-top: 10px;
+  font-size: 11px; line-height: 1.55; color: var(--mom-label);
+  white-space: pre-wrap;
+}
+.mom-note strong { color: var(--mom-navy); font-weight: 600; }
+
+/* ── Paper ────────────────────────────────────────────────────────────────
+   The margins live on @page rather than on the sheet, so the pages after the
+   first get them too — a sheet carrying its own padding would run the second
+   page's table right to the edge of the paper.
+   ─────────────────────────────────────────────────────────────────────── */
+
+@page { size: A4; margin: 16mm 19mm 14mm; }
+
+@media print {
+  .mom-bar, .mom-form, .mom-logo-empty { display: none !important; }
+
+  html, body, .mom, .mom-preview { background: #fff !important; }
+  body, .mom { min-height: 0; }
+
+  .mom-body { display: block; }
+  .mom-preview { padding: 0; max-height: none; overflow: visible; }
+  .mom-sheet {
+    width: auto; margin: 0; padding: 0;
+    box-shadow: none;
+    zoom: 1;
+    /* Backgrounds are the design here — the header fill and the red tab on the
+       letterhead rule carry meaning — so ask for them rather than let the
+       browser drop them to save ink. */
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .mom-sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Breaks fall between things rather than through them: a heading is never
+     stranded at the foot of a page, a row never split across two, and a long
+     table repeats its column headings on every page it reaches. */
+  .mom-section > h2 { break-after: avoid-page; break-inside: avoid; }
+  .mom-head, .mom-sign, .mom-details > div { break-inside: avoid; }
+  .mom-table thead { display: table-header-group; }
+  .mom-table tr { break-inside: avoid; }
+}
