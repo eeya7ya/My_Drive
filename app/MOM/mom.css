@@ -129,8 +129,8 @@
 .mom-field .input { width: 100%; }
 .mom-field textarea.input { resize: vertical; min-height: 66px; line-height: 1.5; }
 
-/* A repeating entry — one attendee, one action — as a small card, so it stays
-   obvious which fields belong together once there are eight of them. */
+/* A repeating entry — one attendee, one discussion point — as a small card, so
+   it stays obvious which fields belong together once there are eight of them. */
 .mom-row {
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
@@ -227,7 +227,7 @@
 }
 .mom-section > h2 > span { color: var(--mom-red); margin-right: 9px; }
 
-/* Captions and values, shared by the details grid and the signature blocks. */
+/* Captions and values, used by the letterhead and the details grid. */
 .mom-label {
   font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
   color: var(--mom-label);
@@ -267,46 +267,7 @@
 }
 /* Newlines somebody typed into a cell are meaning, not accident. */
 .mom-table td.mom-para { white-space: pre-wrap; }
-/* A date is one thing and breaks as one — "24 / 09 /" on one line and "2026"
-   on the next is how a due date stops being read at a glance. The column is
-   sized to hold the full DD / MM / YYYY, and the slightly smaller mono keeps
-   it there when somebody writes the month out instead. */
-.mom-table td.mom-date { font-size: 13px; white-space: nowrap; }
-/* A second, quieter line under a cell's main value — the company under the
-   name of whoever owns an action. */
-.mom-sub { margin-top: 2px; font-size: 12px; color: var(--mom-label); }
 
-.mom-status {
-  display: inline-block;
-  padding: 1px 7px;
-  border: 1px solid var(--mom-line);
-  border-radius: 2px;
-  font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
-  white-space: nowrap;
-}
-.mom-status-open { border-color: #E2B4B6; background: #FBEEEF; color: #8C161A; }
-.mom-status-progress { border-color: #C9D2D7; background: var(--mom-head); color: var(--mom-navy); }
-.mom-status-closed { border-color: #BFD3C4; background: #EEF5F0; color: #2F5D42; }
-
-/* Signature blocks: a ruled space to sign over, captioned underneath. */
-.mom-signs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.mom-sign {
-  border: 1px solid var(--mom-line);
-  padding: 10px 12px 12px;
-}
-.mom-sign-space {
-  height: 56px;
-  border-bottom: 1px solid var(--mom-navy);
-  margin: 10px 0 7px;
-}
-/* Stacked rather than set against each other across the block: two lines
-   competing for one row is how the ruled date came out broken across three. */
-.mom-sign-foot { margin-top: 2px; font-size: 11px; line-height: 1.5; color: var(--mom-label); }
-.mom-sign-date {
-  margin-top: 8px;
-  font-family: var(--mom-mono); font-size: 11px; white-space: nowrap;
-  color: var(--mom-label);
-}
 
 .mom-note {
   border-top: 1px solid var(--mom-line);
@@ -347,7 +308,7 @@
      stranded at the foot of a page, a row never split across two, and a long
      table repeats its column headings on every page it reaches. */
   .mom-section > h2 { break-after: avoid-page; break-inside: avoid; }
-  .mom-head, .mom-sign, .mom-details > div { break-inside: avoid; }
+  .mom-head, .mom-details > div { break-inside: avoid; }
   .mom-table thead { display: table-header-group; }
   .mom-table tr { break-inside: avoid; }
 }

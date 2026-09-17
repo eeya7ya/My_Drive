@@ -46,38 +46,6 @@ interface Point {
   text: string;
 }
 
-interface Action {
-  id: string;
-  action: string;
-  responsible: string;
-  company: string;
-  due: string;
-  status: string;
-}
-
-interface Recipient {
-  id: string;
-  name: string;
-  company: string;
-  email: string;
-}
-
-interface Revision {
-  id: string;
-  rev: string;
-  date: string;
-  description: string;
-  by: string;
-}
-
-interface Signature {
-  id: string;
-  role: string;
-  name: string;
-  position: string;
-  company: string;
-}
-
 interface Mom {
   reference: string;
   title: string;
@@ -95,21 +63,12 @@ interface Mom {
   clientLogo: string | null;
   attendees: Attendee[];
   points: Point[];
-  actions: Action[];
-  nextDate: string;
-  nextTime: string;
-  nextLocation: string;
-  nextAgenda: string;
-  distribution: Recipient[];
-  revisions: Revision[];
-  signatures: Signature[];
   reviewDays: string;
   note: string;
 }
 
-/** The statuses each table offers, as the printed document words them. */
+/** The statuses the attendee table offers, as the printed document words them. */
 const ATTENDANCE = ["Present", "Apology", "Absent", "Partial", "Online"];
-const ACTION_STATUS = ["Open", "In progress", "Closed"];
 
 /**
  * The clause that makes a minute binding, and the reason this document is
@@ -120,8 +79,7 @@ const ACTION_STATUS = ["Open", "In progress", "Closed"];
 const DEFAULT_NOTE =
   "These minutes record ADVEC's understanding of the matters discussed and the decisions taken. " +
   "They are deemed accurate and accepted by all parties unless written comments are received by the preparer " +
-  "within {days} working days of the issue date stated above. Action items are binding on the responsible party " +
-  "from the date of this issue.";
+  "within {days} working days of the issue date stated above.";
 
 let seq = 0;
 /**
@@ -140,18 +98,11 @@ function blankAttendee(company = ""): Attendee {
 function blankPoint(): Point {
   return { id: rowId("pt"), subject: "", text: "" };
 }
-function blankAction(): Action {
-  return { id: rowId("act"), action: "", responsible: "", company: "", due: "", status: "Open" };
-}
-function blankRecipient(): Recipient {
-  return { id: rowId("dist"), name: "", company: "", email: "" };
-}
 
 /**
  * A new minute: the shape filled in, nothing invented. Two attendee rows
- * because a meeting has at least two sides, three discussion rows and two
- * actions because that is roughly where a real minute starts, and the two
- * signature blocks the document is issued under.
+ * because a meeting has at least two sides, and three discussion rows because
+ * that is roughly where a real minute starts.
  */
 function emptyMom(): Mom {
   return {
@@ -171,17 +122,6 @@ function emptyMom(): Mom {
     clientLogo: null,
     attendees: [blankAttendee("ADVEC"), blankAttendee()],
     points: [blankPoint(), blankPoint(), blankPoint()],
-    actions: [blankAction(), blankAction()],
-    nextDate: "",
-    nextTime: "",
-    nextLocation: "",
-    nextAgenda: "",
-    distribution: [blankRecipient()],
-    revisions: [{ id: rowId("rev"), rev: "00", date: "", description: "First issue", by: "" }],
-    signatures: [
-      { id: rowId("sig"), role: "Prepared by", name: "", position: "", company: "ADVEC" },
-      { id: rowId("sig"), role: "Accepted by", name: "", position: "", company: "" },
-    ],
     reviewDays: "5",
     note: DEFAULT_NOTE,
   };
@@ -205,16 +145,17 @@ function load(): Mom | null {
     // earlier version of this page is missing whatever has been added since,
     // and a missing array would be a crash on the first .map().
     const base = emptyMom();
-    return {
+    const merged = {
       ...base,
       ...saved,
       attendees: saved.attendees?.length ? saved.attendees : base.attendees,
       points: saved.points?.length ? saved.points : base.points,
-      actions: saved.actions?.length ? saved.actions : base.actions,
-      distribution: saved.distribution?.length ? saved.distribution : base.distribution,
-      revisions: saved.revisions?.length ? saved.revisions : base.revisions,
-      signatures: saved.signatures?.length ? saved.signatures : base.signatures,
-    };
+    } as Mom & Record<string, unknown>;
+    // The other direction: a draft written while the minute still had its
+    // later sections carries fields this one no longer has, and they would
+    // otherwise be carried forward invisibly on every save from here on.
+    for (const key of Object.keys(merged)) if (!(key in base)) delete merged[key];
+    return merged;
   } catch {
     return null;
   }
@@ -483,13 +424,6 @@ function Detail({
   );
 }
 
-function statusClass(status: string): string {
-  const s = status.trim().toLowerCase();
-  if (s === "closed" || s === "done" || s === "complete") return "mom-status mom-status-closed";
-  if (s === "in progress" || s === "ongoing") return "mom-status mom-status-progress";
-  return "mom-status mom-status-open";
-}
-
 /* ── The page ─────────────────────────────────────────────────────────── */
 
 export default function MomBuilder() {
@@ -525,7 +459,7 @@ export default function MomBuilder() {
 
   /** Change one field of one row of one of the repeating lists. */
   const setRow = useCallback(
-    <K extends "attendees" | "points" | "actions" | "distribution" | "revisions" | "signatures">(
+    <K extends "attendees" | "points">(
       key: K,
       index: number,
       patch: Partial<Mom[K][number]>
@@ -839,248 +773,6 @@ export default function MomBuilder() {
             </button>
           </Group>
 
-          <Group n="4" title="Action items">
-            {mom.actions.map((row, i) => (
-              <div className="mom-row" key={row.id}>
-                <RowHead
-                  label={`Action 4.${i + 1}`}
-                  index={i}
-                  count={mom.actions.length}
-                  onMove={(from, to) => moveRow("actions", from, to)}
-                  onRemove={(index) => removeRow("actions", index)}
-                />
-                <div className="mom-grid">
-                  <Field
-                    label="Action required"
-                    value={row.action}
-                    onChange={(v) => setRow("actions", i, { action: v })}
-                    placeholder="Issue the revised single-line diagram for comment."
-                    area
-                    rows={3}
-                    span
-                  />
-                  <Field
-                    label="Responsible"
-                    value={row.responsible}
-                    onChange={(v) => setRow("actions", i, { responsible: v })}
-                    placeholder="Name"
-                  />
-                  <Field
-                    label="Company"
-                    value={row.company}
-                    onChange={(v) => setRow("actions", i, { company: v })}
-                    placeholder="ADVEC"
-                  />
-                  <Field
-                    label="Due date"
-                    value={row.due}
-                    onChange={(v) => setRow("actions", i, { due: v })}
-                    placeholder="24 / 09 / 2026"
-                  />
-                  <Field
-                    label="Status"
-                    value={row.status}
-                    onChange={(v) => setRow("actions", i, { status: v })}
-                    options={ACTION_STATUS}
-                  />
-                </div>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="btn btn-secondary btn-block"
-              onClick={() => addRow("actions", blankAction())}
-            >
-              <Icon name="plus" size={14} /> Add action
-            </button>
-          </Group>
-
-          <Group n="5" title="Next meeting" open={false}>
-            <div className="mom-grid">
-              <Field
-                label="Date"
-                value={mom.nextDate}
-                onChange={(v) => set("nextDate", v)}
-                placeholder="01 / 10 / 2026"
-              />
-              <Field
-                label="Time"
-                value={mom.nextTime}
-                onChange={(v) => set("nextTime", v)}
-                placeholder="10:00"
-              />
-              <Field
-                label="Location"
-                value={mom.nextLocation}
-                onChange={(v) => set("nextLocation", v)}
-                placeholder="Site office"
-                span
-              />
-              <Field
-                label="Provisional agenda"
-                value={mom.nextAgenda}
-                onChange={(v) => set("nextAgenda", v)}
-                placeholder="Outstanding actions, shop-drawing status, look-ahead programme."
-                area
-                span
-              />
-            </div>
-          </Group>
-
-          <Group n="6" title="Distribution" open={false}>
-            {mom.distribution.map((row, i) => (
-              <div className="mom-row" key={row.id}>
-                <RowHead
-                  label={`Recipient ${i + 1}`}
-                  index={i}
-                  count={mom.distribution.length}
-                  onMove={(from, to) => moveRow("distribution", from, to)}
-                  onRemove={(index) => removeRow("distribution", index)}
-                />
-                <div className="mom-grid">
-                  <Field
-                    label="Name"
-                    value={row.name}
-                    onChange={(v) => setRow("distribution", i, { name: v })}
-                    placeholder="Full name"
-                  />
-                  <Field
-                    label="Company"
-                    value={row.company}
-                    onChange={(v) => setRow("distribution", i, { company: v })}
-                    placeholder="ADVEC"
-                  />
-                  <Field
-                    label="Email"
-                    value={row.email}
-                    onChange={(v) => setRow("distribution", i, { email: v })}
-                    placeholder="name@company.com"
-                    span
-                  />
-                </div>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="btn btn-secondary btn-block"
-              onClick={() => addRow("distribution", blankRecipient())}
-            >
-              <Icon name="plus" size={14} /> Add recipient
-            </button>
-          </Group>
-
-          <Group n="7" title="Revision history" open={false}>
-            {mom.revisions.map((row, i) => (
-              <div className="mom-row" key={row.id}>
-                <RowHead
-                  label={`Revision ${i + 1}`}
-                  index={i}
-                  count={mom.revisions.length}
-                  onMove={(from, to) => moveRow("revisions", from, to)}
-                  onRemove={(index) => removeRow("revisions", index)}
-                />
-                <div className="mom-grid">
-                  <Field
-                    label="Rev."
-                    value={row.rev}
-                    onChange={(v) => setRow("revisions", i, { rev: v })}
-                    placeholder="00"
-                  />
-                  <Field
-                    label="Date"
-                    value={row.date}
-                    onChange={(v) => setRow("revisions", i, { date: v })}
-                    placeholder="17 / 09 / 2026"
-                  />
-                  <Field
-                    label="Description"
-                    value={row.description}
-                    onChange={(v) => setRow("revisions", i, { description: v })}
-                    placeholder="First issue"
-                    span
-                  />
-                  <Field
-                    label="Prepared by"
-                    value={row.by}
-                    onChange={(v) => setRow("revisions", i, { by: v })}
-                    placeholder="Initials"
-                    span
-                  />
-                </div>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="btn btn-secondary btn-block"
-              onClick={() =>
-                addRow("revisions", {
-                  id: rowId("rev"),
-                  rev: "",
-                  date: "",
-                  description: "",
-                  by: "",
-                })
-              }
-            >
-              <Icon name="plus" size={14} /> Add revision
-            </button>
-          </Group>
-
-          <Group n="8" title="Approval & signatures" open={false}>
-            {mom.signatures.map((row, i) => (
-              <div className="mom-row" key={row.id}>
-                <RowHead
-                  label={row.role || `Signature ${i + 1}`}
-                  index={i}
-                  count={mom.signatures.length}
-                  onMove={(from, to) => moveRow("signatures", from, to)}
-                  onRemove={(index) => removeRow("signatures", index)}
-                />
-                <div className="mom-grid">
-                  <Field
-                    label="Role"
-                    value={row.role}
-                    onChange={(v) => setRow("signatures", i, { role: v })}
-                    placeholder="Prepared by"
-                  />
-                  <Field
-                    label="Company"
-                    value={row.company}
-                    onChange={(v) => setRow("signatures", i, { company: v })}
-                    placeholder="ADVEC"
-                  />
-                  <Field
-                    label="Name"
-                    value={row.name}
-                    onChange={(v) => setRow("signatures", i, { name: v })}
-                    placeholder="Full name"
-                  />
-                  <Field
-                    label="Position"
-                    value={row.position}
-                    onChange={(v) => setRow("signatures", i, { position: v })}
-                    placeholder="Project manager"
-                  />
-                </div>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="btn btn-secondary btn-block"
-              onClick={() =>
-                addRow("signatures", {
-                  id: rowId("sig"),
-                  role: "",
-                  name: "",
-                  position: "",
-                  company: "",
-                })
-              }
-            >
-              <Icon name="plus" size={14} /> Add signature
-            </button>
-          </Group>
-
           <Group n="—" title="Footer note" open={false}>
             <div className="mom-grid mom-grid-1">
               <Field
@@ -1240,157 +932,6 @@ export default function MomBuilder() {
                   ))}
                 </tbody>
               </table>
-            </section>
-
-            {/* 4 · Action items */}
-            <section className="mom-section">
-              <h2>
-                <span>4</span>Action Items
-              </h2>
-              <table className="mom-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: "7%" }}>Ref.</th>
-                    <th style={{ width: "39%" }}>Action required</th>
-                    <th style={{ width: "17%" }}>Responsible</th>
-                    <th style={{ width: "20%" }}>Due date</th>
-                    <th style={{ width: "17%" }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mom.actions.map((row, i) => (
-                    <tr key={row.id}>
-                      <td className="mom-num">4.{i + 1}</td>
-                      <td className="mom-para">
-                        <Cell value={row.action} placeholder="[Action required]" />
-                      </td>
-                      <td>
-                        <Cell value={row.responsible} placeholder="[Name]" />
-                        {row.company.trim() ? <div className="mom-sub">{row.company.trim()}</div> : null}
-                      </td>
-                      <td className="mom-num mom-date">
-                        <Cell value={row.due} placeholder="[DD / MM / YYYY]" />
-                      </td>
-                      <td>
-                        <span className={statusClass(row.status)}>{row.status || "Open"}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-
-            {/* 5 · Next meeting */}
-            <section className="mom-section">
-              <h2>
-                <span>5</span>Next Meeting
-              </h2>
-              <div className="mom-details">
-                <Detail label="Date" value={mom.nextDate} placeholder="[DD / MM / YYYY]" mono />
-                <Detail label="Time" value={mom.nextTime} placeholder="[00:00]" mono />
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <div className="mom-label">Location</div>
-                  <Val value={mom.nextLocation} placeholder="[Site / office / online]" />
-                </div>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <div className="mom-label">Provisional agenda</div>
-                  <div
-                    className={`mom-value${mom.nextAgenda.trim() ? "" : " mom-ph"}`}
-                    style={{ whiteSpace: "pre-wrap" }}
-                  >
-                    {mom.nextAgenda.trim() || "[Items carried forward, and anything tabled for the next meeting.]"}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* 6 · Distribution list */}
-            <section className="mom-section">
-              <h2>
-                <span>6</span>Distribution
-              </h2>
-              <table className="mom-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: "5%" }}>#</th>
-                    <th style={{ width: "30%" }}>Name</th>
-                    <th style={{ width: "27%" }}>Company</th>
-                    <th style={{ width: "38%" }}>Email</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mom.distribution.map((row, i) => (
-                    <tr key={row.id}>
-                      <td className="mom-num">{i + 1}</td>
-                      <td>
-                        <Cell value={row.name} placeholder="[Full name]" />
-                      </td>
-                      <td>
-                        <Cell value={row.company} placeholder="[Company]" />
-                      </td>
-                      <td>
-                        <Cell value={row.email} placeholder="[name@company.com]" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-
-            {/* 7 · Revision history */}
-            <section className="mom-section">
-              <h2>
-                <span>7</span>Revision History
-              </h2>
-              <table className="mom-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: "9%" }}>Rev.</th>
-                    <th style={{ width: "22%" }}>Date</th>
-                    <th style={{ width: "51%" }}>Description</th>
-                    <th style={{ width: "18%" }}>By</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mom.revisions.map((row) => (
-                    <tr key={row.id}>
-                      <td className="mom-num">
-                        <Cell value={row.rev} placeholder="00" />
-                      </td>
-                      <td className="mom-num mom-date">
-                        <Cell value={row.date} placeholder="[DD / MM / YYYY]" />
-                      </td>
-                      <td>
-                        <Cell value={row.description} placeholder="[What changed in this revision]" />
-                      </td>
-                      <td>
-                        <Cell value={row.by} placeholder="[Initials]" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-
-            {/* 8 · Approval and signatures */}
-            <section className="mom-section">
-              <h2>
-                <span>8</span>Approval &amp; Signatures
-              </h2>
-              <div className="mom-signs">
-                {mom.signatures.map((row) => (
-                  <div className="mom-sign" key={row.id}>
-                    <div className="mom-label">{row.role.trim() || "Signature"}</div>
-                    <div className="mom-sign-space" />
-                    <Val value={row.name} placeholder="[Full name]" />
-                    <div className="mom-sign-foot">
-                      <Cell value={row.position} placeholder="[Position]" />
-                      {row.company.trim() ? ` · ${row.company.trim()}` : null}
-                    </div>
-                    <div className="mom-sign-date">Date: ____ / ____ / ________</div>
-                  </div>
-                ))}
-              </div>
             </section>
 
             {/* The clause the minute is issued under. */}
