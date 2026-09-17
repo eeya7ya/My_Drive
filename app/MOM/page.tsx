@@ -5,11 +5,14 @@ import "./mom.css";
 /**
  * The minutes-of-meeting generator, at /MOM.
  *
- * Deliberately open: it holds nothing from the database and writes nothing to
- * it, so there is nothing here to gate. A minute is typed into the browser,
- * laid out on ADVEC's letterhead, and printed to PDF; it never reaches the
- * server, which is also why nothing a visitor types can leak from one caller
- * to the next.
+ * Open, by the owner's decision, and now with a table behind it: a minute is
+ * typed into the browser, laid out on ADVEC's letterhead, printed to PDF, and
+ * saved to D1 so it can be reopened from any machine. Since there is no
+ * sign-in, that means anyone who reaches this address can list, open, edit and
+ * delete every saved minute. What stands in for a gate is lib/mom.ts, which
+ * cuts an incoming save down to a document of known shape and bounded size,
+ * and lib/minutes.ts, which rations writes per caller and caps how many
+ * minutes may exist at all.
  *
  * It sits at the site root rather than inside a drive so that "MOM" cannot
  * shadow a folder in one — the same reasoning that put /print there — and the
@@ -18,9 +21,10 @@ import "./mom.css";
  * note printer must not inherit.
  *
  * Temporary, as asked. Nothing else in the app links to it or imports from it,
- * so the route folder, the component and the stylesheet can be deleted in one
- * go when it has served its purpose; only the ADVEC mark in public/assets and
- * the reserved slug would be left behind.
+ * so the route folder, the component, the stylesheet, app/api/mom, lib/mom.ts
+ * and lib/minutes.ts can be deleted in one go when it has served its purpose;
+ * what would be left behind is the ADVEC mark in public/assets, the reserved
+ * slug, and a `minutes` table to drop.
  */
 export const metadata: Metadata = {
   title: "Minutes of Meeting — ADVEC",

@@ -16,56 +16,35 @@
  * printer, because both are laid out from the same stylesheet, and "Save as
  * PDF" is the destination the reader picks.
  *
- * Nothing here touches the database or the bucket. The route is open and
- * temporary, so the minute lives in this tab — kept in localStorage between
- * reloads so a mis-tap does not cost an hour's typing — and leaves as a PDF.
- * The client's logo is read into a data URL in the browser and never uploaded.
+ * A minute lives in two places, and the difference matters. The draft is in
+ * this tab, written to localStorage on every keystroke so a mis-tap does not
+ * cost an hour's typing; it is private to this browser and survives a reload,
+ * nothing more. Saving puts it in the database, where it can be listed and
+ * reopened from any machine — and, because /MOM has no sign-in, by anyone who
+ * reaches the address. The bar keeps the two apart in as many words: a minute
+ * is "not saved to the database yet" until it has been.
+ *
+ * The client's logo rides along inside the document as a data URL. It is drawn
+ * into the letterhead from the file the person picked and, until they save,
+ * never leaves the browser.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { momLabel, type Attendee, type MomDoc, type MomSummary, type Point } from "@/lib/mom";
 
 /* ── What a minute is ─────────────────────────────────────────────────────
+   The shape itself lives in lib/mom.ts, because the route handler that saves
+   it has to validate against the same definition — and does not get to trust
+   this file, since /MOM is open and a save can arrive from anywhere.
+
    Rows carry an id rather than being keyed by their position, so that React
    keeps the field you are typing in when a row above is deleted or moved.
    Everything is a string: this is a document, and a half-typed date is a
    legitimate state to be in.
    ─────────────────────────────────────────────────────────────────────── */
 
-interface Attendee {
-  id: string;
-  name: string;
-  company: string;
-  position: string;
-  status: string;
-}
-
-interface Point {
-  id: string;
-  subject: string;
-  text: string;
-}
-
-interface Mom {
-  reference: string;
-  title: string;
-  meetingNo: string;
-  meetingType: string;
-  project: string;
-  client: string;
-  date: string;
-  timeFrom: string;
-  timeTo: string;
-  location: string;
-  preparedBy: string;
-  issueDate: string;
-  revision: string;
-  clientLogo: string | null;
-  attendees: Attendee[];
-  points: Point[];
-  reviewDays: string;
-  note: string;
-}
+type Mom = MomDoc;
 
 /** The statuses the attendee table offers, as the printed document words them. */
 const ATTENDANCE = ["Present", "Apology", "Absent", "Partial", "Online"];
@@ -135,6 +114,8 @@ function emptyMom(): Mom {
    ─────────────────────────────────────────────────────────────────────── */
 
 const STORE_KEY = "advec:mom:v1";
+/** The saved minute this draft is a copy of, so a reload keeps the link. */
+const SAVED_KEY = "advec:mom:v1:saved";
 
 function load(): Mom | null {
   try {
@@ -424,12 +405,49 @@ function Detail({
   );
 }
 
+/** "14:32" — enough to tell one save from the next within a session. */
+function timeOfDay(at: number): string {
+  return new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** When a saved minute was last written, as the picker shows it. */
+function stamp(at: number): string {
+  const d = new Date(at);
+  const today = new Date();
+  const sameDay =
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear();
+  return sameDay
+    ? timeOfDay(at)
+    : d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" });
+}
+
 /* ── The page ─────────────────────────────────────────────────────────── */
+
+/**
+ * The minute's relationship to its row in the database: which row, when it
+ * was last written, and what was written — the snapshot is how "there are
+ * unsaved changes" is answered without asking the server.
+ *
+ * `at: 0` means the link was restored from a reload rather than from a save
+ * this session, so the time is not known and is not claimed.
+ */
+interface Saved {
+  id: string;
+  at: number;
+  snapshot: string;
+}
 
 export default function MomBuilder() {
   const [mom, setMom] = useState<Mom>(emptyMom);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<Saved | null>(null);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const [list, setList] = useState<MomSummary[] | null>(null);
   const sheet = useRef<HTMLDivElement>(null);
   const logoInput = useRef<HTMLInputElement>(null);
   // Nothing is written until the saved minute has been read back, or the first
@@ -437,8 +455,18 @@ export default function MomBuilder() {
   const restored = useRef(false);
 
   useEffect(() => {
-    const saved = load();
-    if (saved) setMom(saved);
+    const draft = load();
+    if (draft) setMom(draft);
+    try {
+      const id = window.localStorage.getItem(SAVED_KEY);
+      // No snapshot to compare against after a reload, so the minute counts as
+      // changed until it is saved again. That is the safe way round: offering
+      // a save that turns out to be unnecessary costs a click, and withholding
+      // one that was needed costs the work.
+      if (id) setSaved({ id, at: 0, snapshot: "" });
+    } catch {
+      // A browser that refuses storage simply starts unlinked.
+    }
     restored.current = true;
   }, []);
 
@@ -446,11 +474,21 @@ export default function MomBuilder() {
     if (!restored.current) return;
     try {
       window.localStorage.setItem(STORE_KEY, JSON.stringify(mom));
-      setSaveError(null);
+      setDraftError(null);
     } catch {
-      setSaveError("This browser will not keep a draft — the minute is safe until you close the tab.");
+      setDraftError("This browser will not keep a draft — the minute is safe until you close the tab.");
     }
   }, [mom]);
+
+  useEffect(() => {
+    if (!restored.current) return;
+    try {
+      if (saved) window.localStorage.setItem(SAVED_KEY, saved.id);
+      else window.localStorage.removeItem(SAVED_KEY);
+    } catch {
+      // Same as above: the link is a convenience, not the record.
+    }
+  }, [saved]);
 
   /** Change one top-level field. */
   const set = useCallback(<K extends keyof Mom>(key: K, value: Mom[K]) => {
@@ -510,10 +548,123 @@ export default function MomBuilder() {
     window.print();
   }, []);
 
+  /* ── The database ───────────────────────────────────────────────────────
+     Four calls against /api/mom. Each one reports what went wrong in the bar
+     rather than throwing: the minute on screen is the work, and a failed save
+     must never be allowed to take it down with it.
+     ───────────────────────────────────────────────────────────────────── */
+
+  /** Ask the server what a response meant, preferring its own words. */
+  const problem = useCallback(async (res: Response, fallback: string) => {
+    const body = await res.json().catch(() => null);
+    return new Error(body?.error || `${fallback} (${res.status})`);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/mom", { cache: "no-store" });
+      if (!res.ok) throw await problem(res, "Could not read the saved minutes");
+      setList((await res.json()) as MomSummary[]);
+      setDbError(null);
+    } catch (e) {
+      setList([]);
+      setDbError(e instanceof Error ? e.message : "Could not read the saved minutes");
+    }
+  }, [problem]);
+
+  /** Write the minute: a new row, or the row it was opened from. */
+  const save = useCallback(async () => {
+    setBusy(true);
+    setDbError(null);
+    // Taken before the request, so that edits made while it is in flight are
+    // still counted as unsaved rather than being marked clean by its reply.
+    const sent = JSON.stringify(mom);
+    try {
+      const res = await fetch(saved ? `/api/mom/${saved.id}` : "/api/mom", {
+        method: saved ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: sent,
+      });
+
+      // The row was deleted — by another tab, or by somebody else, since
+      // anyone may delete one here. Unlink rather than fail, so the next press
+      // saves the work as a new minute instead of losing it.
+      if (res.status === 404 && saved) {
+        setSaved(null);
+        throw new Error("That minute is no longer saved. Press Save again to store it as a new one.");
+      }
+      if (!res.ok) throw await problem(res, "Could not save this minute");
+
+      const summary = (await res.json()) as MomSummary;
+      setSaved({ id: summary.id, at: summary.modifiedAt, snapshot: sent });
+      if (list) refresh();
+    } catch (e) {
+      setDbError(e instanceof Error ? e.message : "Could not save this minute");
+    } finally {
+      setBusy(false);
+    }
+  }, [mom, saved, list, refresh, problem]);
+
+  /** Open a saved minute back into the form. */
+  const openSaved = useCallback(
+    async (id: string) => {
+      setBusy(true);
+      setDbError(null);
+      try {
+        const res = await fetch(`/api/mom/${id}`, { cache: "no-store" });
+        if (!res.ok) throw await problem(res, "Could not open that minute");
+        const found = (await res.json()) as { id: string; doc: Mom; modifiedAt: number };
+        setMom(found.doc);
+        // The snapshot is what was just put on screen, so a minute opened and
+        // not touched does not present itself as having unsaved changes.
+        setSaved({ id: found.id, at: found.modifiedAt, snapshot: JSON.stringify(found.doc) });
+        setListOpen(false);
+        setLogoError(null);
+        if (logoInput.current) logoInput.current.value = "";
+      } catch (e) {
+        setDbError(e instanceof Error ? e.message : "Could not open that minute");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [problem]
+  );
+
+  const removeSaved = useCallback(
+    async (row: MomSummary) => {
+      if (!window.confirm(`Delete "${momLabel(row)}"? This cannot be undone.`)) return;
+      setBusy(true);
+      setDbError(null);
+      try {
+        const res = await fetch(`/api/mom/${row.id}`, { method: "DELETE" });
+        if (!res.ok && res.status !== 404) throw await problem(res, "Could not delete that minute");
+        // The minute on screen was that row: it stays, as unsaved work.
+        if (saved?.id === row.id) setSaved(null);
+        await refresh();
+      } catch (e) {
+        setDbError(e instanceof Error ? e.message : "Could not delete that minute");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [saved, refresh, problem]
+  );
+
+  const toggleList = useCallback(() => {
+    setListOpen((open) => {
+      if (!open && list === null) refresh();
+      return !open;
+    });
+  }, [list, refresh]);
+
   const reset = useCallback(() => {
     if (!window.confirm("Clear this minute and start a new one? This cannot be undone.")) return;
     setMom(emptyMom());
+    // Unlinked, so the next save writes a new row rather than overwriting the
+    // one this form happened to be showing.
+    setSaved(null);
     setLogoError(null);
+    setDbError(null);
     if (logoInput.current) logoInput.current.value = "";
   }, []);
 
@@ -526,25 +677,102 @@ export default function MomBuilder() {
 
   const clientName = mom.client.trim();
   const note = mom.note.replace("{days}", mom.reviewDays.trim() || "5");
+  const dirty = !saved || JSON.stringify(mom) !== saved.snapshot;
+
+  /** What the bar says about where this minute stands. */
+  const status = dbError
+    ? dbError
+    : draftError
+      ? draftError
+      : !saved
+        ? "Not saved to the database yet."
+        : dirty
+          ? "Unsaved changes."
+          : saved.at
+            ? `Saved ${timeOfDay(saved.at)}.`
+            : "Saved.";
 
   return (
     <div className="mom">
       <div className="mom-bar">
         <div>
           <span className="mom-bar-title">Minutes of Meeting</span>{" "}
-          <span className="mom-bar-note">
-            {saveError ?? "ADVEC letterhead — fill the form, then save the sheet as a PDF."}
-          </span>
+          <span className={dbError || draftError ? "mom-bar-warn" : "mom-bar-note"}>{status}</span>
         </div>
         <div className="mom-bar-actions">
-          <button type="button" className="btn btn-secondary" onClick={reset}>
-            <Icon name="trash" size={14} /> New minute
+          <button type="button" className="btn btn-secondary" onClick={reset} disabled={busy}>
+            <Icon name="plus" size={14} /> New minute
+          </button>
+          <button
+            type="button"
+            className={listOpen ? "btn btn-primary" : "btn btn-secondary"}
+            onClick={toggleList}
+            aria-expanded={listOpen}
+          >
+            <Icon name="list" size={14} /> Saved minutes
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={save}
+            disabled={busy || (!dirty && Boolean(saved))}
+          >
+            <Icon name="upload" size={14} /> {saved ? "Save" : "Save to database"}
           </button>
           <button type="button" className="btn btn-primary" onClick={toPdf}>
             <Icon name="download" size={14} /> Save as PDF
           </button>
         </div>
       </div>
+
+      {listOpen ? (
+        <div className="mom-saved">
+          {list === null ? (
+            <p className="mom-saved-empty">Reading the saved minutes…</p>
+          ) : list.length === 0 ? (
+            <p className="mom-saved-empty">
+              Nothing saved yet. Press <strong>Save to database</strong> and the minute will be
+              listed here, on any machine that opens this page.
+            </p>
+          ) : (
+            <ul className="mom-saved-list">
+              {list.map((row) => (
+                <li key={row.id} className={row.id === saved?.id ? "is-open" : undefined}>
+                  <div className="mom-saved-what">
+                    <strong>{momLabel(row)}</strong>
+                    <span>
+                      {[row.client.trim(), row.project.trim(), row.meetingDate.trim()]
+                        .filter(Boolean)
+                        .join(" · ") || "No client or date yet"}
+                    </span>
+                  </div>
+                  <div className="mom-saved-when">{stamp(row.modifiedAt)}</div>
+                  <div className="mom-saved-tools">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => openSaved(row.id)}
+                      disabled={busy}
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => removeSaved(row)}
+                      disabled={busy}
+                      aria-label={`Delete ${momLabel(row)}`}
+                      title="Delete"
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       <div className="mom-body">
         {/* ── The form ─────────────────────────────────────────────────── */}

@@ -79,7 +79,54 @@
 }
 .mom-bar-title { font-weight: 600; }
 .mom-bar-note { color: color-mix(in srgb, var(--color-text) 62%, transparent); }
+.mom-bar-warn { color: var(--color-danger); }
 .mom-bar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── The saved minutes ────────────────────────────────────────────────────
+   A panel under the bar rather than a dialog: opening a saved minute replaces
+   what is on screen, so it should be plainly a part of this page and not a
+   thing that floats over it.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.mom-saved {
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-surface);
+  padding: 10px 16px 14px;
+  max-height: 44vh;
+  overflow-y: auto;
+}
+.mom-saved-empty {
+  margin: 4px 0; font-size: 13px; line-height: 1.6;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent);
+}
+.mom-saved-list { list-style: none; margin: 0; padding: 0; }
+.mom-saved-list > li {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.mom-saved-list > li:last-child { border-bottom: 0; }
+/* The row this form is currently showing. */
+.mom-saved-list > li.is-open {
+  box-shadow: inset 3px 0 0 var(--color-accent);
+  padding-left: 10px;
+}
+.mom-saved-what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mom-saved-what > strong {
+  font-size: 13px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mom-saved-what > span {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mom-saved-when {
+  font-family: var(--font-mono); font-size: 11px; white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.mom-saved-tools { display: flex; align-items: center; gap: 6px; }
+.mom-saved-tools .btn { font-size: 12px; padding: 5px 10px; }
 
 .mom-body {
   display: grid;
@@ -286,7 +333,7 @@
 @page { size: A4; margin: 16mm 19mm 14mm; }
 
 @media print {
-  .mom-bar, .mom-form, .mom-logo-empty { display: none !important; }
+  .mom-bar, .mom-saved, .mom-form, .mom-logo-empty { display: none !important; }
 
   html, body, .mom, .mom-preview { background: #fff !important; }
   body, .mom { min-height: 0; }
