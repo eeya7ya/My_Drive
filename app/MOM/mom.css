@@ -165,6 +165,50 @@
 .mom-group[open] > summary::after { content: "−"; }
 .mom-group-fields { padding-top: 12px; }
 
+/* A section the sheet is not printing. The fields stay editable — switching it
+   back on should bring back what was typed — so the heading has to carry the
+   fact, and carry it where the eye lands rather than in a tooltip. */
+.mom-group.is-hidden > summary { opacity: .6; }
+.mom-off {
+  margin-left: 8px;
+  font-size: 9px; font-style: normal; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--color-danger);
+}
+
+/* ── The switches ─────────────────────────────────────────────────────────
+   One column, because these read as a list of what the sheet contains rather
+   than as a form to fill in, and a list is read down.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.mom-toggles { display: flex; flex-direction: column; }
+/* A real group rather than a heading and a list under it: "The whole section"
+   appears three times here, and only the grouping says which section it is. */
+.mom-toggle-set {
+  border: 0; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.mom-toggle-set + .mom-toggle-set { margin-top: 12px; }
+.mom-toggle-set > legend {
+  padding: 0; margin-bottom: 4px;
+  font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.mom-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+}
+.mom-toggle:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
+.mom-toggle input { accent-color: var(--color-accent); cursor: pointer; }
+/* A column switch sits under the section switch that governs it. */
+.mom-toggle-in { padding-left: 22px; }
+.mom-toggle:has(input:disabled) { opacity: .45; cursor: default; }
+.mom-toggle:has(input:disabled):hover { background: none; }
+.mom-toggle:has(input:disabled) input { cursor: default; }
+
 .mom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .mom-grid-1 { grid-template-columns: 1fr; }
 .mom-span { grid-column: 1 / -1; }

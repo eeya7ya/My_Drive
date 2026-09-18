@@ -31,6 +31,75 @@ export interface Point {
   text: string;
 }
 
+/**
+ * What the sheet shows, and what it leaves out.
+ *
+ * Not every meeting needs every part of the form. A minute with no apologies
+ * does not need a Status column; one for an internal review does not need a
+ * client's reference number. Rather than leave those printing as empty cells
+ * and grey placeholders, each is a switch — and it belongs to the minute, not
+ * to the browser, so a minute reopened on another machine is laid out the way
+ * it was issued.
+ *
+ * Every key defaults to on, which is what makes a minute saved before this
+ * existed come back showing everything it used to.
+ */
+export interface MomShow {
+  /** The reference block on the letterhead, beside the title. */
+  reference: boolean;
+
+  /** Whole sections. */
+  details: boolean;
+  attendees: boolean;
+  points: boolean;
+  note: boolean;
+
+  /** Fields of the meeting-details grid. */
+  title: boolean;
+  meetingNo: boolean;
+  project: boolean;
+  client: boolean;
+  date: boolean;
+  time: boolean;
+  location: boolean;
+  preparedBy: boolean;
+  issueDate: boolean;
+  revision: boolean;
+
+  /** Columns of the two tables. */
+  attendeeCompany: boolean;
+  attendeePosition: boolean;
+  attendeeStatus: boolean;
+  pointSubject: boolean;
+}
+
+/**
+ * Everything on. Also the key list: `normalise` walks these names, so a switch
+ * added here is a switch the route handler accepts, and one that is not here
+ * is not a switch at all however it arrives.
+ */
+export const SHOW_ALL: MomShow = {
+  reference: true,
+  details: true,
+  attendees: true,
+  points: true,
+  note: true,
+  title: true,
+  meetingNo: true,
+  project: true,
+  client: true,
+  date: true,
+  time: true,
+  location: true,
+  preparedBy: true,
+  issueDate: true,
+  revision: true,
+  attendeeCompany: true,
+  attendeePosition: true,
+  attendeeStatus: true,
+  pointSubject: true,
+};
+
 /** The minute itself: everything the sheet prints. */
 export interface MomDoc {
   reference: string;
@@ -52,6 +121,8 @@ export interface MomDoc {
   points: Point[];
   reviewDays: string;
   note: string;
+  /** Which of the above the sheet actually prints. */
+  show: MomShow;
 }
 
 /** One row of the picker: what the list shows without reading a document. */
@@ -107,6 +178,21 @@ function logo(value: unknown): string | null {
   return value;
 }
 
+/**
+ * The switches, with anything unrecognised dropped and anything missing left
+ * on. Only a literal `false` turns a part of the sheet off: a save that omits
+ * the object, or sends a string where a boolean belongs, gets the whole
+ * document rather than a mysteriously empty one.
+ */
+function show(value: unknown): MomShow {
+  const raw = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+  const out = {} as MomShow;
+  for (const key of Object.keys(SHOW_ALL) as (keyof MomShow)[]) {
+    out[key] = raw[key] === false ? false : true;
+  }
+  return out;
+}
+
 function rows<T>(value: unknown, max: number, each: (row: Record<string, unknown>, i: number) => T): T[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -151,6 +237,7 @@ export function normalise(input: unknown): MomDoc {
     })),
     reviewDays: line(raw.reviewDays, 8),
     note: line(raw.note, MAX_NOTE),
+    show: show(raw.show),
   };
 }
 

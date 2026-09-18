@@ -32,7 +32,7 @@ const tmp = join(tmpdir(), `mom-${process.pid}.mjs`);
 writeFileSync(tmp, js);
 const m = await import(pathToFileURL(tmp).href);
 try { rmSync(tmp); } catch { /* a leftover temp file is not a test failure */ }
-const { normalise, momLabel, MAX_LINE, MAX_POINT, MAX_NOTE, MAX_LOGO,
+const { normalise, momLabel, SHOW_ALL, MAX_LINE, MAX_POINT, MAX_NOTE, MAX_LOGO,
         MAX_ATTENDEES, MAX_POINTS } = m;
 
 let pass = 0, fail = 0;
@@ -110,6 +110,25 @@ console.log("\nnormalise — the client logo is an image the browser already hol
   eq("a non-string is refused", normalise({ clientLogo: { href: "x" } }).clientLogo, null);
 }
 
+console.log("\nnormalise — the section switches");
+{
+  eq("a save with no switches shows everything", normalise({}).show, SHOW_ALL);
+  eq("a minute saved before switches existed shows everything",
+    normalise({ title: "old" }).show, SHOW_ALL);
+  const off = normalise({ show: { attendeeStatus: false, note: false } }).show;
+  eq("false turns a part off", [off.attendeeStatus, off.note], [false, false]);
+  eq("everything else stays on", [off.attendees, off.points, off.details], [true, true, true]);
+  eq("only a literal false counts — a string does not hide a section",
+    normalise({ show: { attendees: "false" } }).show.attendees, true);
+  eq("nor does 0", normalise({ show: { points: 0 } }).show.points, true);
+  eq("a switch that is not one is dropped rather than stored",
+    "wat" in normalise({ show: { wat: false } }).show, false);
+  eq("switches sent as something other than an object are ignored",
+    normalise({ show: "none" }).show, SHOW_ALL);
+  eq("the set of switches is fixed",
+    Object.keys(normalise({}).show).sort(), Object.keys(SHOW_ALL).sort());
+}
+
 console.log("\nnormalise — a document survives a round trip unchanged");
 {
   const doc = normalise({
@@ -117,8 +136,10 @@ console.log("\nnormalise — a document survives a round trip unchanged");
     attendees: [{ id: "att-1", name: "Yahya Khaled", company: "ADVEC", position: "Engineer", status: "Present" }],
     points: [{ id: "pt-1", subject: "Cable routing", text: "Moved to the north wall." }],
     reviewDays: "5", note: "A note.",
+    show: { ...SHOW_ALL, attendeeStatus: false },
   });
   eq("normalising twice changes nothing", normalise(doc), doc);
+  eq("a switched-off column survives the round trip", doc.show.attendeeStatus, false);
 }
 
 console.log("\nmomLabel — a saved minute is always findable in the list");

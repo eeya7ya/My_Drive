@@ -31,7 +31,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
-import { momLabel, type Attendee, type MomDoc, type MomSummary, type Point } from "@/lib/mom";
+import { momLabel, SHOW_ALL, type Attendee, type MomDoc, type MomShow, type MomSummary, type Point } from "@/lib/mom";
 
 /* ── What a minute is ─────────────────────────────────────────────────────
    The shape itself lives in lib/mom.ts, because the route handler that saves
@@ -103,6 +103,7 @@ function emptyMom(): Mom {
     points: [blankPoint(), blankPoint(), blankPoint()],
     reviewDays: "5",
     note: DEFAULT_NOTE,
+    show: { ...SHOW_ALL },
   };
 }
 
@@ -131,6 +132,10 @@ function load(): Mom | null {
       ...saved,
       attendees: saved.attendees?.length ? saved.attendees : base.attendees,
       points: saved.points?.length ? saved.points : base.points,
+      // A draft from before the switches existed has no `show` at all, and one
+      // from before a switch was added is missing that key: both must come
+      // back showing the part rather than hiding it.
+      show: { ...base.show, ...(saved.show ?? {}) },
     } as Mom & Record<string, unknown>;
     // The other direction: a draft written while the minute still had its
     // later sections carries fields this one no longer has, and they would
@@ -331,23 +336,61 @@ function RowHead({
   );
 }
 
-/** A collapsible block of the form, numbered to match the printed section. */
+/** One switch in the Sections panel. */
+function Toggle({
+  label,
+  on,
+  onChange,
+  disabled,
+  indent,
+}: {
+  label: string;
+  on: boolean;
+  onChange: (next: boolean) => void;
+  /** A column switch whose whole section is off has nothing to act on. */
+  disabled?: boolean;
+  indent?: boolean;
+}) {
+  return (
+    <label className={indent ? "mom-toggle mom-toggle-in" : "mom-toggle"}>
+      <input
+        type="checkbox"
+        checked={on}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+/**
+ * A collapsible block of the form, numbered to match the printed section.
+ *
+ * `hidden` marks a block whose section the sheet is not printing. The fields
+ * stay editable on purpose — switching a section back on should bring back
+ * what was typed, not an empty table — so the heading has to say plainly that
+ * what is being typed is not on the page.
+ */
 function Group({
   n,
   title,
   children,
   open,
+  hidden,
 }: {
   n: string;
   title: string;
   children: React.ReactNode;
   open?: boolean;
+  hidden?: boolean;
 }) {
   return (
-    <details className="mom-group" open={open ?? true}>
+    <details className={hidden ? "mom-group is-hidden" : "mom-group"} open={open ?? true}>
       <summary>
         <span>
           {n}&nbsp;&nbsp;{title}
+          {hidden ? <em className="mom-off">not printed</em> : null}
         </span>
       </summary>
       <div className="mom-group-fields">{children}</div>
@@ -377,6 +420,21 @@ function Val({
       {filled ? value : placeholder}
     </div>
   );
+}
+
+/**
+ * Spread the measure across whichever columns are switched on.
+ *
+ * The widths are weights, not percentages: hiding the Status column has to
+ * give its share back to the others, or a four-column table draws itself
+ * across four fifths of the page and stops. Returns undefined for a hidden
+ * column, which is also what decides whether its cells are rendered at all.
+ */
+function widths(cols: { key: string; weight: number; on: boolean }[]): Record<string, string | undefined> {
+  const total = cols.reduce((n, c) => (c.on ? n + c.weight : n), 0) || 1;
+  const out: Record<string, string | undefined> = {};
+  for (const c of cols) out[c.key] = c.on ? `${((c.weight / total) * 100).toFixed(2)}%` : undefined;
+  return out;
 }
 
 /** The same, inside a table cell. */
@@ -493,6 +551,11 @@ export default function MomBuilder() {
   /** Change one top-level field. */
   const set = useCallback(<K extends keyof Mom>(key: K, value: Mom[K]) => {
     setMom((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  /** Turn one part of the sheet on or off. */
+  const setShow = useCallback((key: keyof MomShow, on: boolean) => {
+    setMom((prev) => ({ ...prev, show: { ...prev.show, [key]: on } }));
   }, []);
 
   /** Change one field of one row of one of the repeating lists. */
@@ -677,6 +740,92 @@ export default function MomBuilder() {
 
   const clientName = mom.client.trim();
   const note = mom.note.replace("{days}", mom.reviewDays.trim() || "5");
+  const show = mom.show;
+
+  // Sections are numbered by what is printed, not by what exists: hide the
+  // attendees and the discussion points become 2, because a document that
+  // jumps from 1 to 3 reads as one with a page missing.
+  const numbered = [
+    show.details && "details",
+    show.attendees && "attendees",
+    show.points && "points",
+  ].filter(Boolean) as string[];
+  const numberOf = (key: string) => numbered.indexOf(key) + 1;
+
+  const attW = widths([
+    { key: "n", weight: 5, on: true },
+    { key: "name", weight: 29, on: true },
+    { key: "company", weight: 24, on: show.attendeeCompany },
+    { key: "position", weight: 25, on: show.attendeePosition },
+    { key: "status", weight: 17, on: show.attendeeStatus },
+  ]);
+  const ptW = widths([
+    { key: "n", weight: 9, on: true },
+    { key: "subject", weight: 24, on: show.pointSubject },
+    { key: "text", weight: 67, on: true },
+  ]);
+
+  /**
+   * The meeting-details grid, as the cells that are switched on.
+   *
+   * Built as a list rather than written out, because the grid is two columns
+   * wide and an odd number of cells would otherwise leave the last row open at
+   * the right — no cell there means no border there.
+   */
+  const details = [
+    show.title && (
+      <Detail key="title" label="Meeting title" value={mom.title} placeholder="[Meeting title]" />
+    ),
+    show.meetingNo && (
+      <Detail
+        key="no"
+        label="Meeting no. / type"
+        value={[mom.meetingNo, mom.meetingType].filter((v) => v.trim()).join(" — ")}
+        placeholder="[No.] — [Kick-off / Progress / Technical / Site]"
+      />
+    ),
+    show.project && (
+      <Detail key="project" label="Project" value={mom.project} placeholder="[Project name / package]" />
+    ),
+    show.client && <Detail key="client" label="Client" value={mom.client} placeholder="[Client name]" />,
+    show.date && <Detail key="date" label="Date" value={mom.date} placeholder="[DD / MM / YYYY]" mono />,
+    show.time && (
+      <Detail
+        key="time"
+        label="Time (from — to)"
+        value={
+          mom.timeFrom.trim() || mom.timeTo.trim()
+            ? `${mom.timeFrom.trim() || "—"} — ${mom.timeTo.trim() || "—"}`
+            : ""
+        }
+        placeholder="[00:00] — [00:00]"
+        mono
+      />
+    ),
+    show.location && (
+      <Detail key="location" label="Location" value={mom.location} placeholder="[Site / office / online]" />
+    ),
+    show.preparedBy && (
+      <Detail
+        key="by"
+        label="Prepared by"
+        value={mom.preparedBy.trim() ? `${mom.preparedBy.trim()} — ADVEC` : ""}
+        placeholder="[Name] — ADVEC"
+      />
+    ),
+    show.issueDate && (
+      <Detail key="issued" label="Issue date" value={mom.issueDate} placeholder="[DD / MM / YYYY]" mono />
+    ),
+    show.revision && (
+      <Detail
+        key="rev"
+        label="Revision"
+        value={mom.revision.trim() ? `Rev. ${mom.revision.trim()}` : ""}
+        placeholder="Rev. [00]"
+        mono
+      />
+    ),
+  ].filter(Boolean);
   const dirty = !saved || JSON.stringify(mom) !== saved.snapshot;
 
   /** What the bar says about where this minute stands. */
@@ -777,7 +926,112 @@ export default function MomBuilder() {
       <div className="mom-body">
         {/* ── The form ─────────────────────────────────────────────────── */}
         <div className="mom-form">
-          <Group n="1" title="Meeting details">
+          <Group n="—" title="Sections" open={false}>
+            <p className="mom-hint" style={{ marginTop: 0 }}>
+              Untick anything this minute should not print. The fields stay here and keep what you
+              typed, and the choice is saved with the minute — so it is laid out the same way
+              wherever it is opened.
+            </p>
+            <div className="mom-toggles">
+              <fieldset className="mom-toggle-set">
+              <legend>Letterhead</legend>
+              <Toggle
+                label="Reference no."
+                on={mom.show.reference}
+                onChange={(v) => setShow("reference", v)}
+              />
+
+              </fieldset>
+
+              <fieldset className="mom-toggle-set">
+              <legend>Meeting details</legend>
+              <Toggle
+                label="The whole section"
+                on={mom.show.details}
+                onChange={(v) => setShow("details", v)}
+              />
+              {(
+                [
+                  ["title", "Meeting title"],
+                  ["meetingNo", "Meeting no. / type"],
+                  ["project", "Project"],
+                  ["client", "Client"],
+                  ["date", "Date"],
+                  ["time", "Time (from — to)"],
+                  ["location", "Location"],
+                  ["preparedBy", "Prepared by"],
+                  ["issueDate", "Issue date"],
+                  ["revision", "Revision"],
+                ] as [keyof MomShow, string][]
+              ).map(([key, label]) => (
+                <Toggle
+                  key={key}
+                  label={label}
+                  indent
+                  disabled={!mom.show.details}
+                  on={mom.show[key]}
+                  onChange={(v) => setShow(key, v)}
+                />
+              ))}
+
+              </fieldset>
+
+              <fieldset className="mom-toggle-set">
+              <legend>Attendees</legend>
+              <Toggle
+                label="The whole section"
+                on={mom.show.attendees}
+                onChange={(v) => setShow("attendees", v)}
+              />
+              <Toggle
+                label="Company column"
+                indent
+                disabled={!mom.show.attendees}
+                on={mom.show.attendeeCompany}
+                onChange={(v) => setShow("attendeeCompany", v)}
+              />
+              <Toggle
+                label="Position column"
+                indent
+                disabled={!mom.show.attendees}
+                on={mom.show.attendeePosition}
+                onChange={(v) => setShow("attendeePosition", v)}
+              />
+              <Toggle
+                label="Status column (Present / Apology)"
+                indent
+                disabled={!mom.show.attendees}
+                on={mom.show.attendeeStatus}
+                onChange={(v) => setShow("attendeeStatus", v)}
+              />
+
+              </fieldset>
+
+              <fieldset className="mom-toggle-set">
+              <legend>Discussion points &amp; decisions</legend>
+              <Toggle
+                label="The whole section"
+                on={mom.show.points}
+                onChange={(v) => setShow("points", v)}
+              />
+              <Toggle
+                label="Subject column"
+                indent
+                disabled={!mom.show.points}
+                on={mom.show.pointSubject}
+                onChange={(v) => setShow("pointSubject", v)}
+              />
+
+              </fieldset>
+
+              <fieldset className="mom-toggle-set">
+              <legend>Foot of the page</legend>
+              <Toggle label="The note" on={mom.show.note} onChange={(v) => setShow("note", v)} />
+              </fieldset>
+            </div>
+          </Group>
+
+          <Group n="1" title="Meeting details" hidden={!mom.show.details}>
             <div className="mom-grid">
               <Field
                 label="Reference no."
@@ -916,7 +1170,7 @@ export default function MomBuilder() {
             {logoError ? <p className="mom-error">{logoError}</p> : null}
           </Group>
 
-          <Group n="2" title="Attendees">
+          <Group n="2" title="Attendees" hidden={!mom.show.attendees}>
             {mom.attendees.map((row, i) => (
               <div className="mom-row" key={row.id}>
                 <RowHead
@@ -964,7 +1218,7 @@ export default function MomBuilder() {
             </button>
           </Group>
 
-          <Group n="3" title="Discussion points & decisions">
+          <Group n="3" title="Discussion points & decisions" hidden={!mom.show.points}>
             {mom.points.map((row, i) => (
               <div className="mom-row" key={row.id}>
                 <RowHead
@@ -1001,7 +1255,7 @@ export default function MomBuilder() {
             </button>
           </Group>
 
-          <Group n="—" title="Footer note" open={false}>
+          <Group n="—" title="Footer note" open={false} hidden={!mom.show.note}>
             <div className="mom-grid mom-grid-1">
               <Field
                 label="Review period (working days)"
@@ -1045,128 +1299,119 @@ export default function MomBuilder() {
               </div>
               <div className="mom-titles">
                 <div className="mom-doctitle">Minutes of Meeting</div>
-                <div className="mom-ref">
-                  <div className="mom-label">Reference no.</div>
-                  <Val value={mom.reference} placeholder="ADV-MOM-[000]" mono />
-                </div>
+                {show.reference ? (
+                  <div className="mom-ref">
+                    <div className="mom-label">Reference no.</div>
+                    <Val value={mom.reference} placeholder="ADV-MOM-[000]" mono />
+                  </div>
+                ) : null}
               </div>
             </div>
 
             {/* 1 · Meeting details */}
-            <section className="mom-section">
-              <h2>
-                <span>1</span>Meeting Details
-              </h2>
-              <div className="mom-details">
-                <Detail label="Meeting title" value={mom.title} placeholder="[Meeting title]" />
-                <Detail
-                  label="Meeting no. / type"
-                  value={[mom.meetingNo, mom.meetingType].filter((s) => s.trim()).join(" — ")}
-                  placeholder="[No.] — [Kick-off / Progress / Technical / Site]"
-                />
-                <Detail label="Project" value={mom.project} placeholder="[Project name / package]" />
-                <Detail label="Client" value={mom.client} placeholder="[Client name]" />
-                <Detail label="Date" value={mom.date} placeholder="[DD / MM / YYYY]" mono />
-                <Detail
-                  label="Time (from — to)"
-                  value={
-                    mom.timeFrom.trim() || mom.timeTo.trim()
-                      ? `${mom.timeFrom.trim() || "—"} — ${mom.timeTo.trim() || "—"}`
-                      : ""
-                  }
-                  placeholder="[00:00] — [00:00]"
-                  mono
-                />
-                <Detail label="Location" value={mom.location} placeholder="[Site / office / online]" />
-                <Detail
-                  label="Prepared by"
-                  value={mom.preparedBy.trim() ? `${mom.preparedBy.trim()} — ADVEC` : ""}
-                  placeholder="[Name] — ADVEC"
-                />
-                <Detail label="Issue date" value={mom.issueDate} placeholder="[DD / MM / YYYY]" mono />
-                <Detail
-                  label="Revision"
-                  value={mom.revision.trim() ? `Rev. ${mom.revision.trim()}` : ""}
-                  placeholder="Rev. [00]"
-                  mono
-                />
-              </div>
-            </section>
+            {show.details && details.length > 0 ? (
+              <section className="mom-section">
+                <h2>
+                  <span>{numberOf("details")}</span>Meeting Details
+                </h2>
+                <div className="mom-details">
+                  {details}
+                  {/* Closes the grid when an odd number of cells leaves the
+                      last row half empty. It draws the same borders and holds
+                      the row's height with a non-breaking space. */}
+                  {details.length % 2 === 1 ? <div aria-hidden="true">&nbsp;</div> : null}
+                </div>
+              </section>
+            ) : null}
 
             {/* 2 · Attendees */}
-            <section className="mom-section">
-              <h2>
-                <span>2</span>Attendees
-              </h2>
-              <table className="mom-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: "5%" }}>#</th>
-                    <th style={{ width: "29%" }}>Name</th>
-                    <th style={{ width: "24%" }}>Company</th>
-                    <th style={{ width: "25%" }}>Position</th>
-                    <th style={{ width: "17%" }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mom.attendees.map((row, i) => (
-                    <tr key={row.id}>
-                      <td className="mom-num">{i + 1}</td>
-                      <td>
-                        <Cell value={row.name} placeholder="[Full name]" />
-                      </td>
-                      <td>
-                        <Cell value={row.company} placeholder="[Company]" />
-                      </td>
-                      <td>
-                        <Cell value={row.position} placeholder="[Position]" />
-                      </td>
-                      <td>
-                        <Cell value={row.status} placeholder="Present" />
-                      </td>
+            {show.attendees ? (
+              <section className="mom-section">
+                <h2>
+                  <span>{numberOf("attendees")}</span>Attendees
+                </h2>
+                <table className="mom-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: attW.n }}>#</th>
+                      <th style={{ width: attW.name }}>Name</th>
+                      {attW.company ? <th style={{ width: attW.company }}>Company</th> : null}
+                      {attW.position ? <th style={{ width: attW.position }}>Position</th> : null}
+                      {attW.status ? <th style={{ width: attW.status }}>Status</th> : null}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
+                  </thead>
+                  <tbody>
+                    {mom.attendees.map((row, i) => (
+                      <tr key={row.id}>
+                        <td className="mom-num">{i + 1}</td>
+                        <td>
+                          <Cell value={row.name} placeholder="[Full name]" />
+                        </td>
+                        {attW.company ? (
+                          <td>
+                            <Cell value={row.company} placeholder="[Company]" />
+                          </td>
+                        ) : null}
+                        {attW.position ? (
+                          <td>
+                            <Cell value={row.position} placeholder="[Position]" />
+                          </td>
+                        ) : null}
+                        {attW.status ? (
+                          <td>
+                            <Cell value={row.status} placeholder="Present" />
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            ) : null}
 
             {/* 3 · Discussion points and decisions */}
-            <section className="mom-section">
-              <h2>
-                <span>3</span>Discussion Points &amp; Decisions
-              </h2>
-              <table className="mom-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: "9%" }}>Item</th>
-                    <th style={{ width: "24%" }}>Subject</th>
-                    <th style={{ width: "67%" }}>Discussion / decision</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mom.points.map((row, i) => (
-                    <tr key={row.id}>
-                      <td className="mom-num">{i + 1}</td>
-                      <td>
-                        <Cell value={row.subject} placeholder="[Subject]" />
-                      </td>
-                      <td className="mom-para">
-                        <Cell
-                          value={row.text}
-                          placeholder="[What was discussed, what was agreed, and by whom. Keep one decision per item.]"
-                        />
-                      </td>
+            {show.points ? (
+              <section className="mom-section">
+                <h2>
+                  <span>{numberOf("points")}</span>Discussion Points &amp; Decisions
+                </h2>
+                <table className="mom-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: ptW.n }}>Item</th>
+                      {ptW.subject ? <th style={{ width: ptW.subject }}>Subject</th> : null}
+                      <th style={{ width: ptW.text }}>Discussion / decision</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
+                  </thead>
+                  <tbody>
+                    {mom.points.map((row, i) => (
+                      <tr key={row.id}>
+                        <td className="mom-num">{i + 1}</td>
+                        {ptW.subject ? (
+                          <td>
+                            <Cell value={row.subject} placeholder="[Subject]" />
+                          </td>
+                        ) : null}
+                        <td className="mom-para">
+                          <Cell
+                            value={row.text}
+                            placeholder="[What was discussed, what was agreed, and by whom. Keep one decision per item.]"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            ) : null}
 
             {/* The clause the minute is issued under. */}
-            <div className="mom-note">
-              <strong>Note&nbsp;·&nbsp;</strong>
-              {note}
-            </div>
+            {show.note ? (
+              <div className="mom-note">
+                <strong>Note&nbsp;·&nbsp;</strong>
+                {note}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
