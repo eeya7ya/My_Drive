@@ -165,16 +165,31 @@
 .mom-group[open] > summary::after { content: "−"; }
 .mom-group-fields { padding-top: 12px; }
 
-/* A section the sheet is not printing. The fields stay editable — switching it
-   back on should bring back what was typed — so the heading has to carry the
-   fact, and carry it where the eye lands rather than in a tooltip. */
-.mom-group.is-hidden > summary { opacity: .6; }
-.mom-off {
-  margin-left: 8px;
-  font-size: 9px; font-style: normal; font-weight: 600;
-  letter-spacing: .08em; text-transform: uppercase;
+/* The title takes the slack so the switch and the open/close marker sit
+   together at the right, rather than being spaced away from each other. */
+.mom-group-name { flex: 1; min-width: 0; }
+
+/* The section's own print switch, in its heading. A section the sheet is not
+   printing keeps its fields and they stay editable, so the heading has to
+   carry the fact — and carry it where the eye lands rather than in a tooltip. */
+.mom-group.is-hidden > summary .mom-group-name { opacity: .55; }
+.mom-eye {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: inherit;
+  font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  cursor: pointer;
+}
+.mom-eye:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.mom-eye.is-off {
+  border-color: color-mix(in srgb, var(--color-danger) 55%, transparent);
   color: var(--color-danger);
 }
+.mom-eye.is-off:hover { background: color-mix(in srgb, var(--color-danger) 10%, transparent); }
 
 /* ── The switches ─────────────────────────────────────────────────────────
    One column, because these read as a list of what the sheet contains rather

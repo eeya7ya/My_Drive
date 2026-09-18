@@ -367,31 +367,56 @@ function Toggle({
 /**
  * A collapsible block of the form, numbered to match the printed section.
  *
- * `hidden` marks a block whose section the sheet is not printing. The fields
- * stay editable on purpose — switching a section back on should bring back
- * what was typed, not an empty table — so the heading has to say plainly that
- * what is being typed is not on the page.
+ * Where `onShow` is given the heading carries the section's own print switch.
+ * The Sections panel at the top of the form has the complete set — fields and
+ * columns as well — but deciding a section is not wanted happens while looking
+ * at it, not while looking at a list of everything, so the switch is here too.
+ *
+ * A section that is not printed keeps its fields, and they stay editable:
+ * switching it back on should bring back what was typed rather than an empty
+ * table. The heading says so instead, because a form that quietly accepts
+ * typing for a page it will not print is worse than one that tells you.
  */
 function Group({
   n,
   title,
   children,
   open,
-  hidden,
+  show,
+  onShow,
 }: {
   n: string;
   title: string;
   children: React.ReactNode;
   open?: boolean;
-  hidden?: boolean;
+  show?: boolean;
+  onShow?: (next: boolean) => void;
 }) {
+  const hidden = show === false;
   return (
     <details className={hidden ? "mom-group is-hidden" : "mom-group"} open={open ?? true}>
       <summary>
-        <span>
+        <span className="mom-group-name">
           {n}&nbsp;&nbsp;{title}
-          {hidden ? <em className="mom-off">not printed</em> : null}
         </span>
+        {onShow ? (
+          <button
+            type="button"
+            className={hidden ? "mom-eye is-off" : "mom-eye"}
+            aria-pressed={!hidden}
+            title={hidden ? "Print this section" : "Leave this section off the sheet"}
+            // A click anywhere in a summary opens or closes the details it
+            // heads; this one is not about that.
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onShow(hidden);
+            }}
+          >
+            <Icon name="eye" size={12} />
+            {hidden ? "Not printed" : "Printed"}
+          </button>
+        ) : null}
       </summary>
       <div className="mom-group-fields">{children}</div>
     </details>
@@ -1031,7 +1056,7 @@ export default function MomBuilder() {
             </div>
           </Group>
 
-          <Group n="1" title="Meeting details" hidden={!mom.show.details}>
+          <Group n="1" title="Meeting details" show={mom.show.details} onShow={(v) => setShow("details", v)}>
             <div className="mom-grid">
               <Field
                 label="Reference no."
@@ -1170,7 +1195,7 @@ export default function MomBuilder() {
             {logoError ? <p className="mom-error">{logoError}</p> : null}
           </Group>
 
-          <Group n="2" title="Attendees" hidden={!mom.show.attendees}>
+          <Group n="2" title="Attendees" show={mom.show.attendees} onShow={(v) => setShow("attendees", v)}>
             {mom.attendees.map((row, i) => (
               <div className="mom-row" key={row.id}>
                 <RowHead
@@ -1218,7 +1243,12 @@ export default function MomBuilder() {
             </button>
           </Group>
 
-          <Group n="3" title="Discussion points & decisions" hidden={!mom.show.points}>
+          <Group
+            n="3"
+            title="Discussion points & decisions"
+            show={mom.show.points}
+            onShow={(v) => setShow("points", v)}
+          >
             {mom.points.map((row, i) => (
               <div className="mom-row" key={row.id}>
                 <RowHead
@@ -1255,7 +1285,13 @@ export default function MomBuilder() {
             </button>
           </Group>
 
-          <Group n="—" title="Footer note" open={false} hidden={!mom.show.note}>
+          <Group
+            n="—"
+            title="Footer note"
+            open={false}
+            show={mom.show.note}
+            onShow={(v) => setShow("note", v)}
+          >
             <div className="mom-grid mom-grid-1">
               <Field
                 label="Review period (working days)"
