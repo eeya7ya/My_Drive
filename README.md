@@ -627,6 +627,19 @@ Two logos sit on the letterhead. ADVEC's is committed at
 through a canvas at the size the sheet prints it — so a photograph of a logo
 does not spend the storage quota — and carried inside the minute as a data URL.
 
+**Sections** decides what the sheet prints: whole sections, single fields of the
+meeting-details grid, and the table columns — the Status column, for a meeting
+with no apologies to record, or the Subject column where the decisions speak for
+themselves. Hiding is not deleting: the fields stay in the form with whatever was
+typed in them, and the group's heading says **not printed** so nothing is typed
+into a page that will not carry it. The sheet keeps itself consistent — sections
+renumber, so hiding the attendees makes the discussion points section 2 rather
+than leaving a gap at 2; a table's remaining columns take the hidden one's share
+of the measure rather than stopping short of the page; and an odd number of
+detail fields is closed with a filler cell so the grid never ends open. The
+choice belongs to the minute, not the browser, so a minute reopened on another
+machine is laid out the way it was issued.
+
 **The route is open: there is no sign-in.** The draft in progress is private to
 the browser, kept in `localStorage` so a reload costs nothing. **Save to
 database** is the other thing entirely: it writes the minute to the `minutes`
