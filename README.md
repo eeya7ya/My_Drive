@@ -627,8 +627,10 @@ Two logos sit on the letterhead. ADVEC's is committed at
 through a canvas at the size the sheet prints it — so a photograph of a logo
 does not spend the storage quota — and carried inside the minute as a data URL.
 
-**Sections** decides what the sheet prints: whole sections, single fields of the
-meeting-details grid, and the table columns — the Status column, for a meeting
+Every section's own heading in the form carries a **Printed / Not printed**
+switch, because deciding a section is not wanted happens while looking at it.
+**Sections**, at the head of the form, has the complete set: whole sections,
+single fields of the meeting-details grid, and the table columns — the Status column, for a meeting
 with no apologies to record, or the Subject column where the decisions speak for
 themselves. Hiding is not deleting: the fields stay in the form with whatever was
 typed in them, and the group's heading says **not printed** so nothing is typed
