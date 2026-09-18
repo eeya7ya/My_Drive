@@ -968,7 +968,7 @@ export default function MomBuilder() {
             {mom.points.map((row, i) => (
               <div className="mom-row" key={row.id}>
                 <RowHead
-                  label={`Item 3.${i + 1}`}
+                  label={`Item ${i + 1}`}
                   index={i}
                   count={mom.points.length}
                   onMove={(from, to) => moveRow("points", from, to)}
@@ -1138,15 +1138,15 @@ export default function MomBuilder() {
               <table className="mom-table">
                 <thead>
                   <tr>
-                    <th style={{ width: "7%" }}>Item</th>
-                    <th style={{ width: "25%" }}>Subject</th>
-                    <th style={{ width: "68%" }}>Discussion / decision</th>
+                    <th style={{ width: "9%" }}>Item</th>
+                    <th style={{ width: "24%" }}>Subject</th>
+                    <th style={{ width: "67%" }}>Discussion / decision</th>
                   </tr>
                 </thead>
                 <tbody>
                   {mom.points.map((row, i) => (
                     <tr key={row.id}>
-                      <td className="mom-num">3.{i + 1}</td>
+                      <td className="mom-num">{i + 1}</td>
                       <td>
                         <Cell value={row.subject} placeholder="[Subject]" />
                       </td>

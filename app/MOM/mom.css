@@ -54,6 +54,7 @@
   --mom-muted: #6E7C85;      /* Placeholders standing in for unfilled fields. */
   --mom-line: #C9D2D7;       /* Table and grid rules. */
   --mom-head: #EEF2F4;       /* Table header fill. */
+  --mom-zebra: #F5F8FA;      /* Every second row, to carry the eye across it. */
   --mom-sans: "IBM Plex Sans", "Geist", system-ui, sans-serif;
   --mom-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -311,7 +312,17 @@
 }
 .mom-table td.mom-num {
   font-family: var(--mom-mono); font-size: 14px; color: var(--mom-ink);
+  /* An item number is one thing. Left to wrap, a two-digit one breaks after
+     the first digit and reads as two numbers in a column of one. */
+  white-space: nowrap;
 }
+
+/* Two colours down the table, so a long row's subject and its decision stay
+   on the same line as each other across 650px of page. The tint is a step
+   lighter than the header fill, which keeps the header the darker band and
+   the banding quiet enough to read under. It is a background, so printing it
+   depends on the colour-adjust rule in the print block below. */
+.mom-table tbody tr:nth-child(even) { background: var(--mom-zebra); }
 /* Newlines somebody typed into a cell are meaning, not accident. */
 .mom-table td.mom-para { white-space: pre-wrap; }
 
