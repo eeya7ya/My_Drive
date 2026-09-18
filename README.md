@@ -268,13 +268,19 @@ the site keeps serving if the deploy lands ahead of the migration; what does not
 work until then is adding or editing a drive, which says so rather than failing
 obscurely.
 
-Finally `migrations/006_drive_storage.console.sql`, which writes each drive's
+Then `migrations/006_drive_storage.console.sql`, which writes each drive's
 quota row so the admin panel shows a real number rather than an implicit
 default. The access model needs no migration at all: a drive's password lives in
 the `passcode_hash` column the schema has always had. **Existing drives come out
 of this with no password**, so nobody can open them until the admin sets one on
 each row — that is the state to expect after this change, not a fault, and the
 panel says so in red.
+
+Last, `migrations/007_minutes.console.sql`, which adds the `minutes` table
+behind `/MOM`. Nothing else in the app touches it, so the drive works perfectly
+well without it; what does not work until it is run is **Save to database** on
+the minutes generator, which says the table is missing rather than failing
+quietly. See [Minutes of meeting](#minutes-of-meeting).
 
 On the eSpark drive:On the eSpark drive:
 
@@ -601,6 +607,47 @@ with a gap where a picture should be says nothing about what went wrong.
 
 It is its own route rather than a dialog because printing takes the whole page,
 and `print` is a reserved drive slug so it cannot be shadowed.
+
+### Minutes of meeting
+
+`/MOM` is a minutes-of-meeting generator on ADVEC's letterhead, and it is
+**temporary** — a thing asked for, built beside the drive, and meant to be
+deletable in one go. `/mom` reaches it too.
+
+A form fills the left of the screen and the sheet fills the right: meeting
+details, attendees, and the discussion points and decisions, numbered 3.1, 3.2
+as they are added. **Save as PDF** prints the sheet — A4, ADVEC's palette and
+IBM Plex, with the table headings repeating on every page a table runs onto and
+no row split across a break. There is no PDF library here either, for the
+reason above: what the screen shows at 100% is what comes out of the printer,
+because both are laid out from one stylesheet.
+
+Two logos sit on the letterhead. ADVEC's is committed at
+`public/assets/advec-logo.png`; the client's is chosen from the machine, redrawn
+through a canvas at the size the sheet prints it — so a photograph of a logo
+does not spend the storage quota — and carried inside the minute as a data URL.
+
+**The route is open: there is no sign-in.** The draft in progress is private to
+the browser, kept in `localStorage` so a reload costs nothing. **Save to
+database** is the other thing entirely: it writes the minute to the `minutes`
+table, where it can be listed, reopened and edited from any machine — and,
+because the address is the only thing in front of it, by anyone who has it. The
+bar keeps the two apart in as many words, and **Saved minutes** lists what is
+stored, marking the one the form is showing.
+
+Standing in for a gate: `lib/mom.ts` cuts every incoming save to a document of
+known shape and bounded size — the fields to a line's worth, the lists to a
+meeting's worth, and the client's logo to a `data:image/…` the browser already
+holds rather than a remote address that would make opening a minute a request
+to somebody else's server. `lib/minutes.ts` adds what only makes sense with the
+whole table in view: a per-caller write throttle and a ceiling on how many
+minutes may exist. `scripts/test-mom.mjs` checks the first of those, and runs
+with `npm test`.
+
+One row per minute: the document as JSON, with the fields the picker lists
+copied out beside it so listing never reads a document — or an embedded logo —
+it is not going to show. Run `migrations/007_minutes.console.sql` before
+expecting **Save to database** to work.
 
 ### Reading DWG drawings
 

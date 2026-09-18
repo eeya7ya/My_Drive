@@ -79,7 +79,54 @@
 }
 .mom-bar-title { font-weight: 600; }
 .mom-bar-note { color: color-mix(in srgb, var(--color-text) 62%, transparent); }
+.mom-bar-warn { color: var(--color-danger); }
 .mom-bar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── The saved minutes ────────────────────────────────────────────────────
+   A panel under the bar rather than a dialog: opening a saved minute replaces
+   what is on screen, so it should be plainly a part of this page and not a
+   thing that floats over it.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.mom-saved {
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-surface);
+  padding: 10px 16px 14px;
+  max-height: 44vh;
+  overflow-y: auto;
+}
+.mom-saved-empty {
+  margin: 4px 0; font-size: 13px; line-height: 1.6;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent);
+}
+.mom-saved-list { list-style: none; margin: 0; padding: 0; }
+.mom-saved-list > li {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.mom-saved-list > li:last-child { border-bottom: 0; }
+/* The row this form is currently showing. */
+.mom-saved-list > li.is-open {
+  box-shadow: inset 3px 0 0 var(--color-accent);
+  padding-left: 10px;
+}
+.mom-saved-what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mom-saved-what > strong {
+  font-size: 13px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mom-saved-what > span {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mom-saved-when {
+  font-family: var(--font-mono); font-size: 11px; white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.mom-saved-tools { display: flex; align-items: center; gap: 6px; }
+.mom-saved-tools .btn { font-size: 12px; padding: 5px 10px; }
 
 .mom-body {
   display: grid;
@@ -129,8 +176,8 @@
 .mom-field .input { width: 100%; }
 .mom-field textarea.input { resize: vertical; min-height: 66px; line-height: 1.5; }
 
-/* A repeating entry — one attendee, one action — as a small card, so it stays
-   obvious which fields belong together once there are eight of them. */
+/* A repeating entry — one attendee, one discussion point — as a small card, so
+   it stays obvious which fields belong together once there are eight of them. */
 .mom-row {
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
@@ -227,7 +274,7 @@
 }
 .mom-section > h2 > span { color: var(--mom-red); margin-right: 9px; }
 
-/* Captions and values, shared by the details grid and the signature blocks. */
+/* Captions and values, used by the letterhead and the details grid. */
 .mom-label {
   font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
   color: var(--mom-label);
@@ -267,46 +314,7 @@
 }
 /* Newlines somebody typed into a cell are meaning, not accident. */
 .mom-table td.mom-para { white-space: pre-wrap; }
-/* A date is one thing and breaks as one — "24 / 09 /" on one line and "2026"
-   on the next is how a due date stops being read at a glance. The column is
-   sized to hold the full DD / MM / YYYY, and the slightly smaller mono keeps
-   it there when somebody writes the month out instead. */
-.mom-table td.mom-date { font-size: 13px; white-space: nowrap; }
-/* A second, quieter line under a cell's main value — the company under the
-   name of whoever owns an action. */
-.mom-sub { margin-top: 2px; font-size: 12px; color: var(--mom-label); }
 
-.mom-status {
-  display: inline-block;
-  padding: 1px 7px;
-  border: 1px solid var(--mom-line);
-  border-radius: 2px;
-  font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
-  white-space: nowrap;
-}
-.mom-status-open { border-color: #E2B4B6; background: #FBEEEF; color: #8C161A; }
-.mom-status-progress { border-color: #C9D2D7; background: var(--mom-head); color: var(--mom-navy); }
-.mom-status-closed { border-color: #BFD3C4; background: #EEF5F0; color: #2F5D42; }
-
-/* Signature blocks: a ruled space to sign over, captioned underneath. */
-.mom-signs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.mom-sign {
-  border: 1px solid var(--mom-line);
-  padding: 10px 12px 12px;
-}
-.mom-sign-space {
-  height: 56px;
-  border-bottom: 1px solid var(--mom-navy);
-  margin: 10px 0 7px;
-}
-/* Stacked rather than set against each other across the block: two lines
-   competing for one row is how the ruled date came out broken across three. */
-.mom-sign-foot { margin-top: 2px; font-size: 11px; line-height: 1.5; color: var(--mom-label); }
-.mom-sign-date {
-  margin-top: 8px;
-  font-family: var(--mom-mono); font-size: 11px; white-space: nowrap;
-  color: var(--mom-label);
-}
 
 .mom-note {
   border-top: 1px solid var(--mom-line);
@@ -325,7 +333,7 @@
 @page { size: A4; margin: 16mm 19mm 14mm; }
 
 @media print {
-  .mom-bar, .mom-form, .mom-logo-empty { display: none !important; }
+  .mom-bar, .mom-saved, .mom-form, .mom-logo-empty { display: none !important; }
 
   html, body, .mom, .mom-preview { background: #fff !important; }
   body, .mom { min-height: 0; }
@@ -347,7 +355,7 @@
      stranded at the foot of a page, a row never split across two, and a long
      table repeats its column headings on every page it reaches. */
   .mom-section > h2 { break-after: avoid-page; break-inside: avoid; }
-  .mom-head, .mom-sign, .mom-details > div { break-inside: avoid; }
+  .mom-head, .mom-details > div { break-inside: avoid; }
   .mom-table thead { display: table-header-group; }
   .mom-table tr { break-inside: avoid; }
 }

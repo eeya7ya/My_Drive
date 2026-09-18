@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node scripts/test-note-format.mjs && node scripts/test-report.mjs"
+    "test": "node scripts/test-note-format.mjs && node scripts/test-report.mjs && node scripts/test-mom.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.699.0",
