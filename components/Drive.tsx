@@ -12,6 +12,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import AskDialog, { type AskRequest } from "./AskDialog";
+import MoveDialog from "./MoveDialog";
 import DriveSettings from "./DriveSettings";
 import ReportPicker from "./ReportPicker";
 import FileViewer from "./FileViewer";
@@ -170,6 +171,8 @@ export default function Drive({
   const [managing, setManaging] = useState(false);
   /** The question on screen, if any. See `ask` and `confirmAsk` below. */
   const [asking, setAsking] = useState<AskRequest | null>(null);
+  // The file whose "Move to…" folder picker is open.
+  const [moving, setMoving] = useState<DriveFile | null>(null);
   /**
    * The folder the report picker was opened in, or null when it is shut.
    * A path rather than a boolean, so the list it shows is fixed at the moment
@@ -823,6 +826,39 @@ export default function Drive({
     [ask, call, run]
   );
 
+  /**
+   * Move a file to another folder, chosen in MoveDialog.
+   *
+   * Refused while that note is open in the editor: saving writes the editor's
+   * name into the folder it was opened from, so a note moved out from under
+   * it would come back as a second copy in the old folder on the next save.
+   */
+  const moveFileAction = useCallback(
+    (file: DriveFile) => {
+      if (noteIn && noteEdit?.fileId === file.id) {
+        setError(`“${file.name}” is open in the editor — close it first, then move it.`);
+        return;
+      }
+      setMoving(file);
+    },
+    [noteIn, noteEdit]
+  );
+
+  const finishMove = useCallback(
+    (folderId: string | null | undefined) => {
+      const file = moving;
+      setMoving(null);
+      if (!file || folderId === undefined) return;
+      run(`Moving ${file.name}`, async () => {
+        await call(`/api/files/${file.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ folderId }),
+        });
+      });
+    },
+    [moving, run, call]
+  );
+
   const deleteFileAction = useCallback(
     async (file: DriveFile) => {
       if (
@@ -1313,6 +1349,7 @@ export default function Drive({
         items.push(
           { sep: true },
           { label: "Rename", icon: "edit", action: () => renameFileAction(file) },
+          { label: "Move to…", icon: "folder", action: () => moveFileAction(file) },
           {
             label: "Delete",
             icon: "trash",
@@ -1323,7 +1360,7 @@ export default function Drive({
       }
       openMenu(ev, items);
     },
-    [canManage, openFile, downloadFile, downloadReport, copyLink, toggleHistory, isEditableNote, editNote, renameFileAction, deleteFileAction, openMenu]
+    [canManage, openFile, downloadFile, downloadReport, copyLink, toggleHistory, isEditableNote, editNote, renameFileAction, moveFileAction, deleteFileAction, openMenu]
   );
 
   const canvasMenu = useCallback(
@@ -3071,6 +3108,20 @@ export default function Drive({
       )}
 
       {asking && <AskDialog request={asking} onAnswer={settle} />}
+
+      {moving && (
+        <MoveDialog
+          fileName={moving.name}
+          tree={data.tree}
+          rootLabel="My Drive"
+          labelOf={labelOf}
+          currentFolderId={(() => {
+            const p = folderPathOfFile(moving.id);
+            return p.length ? p[p.length - 1] : null;
+          })()}
+          onAnswer={finishMove}
+        />
+      )}
 
       {picking && (
         <ReportPicker

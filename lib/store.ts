@@ -687,6 +687,68 @@ export async function renameFile(id: string, rawName: string): Promise<void> {
   if (!changed) throw new Error("File not found");
 }
 
+/**
+ * File a document under another folder of the same drive, or at its root.
+ *
+ * Only the row's folder changes. Every revision keeps its R2 key — the key
+ * still names the folder it was uploaded into, but nothing reads a folder back
+ * out of a key, so no bytes are copied — and links into a note (images, the
+ * print route) are by file id, so they keep working after the move.
+ *
+ * A folder holds one document per name, so arriving beside a file of the same
+ * name takes "name-2.ext" rather than silently becoming its next revision.
+ * Returns the name the file ends up with.
+ */
+export async function moveFile(
+  id: string,
+  folderId: string | null
+): Promise<{ name: string }> {
+  const rows = await d1Query<{ drive: DriveKey; name: string; folder_id: string | null }>(
+    "SELECT drive, name, folder_id FROM files WHERE id = ?",
+    [id]
+  );
+  const file = rows[0];
+  if (!file) throw new Error("File not found");
+  if (file.folder_id === folderId) return { name: file.name };
+
+  // Scoped by the file's own drive, so an id from another drive is "not found".
+  if (folderId !== null) {
+    const target = await d1Query<{ id: string }>(
+      "SELECT id FROM folders WHERE id = ? AND drive = ?",
+      [folderId, file.drive]
+    );
+    if (!target.length) {
+      const err = new Error("That folder no longer exists.");
+      (err as Error & { status?: number }).status = 404;
+      throw err;
+    }
+  }
+
+  const siblings = await d1Query<{ name: string }>(
+    folderId === null
+      ? "SELECT name FROM files WHERE folder_id IS NULL AND drive = ?"
+      : "SELECT name FROM files WHERE folder_id = ?",
+    folderId === null ? [file.drive] : [folderId]
+  );
+  const taken = new Set(siblings.map((s) => s.name));
+  let name = file.name;
+  if (taken.has(name)) {
+    const dot = name.lastIndexOf(".");
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : "";
+    let n = 2;
+    while (taken.has(`${base}-${n}${ext}`)) n++;
+    name = `${base}-${n}${ext}`;
+  }
+
+  await d1Execute("UPDATE files SET folder_id = ?, name = ? WHERE id = ?", [
+    folderId,
+    name,
+    id,
+  ]);
+  return { name };
+}
+
 /** The R2 key for a specific revision, or the current one when unspecified. */
 export async function resolveDownload(
   fileId: string,
