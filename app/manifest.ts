@@ -19,8 +19,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     display: "standalone",
     orientation: "any",
-    background_color: "#1B1E20",
-    theme_color: "#1B1E20",
+    background_color: "#F8F5F3",
+    theme_color: "#F8F5F3",
     icons: [
       {
         src: "/assets/espark-bright.png",

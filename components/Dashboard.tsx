@@ -51,7 +51,7 @@ export default function Dashboard({
   // The drive keeps its light/dark choice in component state and writes it to
   // the body, which is where every token flips. The dashboard is a sibling
   // screen, not a second app, so it does exactly the same thing.
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   const [driveChoice, setDriveChoice] = useState("");
   const [name, setName] = useState("");

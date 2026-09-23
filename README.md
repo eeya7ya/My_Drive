@@ -44,9 +44,8 @@ recomputed:
 | Sage Light | `#AEBCAB` | accent light |
 
 The dark neutrals are the sheet's too — Background `#1B1E20`, Surface `#232729`,
-Surface Light `#2D3234`, Border `#3A4143`, Foreground `#E9E4E0` — and dark is
-the default, because dark is the only theme the sheet specifies. The toggle
-stays for anyone who wants otherwise; the light neutrals behind it are derived
+Surface Light `#2D3234`, Border `#3A4143`, Foreground `#E9E4E0`. Light is the
+default; the toggle switches any screen to dark. The light neutrals are derived
 from the foreground's own warmth, so both themes share one hue instead of
 reading as two different products.
 

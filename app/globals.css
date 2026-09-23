@@ -225,10 +225,11 @@ html, body { height: 100%; }
     width: min(84vw, 320px);
     transform: translateX(-100%);
     transition: transform .26s cubic-bezier(.2,.7,.3,1);
-    box-shadow: var(--shadow-lg);
     overflow-y: auto;
   }
-  .dc-sidebar.dc-open { transform: none; }
+  /* The shadow only while open: on the parked drawer it bled back on screen
+     as a grey band down the left edge. */
+  .dc-sidebar.dc-open { transform: none; box-shadow: var(--shadow-lg); }
 
   .dc-scrim {
     position: fixed; inset: 0; z-index: 59;
@@ -270,13 +271,55 @@ html, body { height: 100%; }
   /* On a phone the filename plus four controls will not fit on one line. */
   .dc-viewer-head .dc-viewer-rev { display: none; }
 
-  .dc-filter-pop { right: -60px !important; min-width: 260px !important; }
+  /* The popover hangs from a button that sits anywhere in a wrapped toolbar,
+     so pinned to that button it ran off the left edge. It hangs from the
+     header instead and spans it. */
+  .dc-header { position: relative; }
+  .dc-filter-wrap { position: static !important; }
+  .dc-filter-pop {
+    left: 16px !important; right: 16px !important;
+    min-width: 0 !important; top: calc(100% - 6px) !important;
+  }
+  .dc-filter-pop input[type="date"] { min-width: 0; }
+
+  /* Upload, Note, Report and New folder share the full width under the title
+     rather than squeezing up against the right edge. */
+  .dc-actions { margin-left: 0 !important; width: 100%; flex-wrap: wrap; }
+  .dc-actions > .btn { flex: 1 1 auto; justify-content: center; }
+
+  /* Two cards abreast leaves about 170px for a name; a long word like
+     "Communication" has to break rather than spill over the card's edge. */
+  .dc-card-name { font-size: 16px !important; overflow-wrap: anywhere; hyphens: auto; }
+
+  /* A label that wraps inside a button doubles its height and misaligns the
+     row it sits in. */
+  .btn { white-space: nowrap; }
+
+  .dialog-backdrop { padding: 16px; }
+  .dialog { max-height: calc(100svh - 32px); overflow-y: auto; }
+}
+
+/* iOS zooms the whole page into any field whose text is under 16px and does
+   not zoom back out, which leaves the layout stranded off-screen after every
+   search or rename. At phone widths fields are 16px so that never starts. */
+@media (max-width: 860px) {
+  .input, input, select, textarea { font-size: 16px !important; }
+}
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* The note panel's keyboard hint means nothing without a keyboard, and at
+   phone width it crowds the Save button onto two lines. */
+@media (max-width: 640px) {
+  .dc-note-hint { display: none; }
+  .dc-note-hint + div { margin-left: auto; }
 }
 
 /* Touch devices get no hover state and no right-click, so the affordances
    that depend on either are always visible instead of revealed. */
 @media (hover: none) {
   .dc-icon-btn, .dc-file-btn { opacity: .85; }
+  /* 28–30px is fine for a pointer and too small for a thumb. */
+  .dc-icon-btn, .dc-file-btn { width: 38px; height: 38px; }
 }
 
 /* A long-press should select the row, not the text inside it. */

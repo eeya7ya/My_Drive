@@ -1309,6 +1309,7 @@ export default function NoteEditor({
           style={{ alignItems: "center", justifyContent: "space-between" }}
         >
           <div
+            className="dc-note-hint"
             style={{
               fontSize: 11,
               color: "color-mix(in srgb, var(--color-text) 50%, transparent)",

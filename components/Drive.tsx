@@ -120,7 +120,7 @@ const EMPTY: DrivePayload = {
 };
 
 export default function Drive({
-  defaultTheme = "dark",
+  defaultTheme = "light",
   defaultView = "grid",
   brand = DEFAULT_BRAND,
 }: {
@@ -1987,7 +1987,7 @@ export default function Drive({
           {/* Sort and date filter live behind this, the way a data grid hides
               them until asked. The dot marks a filter that is still applied,
               so a short listing is never a mystery. */}
-          <div style={{ position: "relative" }}>
+          <div className="dc-filter-wrap" style={{ position: "relative" }}>
             <button
               className="btn btn-secondary btn-icon"
               onClick={() => setFiltersOpen((v) => !v)}
@@ -2297,7 +2297,7 @@ export default function Drive({
               />
             </div>
             {showActions && (
-              <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+              <div className="dc-actions" style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
                 {showUpload && (
                   <button
                     className="btn btn-secondary"
@@ -2399,6 +2399,7 @@ export default function Drive({
                   </div>
                   <div>
                     <div
+                      className="dc-card-name"
                       style={{
                         fontFamily: "var(--font-heading)",
                         fontWeight: 600,
@@ -2423,11 +2424,15 @@ export default function Drive({
                       style={{
                         display: "flex",
                         alignItems: "center",
+                        flexWrap: "wrap",
                         gap: 8,
                         marginTop: 8,
                       }}
                     >
-                      <span className="tag tag-accent" style={{ fontSize: 10 }}>
+                      <span
+                        className="tag tag-accent"
+                        style={{ fontSize: 10, whiteSpace: "nowrap" }}
+                      >
                         {f.meta}
                       </span>
                       <span style={{ fontSize: 11, opacity: 0.5 }}>{f.modified}</span>
