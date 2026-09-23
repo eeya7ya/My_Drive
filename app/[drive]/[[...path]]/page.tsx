@@ -105,7 +105,7 @@ export default async function DrivePage({ params }: { params: Params }) {
       return <DriveSignIn brand={hit.brand} next={hit.brand.basePath + rest} />;
     }
 
-    return <Drive defaultTheme="dark" defaultView="grid" brand={hit.brand} />;
+    return <Drive defaultTheme="light" defaultView="grid" brand={hit.brand} />;
   }
 
   // No drive answers here. It may still be a link from when one of them was
