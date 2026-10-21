@@ -16,6 +16,7 @@ import MoveDialog from "./MoveDialog";
 import DriveSettings from "./DriveSettings";
 import ReportPicker from "./ReportPicker";
 import FileViewer from "./FileViewer";
+import LogoLoader from "./LogoLoader";
 import { isNoteFile, kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
 import { hrefFor, resolveSegments, segmentsOf, slugify, stripBasePath } from "@/lib/paths";
@@ -85,6 +86,43 @@ function saveBlob(blob: Blob, name: string): void {
   // Revoked on the next turn of the loop: revoking it immediately races the
   // download on Safari, which has not read the blob yet when click() returns.
   setTimeout(() => URL.revokeObjectURL(url), 20000);
+}
+
+/**
+ * PUT bytes to a presigned URL, reporting how much of them has gone.
+ *
+ * XMLHttpRequest rather than fetch because fetch still cannot report upload
+ * progress, and a large file is exactly when the upload screen needs to say
+ * how far along it is. Resolves with the status for the caller to judge, and
+ * rejects only when the request never completed.
+ */
+function putBlob(
+  url: string,
+  body: Blob,
+  contentType: string,
+  onProgress?: (fraction: number) => void,
+  signal?: AbortSignal
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const aborted = () => reject(new DOMException("The upload was cancelled.", "AbortError"));
+    if (signal?.aborted) return aborted();
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", contentType);
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total) onProgress(e.loaded / e.total);
+      };
+    }
+    xhr.onload = () => resolve(xhr.status);
+    // A CORS refusal lands here too, indistinguishable from a dropped line.
+    xhr.onerror = () =>
+      reject(new Error("Could not reach storage. Check the connection and the bucket's CORS rules."));
+    xhr.onabort = aborted;
+    signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+    xhr.send(body);
+  });
 }
 
 /** The design's recurring micro-label: 11px, uppercase, letterspaced, accent. */
@@ -190,8 +228,25 @@ export default function Drive({
 
   // A file deep-linked to, highlighted until the next navigation.
   const [focusFile, setFocusFile] = useState<string | null>(null);
+  /**
+   * The upload in flight, for its loading screen. Marked done rather than
+   * cleared when it ends, so the screen keeps its words while it fades.
+   */
+  const [upload, setUpload] = useState<{
+    name: string;
+    label: string;
+    progress: number;
+    done: boolean;
+  } | null>(null);
+
   // Guards the first URL resolution so it runs once, after data lands.
   const urlApplied = useRef(false);
+  /**
+   * Whether the first payload has landed and the address has been resolved
+   * against it. Until then the loading screen covers the drive, so nobody sees
+   * an empty tree, or the root for a frame before the folder the link names.
+   */
+  const [ready, setReady] = useState(false);
   /** Whether the last /api/drive call failed, so the address is not judged against an empty tree. */
   const loadFailed = useRef(false);
 
@@ -554,14 +609,22 @@ export default function Drive({
       name: string,
       body: Blob,
       contentType: string,
-      onRevision?: (version: number) => void,
-      /**
-       * Bounds the whole round trip. Passed for a note, whose bytes are small
-       * and whose author is sitting in front of a dialog waiting to be let go;
-       * left off for uploads, where a large file legitimately takes as long as
-       * it takes and a deadline would abort a working transfer.
-       */
-      signal?: AbortSignal
+      {
+        onRevision,
+        onProgress,
+        signal,
+      }: {
+        onRevision?: (version: number) => void;
+        /** How much of the bytes R2 has taken so far, 0 to 1. */
+        onProgress?: (fraction: number) => void;
+        /**
+         * Bounds the whole round trip. Passed for a note, whose bytes are small
+         * and whose author is sitting in front of a dialog waiting to be let go;
+         * left off for uploads, where a large file legitimately takes as long as
+         * it takes and a deadline would abort a working transfer.
+         */
+        signal?: AbortSignal;
+      } = {}
     ) => {
       const { fileId, versionId, version, uploadUrl } = await call("/api/files", {
         method: "POST",
@@ -576,15 +639,10 @@ export default function Drive({
       });
       if (version > 1) onRevision?.(version);
 
-      const put = await fetch(uploadUrl, {
-        method: "PUT",
-        body,
-        signal,
-        headers: { "Content-Type": contentType },
-      });
-      if (!put.ok) {
+      const status = await putBlob(uploadUrl, body, contentType, onProgress, signal);
+      if (status < 200 || status >= 300) {
         throw new Error(
-          `R2 rejected the upload (${put.status}). Check the bucket's CORS rules.`
+          `R2 rejected the upload (${status}). Check the bucket's CORS rules.`
         );
       }
 
@@ -613,21 +671,30 @@ export default function Drive({
 
       setError(null);
       let failed = false;
+      // The bar runs across the whole batch by bytes, so it never jumps back
+      // to empty between files. A batch of empty files counts by file instead.
+      const total = picked.reduce((n, f) => n + f.size, 0);
+      let sent = 0;
+      // Progress events come many times a second; the drive re-renders only
+      // when the whole percentage on screen would change.
+      let shown = -1;
       for (let i = 0; i < picked.length; i++) {
         const file = picked[i];
-        setBusy(
-          picked.length > 1
-            ? `Uploading ${i + 1} of ${picked.length} — ${file.name}`
-            : `Uploading ${file.name}`
-        );
+        const step = picked.length > 1 ? `Uploading ${i + 1} of ${picked.length}` : "Uploading";
+        const overall = (fraction: number) =>
+          total ? (sent + fraction * file.size) / total : (i + fraction) / picked.length;
+        setUpload({ name: file.name, label: step, progress: overall(0), done: false });
         try {
-          await storeBlob(
-            folderId,
-            file.name,
-            file,
-            file.type || "application/octet-stream",
-            (version) => setBusy(`Uploading ${file.name} — revision ${version}`)
-          );
+          await storeBlob(folderId, file.name, file, file.type || "application/octet-stream", {
+            onRevision: (version) =>
+              setUpload((u) => u && { ...u, label: `${step} · revision ${version}` }),
+            onProgress: (fraction) => {
+              const progress = overall(fraction);
+              if (Math.round(progress * 100) === shown) return;
+              shown = Math.round(progress * 100);
+              setUpload((u) => u && { ...u, progress });
+            },
+          });
         } catch (e) {
           failed = true;
           setError(
@@ -635,10 +702,13 @@ export default function Drive({
           );
           break;
         }
+        sent += file.size;
       }
 
-      setBusy(null);
+      // Up until the refresh is in, so the screen clears onto the new files
+      // rather than onto the folder as it was.
       await refresh(failed);
+      setUpload((u) => u && { ...u, done: true });
     },
     [storeBlob, refresh]
   );
@@ -669,8 +739,10 @@ export default function Drive({
           name,
           new Blob([text], { type }),
           type,
-          (version) => setBusy(`Saving ${name} — revision ${version}`),
-          deadline.signal
+          {
+            onRevision: (version) => setBusy(`Saving ${name} — revision ${version}`),
+            signal: deadline.signal,
+          }
         );
       } catch (e) {
         throw deadline.signal.aborted
@@ -1191,6 +1263,7 @@ export default function Drive({
     if (!loaded || urlApplied.current) return;
     urlApplied.current = true;
     applyUrl(window.location.pathname);
+    setReady(true);
   }, [loaded, applyUrl]);
 
   /**
@@ -1693,6 +1766,14 @@ export default function Drive({
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", alignItems: "stretch" }}>
+      <LogoLoader done={ready} title={brand.name} label="Opening drive" />
+      <LogoLoader
+        overlay
+        done={!upload || upload.done}
+        title={upload?.name ?? ""}
+        label={upload?.label ?? ""}
+        progress={upload?.progress ?? 0}
+      />
       {navOpen && (
         <div className="dc-scrim" onClick={() => setNavOpen(false)} />
       )}

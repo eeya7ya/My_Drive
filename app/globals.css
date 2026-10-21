@@ -149,6 +149,82 @@ body[data-theme="dark"] .brand-dark { display: block; }
 }
 .dc-menu-item:hover { background: var(--item-hover-bg); }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   The drive's loading screen (components/LogoLoader.tsx).
+
+   One 2s cycle: the mark's path is drawn top to bottom over the first 72%,
+   held, then faded so the next pass starts from nothing. Each circle's ring
+   is delayed to the moment the line reaches it, and shares the period, so the
+   rings stay in step with the drawing on every pass. The contents wait a beat
+   before rising in, so a drive that loads at once shows its own ground and
+   then itself, not a flash of logo.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.dc-loader {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  background: var(--color-bg); color: var(--color-text);
+  transition: opacity .4s ease, visibility .4s;
+}
+.dc-loader > * { animation: rise .45s .15s cubic-bezier(.2,.7,.3,1) both; }
+.dc-loader-out { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* Over a drive that is already there, as during an upload: the drive stays
+   visible but out of reach. The fade-in fills backwards only, so once it has
+   run it lets go of opacity and .dc-loader-out can still fade it away. */
+.dc-loader-overlay {
+  background: color-mix(in srgb, var(--color-bg) 92%, transparent);
+  backdrop-filter: blur(6px);
+  animation: dc-fade-in .25s backwards;
+}
+@keyframes dc-fade-in { from { opacity: 0; } }
+
+.dc-loader-bar {
+  width: 180px; max-width: 100%; height: 2px; margin: 14px auto 0;
+  background: var(--color-divider); overflow: hidden;
+}
+.dc-loader-bar > span {
+  display: block; height: 100%; background: var(--color-accent);
+  transition: width .25s ease;
+}
+
+.dc-loader-mark { position: relative; width: 64px; aspect-ratio: 480 / 1002; }
+.dc-loader-ghost, .dc-loader-fill { position: absolute; inset: 0; }
+.dc-loader-mark img { width: 100%; height: 100%; object-fit: contain; }
+.dc-loader-ghost { opacity: .16; }
+.dc-loader-fill { animation: dc-draw 2s linear infinite; }
+
+.dc-loader-ring {
+  position: absolute; width: 30%; aspect-ratio: 1; translate: -50% -50%;
+  border: 1.5px solid var(--color-accent); border-radius: 50%;
+  animation: dc-ring 2s cubic-bezier(.2,.7,.3,1) infinite both;
+}
+
+.dc-loader-label {
+  margin-top: 6px; font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--color-accent-700);
+  animation: dc-breathe 2s ease-in-out infinite;
+}
+
+@keyframes dc-draw {
+  0% { clip-path: inset(0 0 100% 0); opacity: 1; }
+  72%, 88% { clip-path: inset(0); opacity: 1; }
+  100% { clip-path: inset(0); opacity: 0; }
+}
+@keyframes dc-ring {
+  0% { opacity: 0; transform: scale(.9); }
+  6% { opacity: .85; }
+  34%, 100% { opacity: 0; transform: scale(1.6); }
+}
+@keyframes dc-breathe { 50% { opacity: .45; } }
+
+/* No drawing and no rings: the mark only breathes, which still says "busy". */
+@media (prefers-reduced-motion: reduce) {
+  .dc-loader > * { animation: none; }
+  .dc-loader-fill { animation: dc-breathe 2.4s ease-in-out infinite; }
+  .dc-loader-ring { display: none; }
+}
+
 /* The drive is a single full-height surface; never let the page double-scroll. */
 html, body { height: 100%; }
 
