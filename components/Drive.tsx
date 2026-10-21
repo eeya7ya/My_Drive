@@ -16,6 +16,7 @@ import MoveDialog from "./MoveDialog";
 import DriveSettings from "./DriveSettings";
 import ReportPicker from "./ReportPicker";
 import FileViewer from "./FileViewer";
+import DriveLoader from "./DriveLoader";
 import { isNoteFile, kindFor } from "@/lib/preview";
 import { useLongPress } from "@/lib/longpress";
 import { hrefFor, resolveSegments, segmentsOf, slugify, stripBasePath } from "@/lib/paths";
@@ -192,6 +193,12 @@ export default function Drive({
   const [focusFile, setFocusFile] = useState<string | null>(null);
   // Guards the first URL resolution so it runs once, after data lands.
   const urlApplied = useRef(false);
+  /**
+   * Whether the first payload has landed and the address has been resolved
+   * against it. Until then the loading screen covers the drive, so nobody sees
+   * an empty tree, or the root for a frame before the folder the link names.
+   */
+  const [ready, setReady] = useState(false);
   /** Whether the last /api/drive call failed, so the address is not judged against an empty tree. */
   const loadFailed = useRef(false);
 
@@ -1191,6 +1198,7 @@ export default function Drive({
     if (!loaded || urlApplied.current) return;
     urlApplied.current = true;
     applyUrl(window.location.pathname);
+    setReady(true);
   }, [loaded, applyUrl]);
 
   /**
@@ -1693,6 +1701,7 @@ export default function Drive({
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", alignItems: "stretch" }}>
+      <DriveLoader brand={brand} done={ready} />
       {navOpen && (
         <div className="dc-scrim" onClick={() => setNavOpen(false)} />
       )}
